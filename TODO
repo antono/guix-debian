@@ -1,0 +1,155 @@
+-*- mode: org; coding: utf-8; -*-
+
+#+TITLE: What's left to do?
+#+STARTUP: content hidestars
+
+Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+
+  Copying and distribution of this file, with or without modification,
+  are permitted in any medium without royalty provided the copyright
+  notice and this notice are preserved.
+
+* integrate needed Nix code
+
+** Remove dependency on OpenSSL
+
+The ‘openssl’ command-line tool is used in libstore to sign store paths
+to be exported, and to check such signatures.  The signing keys are
+usually in /etc/nix/signing-key.{pub,sec}.  They are a PKCS#8-encoded
+X.509 SubjectPublicKeyInfo.  These can be decoded with the [[http://lists.gnu.org/archive/html/help-gnutls/2012-12/msg00012.html][C API of
+GnuTLS]], but not yet with its Guile bindings.  There’s also
+‘gnutls_privkey_sign_data’ to sign, and related functions.
+
+
+** Add `guix publish' to publish the store using Guile's web server
+
+Generate narinfos and nars on the fly, upon HTTP GET requests.
+Ideally, extend .nix-cache-info to include the server's public key, and also
+reply to requests for .narinfo.sig.
+Optionally, use Guile-Avahi to publish the service.
+
+** MAYBE Add a substituter that uses the GNUnet DHT
+
+Would be neat if binaries could be pushed to and pulled from the GNUnet
+DHT.  Guix users would sign their binaries, and define which binaries
+they trust.
+
+** Add a remote build hook
+
+Like scripts/build-remote.pl in Nix.
+
+* user interface
+** Add a package.el (Emacs) back-end
+
+package.el is quite monolithic, but we may be able to reuse/extend
+‘package-menu-mode’ or at least ‘tabulated-list-mode’.
+
+** add guile-ncurses interface
+
+* extend <origin>
+** add OpenPGP signatures:
+
+   (origin
+     (method http-fetch)
+     (uri "http://.../foo.tgz")
+     (signature-uri (string-append uri ".sig"))
+     (signer-openpgp-fingerprint "..."))
+
+** allow <origin> to be a derivation/package or a file
+
+* extend <package>
+
+** add ‘recommends’ field
+
+For instance, glibc, binutils, gcc, and ld-wrapper would recommend each other.
+‘guix package -i’ could ask interactively (?), or allow users to follow all or
+none of the recommendations.
+
+** add a ‘user-environment-hook’
+
+This should specify builder code to be run when building a user
+environment with ‘guix-package’.  For instance, Texinfo’s hook would
+create a new ‘dir’.
+
+** add ‘patches’ there
+
+** extend ‘propagated-build-inputs’ with support for multiple outputs
+
+#+BEGIN_SRC scheme
+  (outputs '("out" "include"))
+  (propagated-build-inputs
+    `(((("i1" ,p1 "o1")
+        ("i2" ,p2))
+       => "include")
+      ("i3" ,p3)))
+#+END_SRC
+
+
+* synchronize package descriptions with GSRC and/or the [[http://directory.fsf.org][FSD]]
+
+Meta-data for GNU packages, including descriptions and synopses, can be
+dumped from the FSD:
+http://directory.fsf.org/wiki?title=GNU/Export&action=purge .
+We could periodically synchronize with that.
+
+See http://lists.gnu.org/archive/html/bug-guix/2013-04/msg00120.html for info
+on how to synchronize with GSRC's descriptions.
+
+* add a guildhall build system
+
+The Guildhall is Guile’s packaging system.  It should be easy to add a
+‘guildhall-build-system’ that does the right thing based on guildhall
+recipes.
+
+* gnu-build-system: produce a ‘debug’ derivation
+
+Set a .gnu_debuglink in the main derivations to point to the sibling
+file name (only the basename, to not retain a dependency on the ‘debug’
+derivation.)
+
+For /nix/store/xyz-foobar/bin/foo, we should have
+/nix/store/abc-foobar-debug/lib/nix/store/xyz-foobar/bin/foo.debug (info
+"(gdb) Separate Debug Files").
+
+Users should have a default GDB setting with ~/.guix-profile/lib/debug
+as their ‘debug-file-directory’.
+
+* build-expression->derivation: define `%system' in the builder
+
+Would allow build expressions to have system-dependent code, like
+`glibc-dynamic-linker'.
+
+* add ‘allowed-references’ in <package>
+
+[[file:~/src/nix/src/libstore/build.cc::if%20(drv.env.find("allowedReferences")%20!%3D%20drv.env.end())%20{][See how Nix implements that internally]].
+
+* union
+
+Support sophisticated collision handling when building a union: check
+whether the colliding files are identical, honor per-package priorities,
+etc.
+
+* guix package
+
+** add ‘--list-generations’, and ‘--delete-generations’
+
+* guix build utils
+** MAYBE Change ‘ld-wrapper’ to add RPATH for libs passed by file name
+
+** MAYBE Add equivalent to chrpath that uses [[https://gitorious.org/guile-dlhacks/guile-dlhacks/][guile-dlhacks]]
+
+** MAYBE Add a hash-rewriting thing for deep dependency replacement without rebuild
+
+See [[https://github.com/NixOS/nixpkgs/commit/d1662d715514e6ef9d3dc29f132f1b3d8e608a18][Shea Levy's `replace-dependency' in Nixpkgs]].
+
+* distro
+** port to new GNU/Linux platforms, notably ‘mipsel64-linux’
+** port to GNU/Hurd, aka. ‘i686-gnu’
+
+Problems include that current glibc releases do not build on GNU/Hurd.
+In addition, there haven’t been stable releases of GNU Mach, MiG, and
+Hurd, which would be a pre-condition.
+
+** make a bootable GNU/Linux-Libre distro, with OS configuration EDSL
+
+Similar in spirit to /etc/nixos/configuration.nix.

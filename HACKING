@@ -1,0 +1,154 @@
+-*- mode: org; coding: utf-8; -*-
+
+#+TITLE: Hacking GNU Guix and Its Incredible Distro
+
+Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+Copyright © 2013 Nikita Karetnikov <nikita@karetnikov.org>
+
+  Copying and distribution of this file, with or without modification,
+  are permitted in any medium without royalty provided the copyright
+  notice and this notice are preserved.
+
+
+* Building from Git
+
+First, make sure that Autoconf (>= 2.69), Automake, and pkg-config are
+installed.  Run ‘./bootstrap’ that, among other things, invokes ‘git submodule
+update’, or you might get the following error
+
+  make: *** No rule to make target `nix/libstore/schema.sql', needed by
+  `nix/libstore/schema.sql.hh'
+
+Then, as always, run ‘./configure’.  If you get an error like this one
+
+  ./configure: line 6755: `PKG_CHECK_MODULES(GUILE, guile-2.0 >= 2.0.5)'
+
+it probably means that Autoconf couldn’t find ‘pkg.m4’, which is provided by
+pkg-config.  Make sure that ‘pkg.m4’ is available.  For instance, if you
+installed Automake in ‘/usr/local’, it wouldn’t look for ‘.m4’ files in
+‘/usr/share’.  So you have to invoke the following command in that case
+
+  $ export ACLOCAL_PATH=/usr/share/aclocal
+
+See “info '(automake) Macro Search Path'” for more information.
+
+After that you should proceed with ‘make’.  You might also get this error
+
+  /bin/bash: dot: command not found
+  make[2]: *** [doc/images/bootstrap-graph.png] Error 127
+
+This one is easy to handle; just install Graphviz.  It is not listed as a
+requirement because the resulting images should come with a tarball.
+
+Finally, you have to invoke ‘make check’ to run tests.  If anything fails,
+take a look at “info '(guix) Installation'” or send a message to
+<bug-guix@gnu.org>.
+
+* Running Guix before it is installed
+
+Command-line tools can be used even if you have not run "make install".
+To do that, prefix each command with ‘./pre-inst-env’, as in:
+
+  ./pre-inst-env guix build --help
+
+Similarly, for a Guile session using the Guix modules:
+
+  ./pre-inst-env guile -c '(use-modules (guix utils)) (pk (%current-system))'
+
+The ‘pre-inst-env’ script sets up all the environment variables
+necessary to support this.
+
+* The Perfect Setup
+
+The Perfect Setup to hack on Guix is basically the perfect setup used
+for Guile hacking (info "(guile) Using Guile in Emacs").  First, you
+need more than an editor, you need [[http://www.gnu.org/software/emacs][Emacs]], empowered by the wonderful
+[[http://nongnu.org/geiser/][Geiser]].
+
+Geiser allows for interactive and incremental development from within
+Emacs: code compilation and evaluation from within buffers, access to
+on-line documentation (docstrings), context-sensitive completion, M-. to
+jump to an object definition, a REPL to try out your code, and more.
+
+To actually edit the code, Emacs already has a neat Scheme mode.  But in
+addition to that, you must not miss [[http://www.emacswiki.org/emacs/ParEdit][Paredit]].  It provides facilities to
+directly operate on the syntax tree, such as raising an s-expression or
+wrapping it, swallowing or rejecting the following s-expression, etc.
+
+* Adding new packages
+
+Package recipes in Guix look like this:
+
+#+BEGIN_SRC scheme
+  (package
+    (name "nettle")
+    (version "2.5")
+    (source
+      (origin
+        (method url-fetch)
+        (uri (string-append "mirror://gnu/nettle/nettle-"
+                            version ".tar.gz"))
+        (sha256
+          (base32
+            "0wicr7amx01l03rm0pzgr1qvw3f9blaw17vjsy1301dh13ll58aa"))))
+    (build-system gnu-build-system)
+    (inputs `(("m4" ,m4)))
+    (propagated-inputs `(("gmp" ,gmp)))
+    (home-page
+      "http://www.lysator.liu.se/~nisse/nettle/")
+    (synopsis "GNU Nettle, a cryptographic library")
+    (description
+      "Nettle is a cryptographic library...")
+    (license gpl2+))
+#+END_SRC
+
+Such a recipe can be written by hand, and then tested by running
+‘./pre-inst-env guix build nettle’.
+
+When writing the recipe, the base32-encoded SHA256 hash of the source
+code tarball, which can be seen in the example above, can be obtained by
+running:
+
+  guix download http://ftp.gnu.org/gnu/nettle/nettle-2.5.tar.gz
+
+Alternatively, it is possible to semi-automatically import recipes from
+the [[http://nixos.org/nixpkgs/][Nixpkgs]] software distribution using this command:
+
+  guix import /path/to/nixpkgs/checkout nettle
+
+The command automatically fetches and converts to Guix the “Nix
+expression” of Nettle.
+
+* Submitting Patches
+
+Development is done using the Git distributed version control system.  Thus,
+access to the repository is not strictly necessary.  We welcome contributions
+in the form of patches as produced by ‘git format-patch’ sent to
+bug-guix@gnu.org.  Please write commit logs in the [[http://www.gnu.org/prep/standards/html_node/Change-Logs.html#Change-Logs][GNU ChangeLog format]].
+
+As you become a regular contributor, you may find it convenient to have write
+access to the repository (see below.)
+
+* Commit Access
+
+For frequent contributors, having write access to the repository is
+convenient.  When you deem it necessary, feel free to ask for it on the
+mailing list.  When you get commit access, please make sure to follow the
+policy below (discussions of the policy can take place on bug-guix@gnu.org.)
+
+Non-trivial patches should always be posted to bug-guix@gnu.org (trivial
+patches include fixing typos, etc.)
+
+For patches that just add a new package, and a simple one, it’s OK to commit,
+if you’re confident (which means you successfully built it in a chroot setup,
+and have done a reasonable copyright and license auditing.)  Likewise for
+package upgrades.  We have a mailing list for commit notifications
+(guix-commits@gnu.org), so people can notice.  Before pushing your changes,
+make sure to run ‘git pull --rebase’.
+
+For anything else, please post to bug-guix@gnu.org and leave time for a
+review, without committing anything.  If you didn’t receive any reply
+after two weeks, and if you’re confident, it’s OK to commit.
+
+That last part is subject to being adjusted, allowing individuals to commit
+directly on non-controversial changes on parts they’re familiar with.

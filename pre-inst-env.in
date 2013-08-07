@@ -1,0 +1,55 @@
+#!/bin/sh
+
+# GNU Guix --- Functional package management for GNU
+# Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+#
+# This file is part of GNU Guix.
+#
+# GNU Guix is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or (at
+# your option) any later version.
+#
+# GNU Guix is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
+
+# Usage: ./pre-inst-env COMMAND ARG...
+#
+# Run COMMAND in a pre-installation environment.  Typical use is
+# "./pre-inst-env guix-build hello".
+
+GUILE_LOAD_COMPILED_PATH="@abs_top_builddir@${GUILE_LOAD_COMPILED_PATH:+:}$GUILE_LOAD_COMPILED_PATH"
+GUILE_LOAD_PATH="@abs_top_builddir@:@abs_top_srcdir@${GUILE_LOAD_PATH:+:}:$GUILE_LOAD_PATH"
+export GUILE_LOAD_COMPILED_PATH GUILE_LOAD_PATH
+
+# Define $PATH so that `guix' and friends are easily found.
+
+PATH="@abs_top_builddir@/scripts:@abs_top_builddir@:$PATH"
+export PATH
+
+# Daemon helpers.
+
+NIX_ROOT_FINDER="@abs_top_builddir@/nix/scripts/list-runtime-roots"
+NIX_SUBSTITUTERS="@abs_top_builddir@/nix/scripts/substitute-binary"
+NIX_SETUID_HELPER="@abs_top_builddir@/nix-setuid-helper"
+export NIX_ROOT_FINDER NIX_SETUID_HELPER NIX_SUBSTITUTERS
+
+# The following variables need only be defined when compiling Guix
+# modules, but we define them to be on the safe side in case of
+# auto-compilation.
+
+NIX_HASH="@NIX_HASH@"
+export NIX_HASH
+
+# Define $GUIX_UNINSTALLED to prevent `guix' from
+# prepending @guilemoduledir@ to the Guile load paths.
+
+GUIX_UNINSTALLED=1
+export GUIX_UNINSTALLED
+
+exec "$@"

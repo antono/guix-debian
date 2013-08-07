@@ -1,0 +1,2307 @@
+This is guix.info, produced by makeinfo version 5.1 from guix.texi.
+
+This manual documents GNU Guix version 0.3.
+
+   Copyright © 2012, 2013 Ludovic Courtès
+
+   Permission is granted to copy, distribute and/or modify this document
+under the terms of the GNU Free Documentation License, Version 1.3 or
+any later version published by the Free Software Foundation; with no
+Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.  A
+copy of the license is included in the section entitled “GNU Free
+Documentation License.”
+INFO-DIR-SECTION Package management
+START-INFO-DIR-ENTRY
+* guix: (guix).       Guix, the functional package manager.
+* guix package: (guix)Invoking guix package
+                      Managing packages with Guix.
+* guix build: (guix)Invoking guix build
+                      Building packages with Guix.
+END-INFO-DIR-ENTRY
+
+
+File: guix.info,  Node: Top,  Next: Introduction,  Up: (dir)
+
+GNU Guix
+********
+
+This document describes GNU Guix version 0.3, a functional package
+management tool written for the GNU system.
+
+     Copyright © 2012, 2013 Ludovic Courtès
+
+     Permission is granted to copy, distribute and/or modify this
+     document under the terms of the GNU Free Documentation License,
+     Version 1.3 or any later version published by the Free Software
+     Foundation; with no Invariant Sections, no Front-Cover Texts, and
+     no Back-Cover Texts.  A copy of the license is included in the
+     section entitled “GNU Free Documentation License.”
+
+* Menu:
+
+* Introduction::                What is Guix about?
+* Installation::                Installing Guix.
+* Package Management::          Package installation, upgrade, etc.
+* Programming Interface::       Using Guix in Scheme.
+* Utilities::                   Package management commands.
+* GNU Distribution::            Software for your friendly GNU system.
+* Contributing::                Your help needed!
+
+* Acknowledgments::             Thanks!
+* GNU Free Documentation License::  The license of this manual.
+* Concept Index::               Concepts.
+* Function Index::              Functions.
+
+
+File: guix.info,  Node: Introduction,  Next: Installation,  Prev: Top,  Up: Top
+
+1 Introduction
+**************
+
+GNU Guix(1) is a functional package management tool for the GNU system.
+Package management consists of all activities that relate to building
+packages from sources, honoring their build-time and run-time
+dependencies, installing packages in user environments, upgrading
+installed packages to new versions or rolling back to a previous set,
+removing unused software packages, etc.
+
+   The term "functional" refers to a specific package management
+discipline.  In Guix, the package build and installation process is seen
+as a function, in the mathematical sense.  That function takes inputs,
+such as build scripts, a compiler, and libraries, and returns an
+installed package.  As a pure function, its result depends solely on its
+inputs—for instance, it cannot refer to software or scripts that were
+not explicitly passed as inputs.  A build function always produces the
+same result when passed a given set of inputs.  It cannot alter the
+system’s environment in any way; for instance, it cannot create, modify,
+or delete files outside of its build and installation directories.  This
+is achieved by running build processes in isolated environments (or
+"chroots"), where only their explicit inputs are visible.
+
+   The result of package build functions is "cached" in the file system,
+in a special directory called "the store" (*note The Store::).  Each
+package is installed in a directory of its own, in the store—by default
+under ‘/nix/store’.  The directory name contains a hash of all the
+inputs used to build that package; thus, changing an input yields a
+different directory name.
+
+   This approach is the foundation of Guix’s salient features: support
+for transactional package upgrade and rollback, per-user installation,
+and garbage collection of packages (*note Features::).
+
+   Guix has a command-line interface, which allows users to build,
+install, upgrade, and remove packages, as well as a Scheme programming
+interface.
+
+   Last but not least, Guix is used to build a distribution of the GNU
+system, with many GNU and non-GNU free software packages.  *Note GNU
+Distribution::.
+
+   ---------- Footnotes ----------
+
+   (1) “Guix” is pronounced like “geeks”, or “ɡiːks” using the
+international phonetic alphabet (IPA).
+
+
+File: guix.info,  Node: Installation,  Next: Package Management,  Prev: Introduction,  Up: Top
+
+2 Installation
+**************
+
+GNU Guix is available for download from its website at
+<http://www.gnu.org/software/guix/>.  This section describes the
+software requirements of Guix, as well as how to install it and get
+ready to use it.
+
+   The build procedure for Guix is the same as for other GNU software,
+and is not covered here.  Please see the files ‘README’ and ‘INSTALL’ in
+the Guix source tree for additional details.
+
+* Menu:
+
+* Requirements::                Software needed to build and run Guix.
+* Setting Up the Daemon::       Preparing the build daemon’s environment.
+* Invoking guix-daemon::        Running the build daemon.
+
+
+File: guix.info,  Node: Requirements,  Next: Setting Up the Daemon,  Up: Installation
+
+2.1 Requirements
+================
+
+GNU Guix depends on the following packages:
+
+   • GNU Guile (http://gnu.org/software/guile/), version 2.0.5 or later;
+   • GNU libgcrypt (http://gnupg.org/)
+
+   Unless ‘--disable-daemon’ was passed to ‘configure’, the following
+packages are also needed:
+
+   • SQLite 3 (http://sqlite.org)
+   • libbz2 (http://www.bzip.org)
+   • GCC’s g++ (http://gcc.gnu.org)
+
+   When a working installation of the Nix package manager
+(http://nixos.org/nix/) is available, you can instead configure Guix
+with ‘--disable-daemon’.  In that case, Nix replaces the three
+dependencies above.
+
+   Guix is compatible with Nix, so it is possible to share the same
+store between both.  To do so, you must pass ‘configure’ not only the
+same ‘--with-store-dir’ value, but also the same ‘--localstatedir’
+value.  The latter is essential because it specifies where the database
+that stores metadata about the store is located, among other things.
+The default values are ‘--with-store-dir=/nix/store’ and
+‘--localstatedir=/nix/var’.  Note that ‘--disable-daemon’ is not
+required if your goal is to share the store with Nix.
+
+
+File: guix.info,  Node: Setting Up the Daemon,  Next: Invoking guix-daemon,  Prev: Requirements,  Up: Installation
+
+2.2 Setting Up the Daemon
+=========================
+
+Operations such as building a package or running the garbage collector
+are all performed by a specialized process, the "Guix daemon", on behalf
+of clients.  Only the daemon may access the store and its associated
+database.  Thus, any operation that manipulates the store goes through
+the daemon.  For instance, command-line tools such as ‘guix package’ and
+‘guix build’ communicate with the daemon (via remote procedure calls) to
+instruct it what to do.
+
+   In a standard multi-user setup, Guix and its daemon—the ‘guix-daemon’
+program—are installed by the system administrator; ‘/nix/store’ is owned
+by ‘root’ and ‘guix-daemon’ runs as ‘root’.  Unprivileged users may use
+Guix tools to build packages or otherwise access the store, and the
+daemon will do it on their behalf, ensuring that the store is kept in a
+consistent state, and allowing built packages to be shared among users.
+
+   When ‘guix-daemon’ runs as ‘root’, you may not want package build
+processes themselves to run as ‘root’ too, for obvious security reasons.
+To avoid that, a special pool of "build users" should be created for use
+by build processes started by the daemon.  These build users need not
+have a shell and a home directory: they will just be used when the
+daemon drops ‘root’ privileges in build processes.  Having several such
+users allows the daemon to launch distinct build processes under
+separate UIDs, which guarantees that they do not interfere with each
+other—an essential feature since builds are regarded as pure functions
+(*note Introduction::).
+
+   On a GNU/Linux system, a build user pool may be created like this
+(using Bash syntax and the ‘shadow’ commands):
+
+     # groupadd guix-builder
+     # for i in `seq 1 10`;
+       do
+         useradd -g guix-builder -G guix-builder           \
+                 -d /var/empty -s `which nologin`          \
+                 -c "Guix build user $i" guix-builder$i;
+       done
+
+The ‘guix-daemon’ program may then be run as ‘root’ with:
+
+     # guix-daemon --build-users-group=guix-builder
+
+   Guix may also be used in a single-user setup, with ‘guix-daemon’
+running as an unprivileged user.  However, to maximize non-interference
+of build processes, the daemon still needs to perform certain operations
+that are restricted to ‘root’ on GNU/Linux: it should be able to run
+build processes in a chroot, and to run them under different UIDs.  To
+that end, the ‘nix-setuid-helper’ program is provided; it is a small C
+program (less than 300 lines) that, if it is made setuid ‘root’, can be
+executed by the daemon to perform these operations on its behalf.  The
+‘root’-owned ‘/etc/nix-setuid.conf’ file is read by ‘nix-setuid-helper’;
+it should contain exactly two words: the user name under which the
+authorized ‘guix-daemon’ runs, and the name of the build users group.
+
+   If you are installing Guix as an unprivileged user and do not have
+the ability to make ‘nix-setuid-helper’ setuid-‘root’, it is still
+possible to run ‘guix-daemon’.  However, build processes will not be
+isolated from one another, and not from the rest of the system.  Thus,
+build processes may interfere with each other, and may access programs,
+libraries, and other files available on the system—making it much harder
+to view them as _pure_ functions.
+
+
+File: guix.info,  Node: Invoking guix-daemon,  Prev: Setting Up the Daemon,  Up: Installation
+
+2.3 Invoking ‘guix-daemon’
+==========================
+
+The ‘guix-daemon’ program implements all the functionality to access the
+store.  This includes launching build processes, running the garbage
+collector, querying the availability of a build result, etc.  It is
+normally run as ‘root’ like this:
+
+     # guix-daemon --build-users-group=guix-builder
+
+For details on how to set it up, *note Setting Up the Daemon::.
+
+   By default, ‘guix-daemon’ launches build processes under different
+UIDs, taken from the build group specified with ‘--build-users-group’.
+In addition, each build process is run in a chroot environment that only
+contains the subset of the store that the build process depends on, as
+specified by its derivation (*note derivation: Programming Interface.),
+plus a set of specific system directories.  By default, the latter
+contains ‘/dev’ and ‘/dev/pts’.
+
+   The following command-line options are supported:
+
+‘--build-users-group=GROUP’
+     Take users from GROUP to run build processes (*note build users:
+     Setting Up the Daemon.).
+
+‘--no-substitutes’
+     Do not use substitutes for build products.  That is, always build
+     things locally instead of allowing downloads of pre-built binaries.
+
+‘--cache-failures’
+     Cache build failures.  By default, only successful builds are
+     cached.
+
+‘--cores=N’
+‘-c N’
+     Use N CPU cores to build each derivation; ‘0’ means as many as
+     available.
+
+     The default value is ‘1’, but it may be overridden by clients, such
+     as the ‘--cores’ option of ‘guix build’ (*note Invoking guix
+     build::).
+
+     The effect is to define the ‘NIX_BUILD_CORES’ environment variable
+     in the build process, which can then use it to exploit internal
+     parallelism—for instance, by running ‘make -j$NIX_BUILD_CORES’.
+
+‘--max-jobs=N’
+‘-M N’
+     Allow at most N build jobs in parallel.  The default value is ‘1’.
+
+‘--debug’
+     Produce debugging output.
+
+     This is useful to debug daemon start-up issues, but then it may be
+     overridden by clients, for example the ‘--verbosity’ option of
+     ‘guix build’ (*note Invoking guix build::).
+
+‘--chroot-directory=DIR’
+     Add DIR to the build chroot.
+
+     Doing this may change the result of build processes—for instance if
+     they use optional dependencies found in DIR when it is available,
+     and not otherwise.  For that reason, it is not recommended to do
+     so.  Instead, make sure that each derivation declares all the
+     inputs that it needs.
+
+‘--disable-chroot’
+     Disable chroot builds.
+
+     Using this option is not recommended since, again, it would allow
+     build processes to gain access to undeclared dependencies.
+
+‘--disable-log-compression’
+     Disable compression of the build logs.
+
+     Unless ‘--lose-logs’ is used, all the build logs are kept in the
+     LOCALSTATEDIR.  To save space, the daemon automatically compresses
+     them with bzip2 by default.  This option disables that.
+
+‘--disable-store-optimization’
+     Disable automatic file “deduplication” in the store.
+
+     By default, files added to the store are automatically
+     “deduplicated”: if a newly added file is identical as another one
+     found in the store, the daemon makes the new file a hard link to
+     the other file.  This slightly increases the input/output load at
+     the end of a build process.  This option disables this.
+
+‘--impersonate-linux-2.6’
+     On Linux-based systems, impersonate Linux 2.6.  This means that the
+     kernel’s ‘uname’ system call will report 2.6 as the release number.
+
+     This might be helpful to build programs that (usually wrongfully)
+     depend on the kernel version number.
+
+‘--lose-logs’
+     Do not keep build logs.  By default they are kept under
+     ‘LOCALSTATEDIR/nix/log’.
+
+‘--system=SYSTEM’
+     Assume SYSTEM as the current system type.  By default it is the
+     architecture/kernel pair found at configure time, such as
+     ‘x86_64-linux’.
+
+‘--listen=SOCKET’
+     Listen for connections on SOCKET, the file name of a Unix-domain
+     socket.  The default socket is
+     ‘LOCALSTATEDIR/daemon-socket/socket’.  This option is only useful
+     in exceptional circumstances, such as if you need to run several
+     daemons on the same machine.
+
+
+File: guix.info,  Node: Package Management,  Next: Programming Interface,  Prev: Installation,  Up: Top
+
+3 Package Management
+********************
+
+The purpose of GNU Guix is to allow users to easily install, upgrade,
+and remove software packages, without having to know about their build
+procedure or dependencies.  Guix also goes beyond this obvious set of
+features.
+
+   This chapter describes the main features of Guix, as well as the
+package management tools it provides.
+
+* Menu:
+
+* Features::                    How Guix will make your life brighter.
+* Invoking guix package::       Package installation, removal, etc.
+* Packages with Multiple Outputs:: Single source package, multiple outputs.
+* Invoking guix gc::            Running the garbage collector.
+* Invoking guix pull::          Fetching the latest Guix and distribution.
+
+
+File: guix.info,  Node: Features,  Next: Invoking guix package,  Up: Package Management
+
+3.1 Features
+============
+
+When using Guix, each package ends up in the "package store", in its own
+directory—something that resembles ‘/nix/store/xxx-package-1.2’, where
+‘xxx’ is a base32 string.
+
+   Instead of referring to these directories, users have their own
+"profile", which points to the packages that they actually want to use.
+These profiles are stored within each user’s home directory, at
+‘$HOME/.guix-profile’.
+
+   For example, ‘alice’ installs GCC 4.7.2.  As a result,
+‘/home/alice/.guix-profile/bin/gcc’ points to
+‘/nix/store/…-gcc-4.7.2/bin/gcc’.  Now, on the same machine, ‘bob’ had
+already installed GCC 4.8.0.  The profile of ‘bob’ simply continues to
+point to ‘/nix/store/…-gcc-4.8.0/bin/gcc’—i.e., both versions of GCC
+coexist on the same system without any interference.
+
+   The ‘guix package’ command is the central tool to manage packages
+(*note Invoking guix package::).  It operates on those per-user
+profiles, and can be used _with normal user privileges_.
+
+   The command provides the obvious install, remove, and upgrade
+operations.  Each invocation is actually a _transaction_: either the
+specified operation succeeds, or nothing happens.  Thus, if the ‘guix
+package’ process is terminated during the transaction, or if a power
+outage occurs during the transaction, then the user’s profile remains in
+its previous state, and remains usable.
+
+   In addition, any package transaction may be _rolled back_.  So, if,
+for example, an upgrade installs a new version of a package that turns
+out to have a serious bug, users may roll back to the previous instance
+of their profile, which was known to work well.
+
+   All those packages in the package store may be _garbage-collected_.
+Guix can determine which packages are still referenced by the user
+profiles, and remove those that are provably no longer referenced (*note
+Invoking guix gc::).  Users may also explicitly remove old generations
+of their profile so that the packages they refer to can be collected.
+
+   Finally, Guix takes a "purely functional" approach to package
+management, as described in the introduction (*note Introduction::).
+Each ‘/nix/store’ package directory name contains a hash of all the
+inputs that were used to build that package—compiler, libraries, build
+scripts, etc.  This direct correspondence allows users to make sure a
+given package installation matches the current state of their
+distribution, and helps maximize "reproducibility".
+
+   This foundation allows Guix to support "transparent binary/source
+deployment".  When a pre-built binary for a ‘/nix/store’ path is
+available from an external source, Guix just downloads it; otherwise, it
+builds the package from source, locally.
+
+
+File: guix.info,  Node: Invoking guix package,  Next: Packages with Multiple Outputs,  Prev: Features,  Up: Package Management
+
+3.2 Invoking ‘guix package’
+===========================
+
+The ‘guix package’ command is the tool that allows users to install,
+upgrade, and remove packages, as well as rolling back to previous
+configurations.  It operates only on the user’s own profile, and works
+with normal user privileges (*note Features::).  Its syntax is:
+
+     guix package OPTIONS
+
+   Primarily, OPTIONS specifies the operations to be performed during
+the transaction.  Upon completion, a new profile is created, but
+previous generations of the profile remain available, should the user
+want to roll back.
+
+   For each user, a symlink to the user’s default profile is
+automatically created in ‘$HOME/.guix-profile’.  This symlink always
+points to the current generation of the user’s default profile.  Thus,
+users can add ‘$HOME/.guix-profile/bin’ to their ‘PATH’ environment
+variable, and so on.
+
+   In a multi-user setup, user profiles must be stored in a place
+registered as a "garbage-collector root", which ‘$HOME/.guix-profile’
+points to (*note Invoking guix gc::).  That directory is normally
+‘LOCALSTATEDIR/profiles/per-user/USER’, where LOCALSTATEDIR is the value
+passed to ‘configure’ as ‘--localstatedir’, and USER is the user name.
+It must be created by ‘root’, with USER as the owner.  When it does not
+exist, or is not owned by USER, ‘guix package’ emits an error about it.
+
+   The OPTIONS can be among the following:
+
+‘--install=PACKAGE’
+‘-i PACKAGE’
+     Install PACKAGE.
+
+     PACKAGE may specify either a simple package name, such as ‘guile’,
+     or a package name followed by a hyphen and version number, such as
+     ‘guile-1.8.8’.  If no version number is specified, the newest
+     available version will be selected.  In addition, PACKAGE may
+     contain a colon, followed by the name of one of the outputs of the
+     package, as in ‘gcc:doc’ or ‘binutils-2.22:lib’ (*note Packages
+     with Multiple Outputs::).
+
+     Sometimes packages have "propagated inputs": these are dependencies
+     that automatically get installed along with the required package.
+
+     An example is the GNU MPC library: its C header files refer to
+     those of the GNU MPFR library, which in turn refer to those of the
+     GMP library.  Thus, when installing MPC, the MPFR and GMP libraries
+     also get installed in the profile; removing MPC also removes MPFR
+     and GMP—unless they had also been explicitly installed
+     independently.
+
+     Besides, packages sometime rely on the definition of environment
+     variables for their search paths (see explanation of
+     ‘--search-paths’ below.)  Any missing or possibly incorrect
+     environment variable definitions are reported here.
+
+     Finally, when installing a GNU package, the tool reports the
+     availability of a newer upstream version.  In the future, it may
+     provide the option of installing directly from the upstream
+     version, even if that version is not yet in the distribution.
+
+‘--install-from-expression=EXP’
+‘-e EXP’
+     Install the package EXP evaluates to.
+
+     EXP must be a Scheme expression that evaluates to a ‘<package>’
+     object.  This option is notably useful to disambiguate between
+     same-named variants of a package, with expressions such as ‘(@ (gnu
+     packages base) guile-final)’.
+
+     Note that this option installs the first output of the specified
+     package, which may be insufficient when needing a specific output
+     of a multiple-output package.
+
+‘--remove=PACKAGE’
+‘-r PACKAGE’
+     Remove PACKAGE.
+
+‘--upgrade[=REGEXP]’
+‘-u [REGEXP]’
+     Upgrade all the installed packages.  When REGEXP is specified,
+     upgrade only installed packages whose name matches REGEXP.
+
+     Note that this upgrades package to the latest version of packages
+     found in the distribution currently installed.  To update your
+     distribution, you should regularly run ‘guix pull’ (*note Invoking
+     guix pull::).
+
+‘--roll-back’
+     Roll back to the previous "generation" of the profile—i.e., undo
+     the last transaction.
+
+     When combined with options such as ‘--install’, roll back occurs
+     before any other actions.
+
+     When rolling back from the first generation that actually contains
+     installed packages, the profile is made to point to the "empty
+     profile", also known as "profile zero"—i.e., it contains no files
+     apart from its own meta-data.
+
+     Installing, removing, or upgrading packages from a generation that
+     has been rolled back to overwrites previous future generations.
+     Thus, the history of a profile’s generations is always linear.
+
+‘--search-paths’
+     Report environment variable definitions, in Bash syntax, that may
+     be needed in order to use the set of installed packages.  These
+     environment variables are used to specify "search paths" for files
+     used by some of the installed packages.
+
+     For example, GCC needs the ‘CPATH’ and ‘LIBRARY_PATH’ environment
+     variables to be defined so it can look for headers and libraries in
+     the user’s profile (*note (gcc)Environment Variables::).  If GCC
+     and, say, the C library are installed in the profile, then
+     ‘--search-paths’ will suggest setting these variables to
+     ‘PROFILE/include’ and ‘PROFILE/lib’, respectively.
+
+‘--profile=PROFILE’
+‘-p PROFILE’
+     Use PROFILE instead of the user’s default profile.
+
+‘--dry-run’
+‘-n’
+     Show what would be done without actually doing it.
+
+‘--fallback’
+     When substituting a pre-built binary fails, fall back to building
+     packages locally.
+
+‘--no-substitutes’
+‘--max-silent-time=SECONDS’
+     Same as for ‘guix build’ (*note Invoking guix build::).
+
+‘--verbose’
+     Produce verbose output.  In particular, emit the environment’s
+     build log on the standard error port.
+
+‘--bootstrap’
+     Use the bootstrap Guile to build the profile.  This option is only
+     useful to distribution developers.
+
+   In addition to these actions ‘guix package’ supports the following
+options to query the current state of a profile, or the availability of
+packages:
+
+‘--search=REGEXP’
+‘-s REGEXP’
+     List the available packages whose synopsis or description matches
+     REGEXP.  Print all the meta-data of matching packages in ‘recutils’
+     format (*note GNU recutils databases: (recutils)Top.).
+
+     This allows specific fields to be extracted using the ‘recsel’
+     command, for instance:
+
+          $ guix package -s malloc | recsel -p name,version
+          name: glibc
+          version: 2.17
+
+          name: libgc
+          version: 7.2alpha6
+
+‘--list-installed[=REGEXP]’
+‘-I [REGEXP]’
+     List currently installed packages in the specified profile.  When
+     REGEXP is specified, list only installed packages whose name
+     matches REGEXP.
+
+     For each installed package, print the following items, separated by
+     tabs: the package name, its version string, the part of the package
+     that is installed (for instance, ‘out’ for the default output,
+     ‘include’ for its headers, etc.), and the path of this package in
+     the store.
+
+‘--list-available[=REGEXP]’
+‘-A [REGEXP]’
+     List packages currently available in the software distribution
+     (*note GNU Distribution::).  When REGEXP is specified, list only
+     installed packages whose name matches REGEXP.
+
+     For each package, print the following items separated by tabs: its
+     name, its version string, the parts of the package (*note Packages
+     with Multiple Outputs::), and the source location of its
+     definition.
+
+
+File: guix.info,  Node: Packages with Multiple Outputs,  Next: Invoking guix gc,  Prev: Invoking guix package,  Up: Package Management
+
+3.3 Packages with Multiple Outputs
+==================================
+
+Often, packages defined in Guix have a single "output"—i.e., the source
+package leads exactly one directory in the store.  When running ‘guix
+package -i glibc’, one installs the default output of the GNU libc
+package; the default output is called ‘out’, but its name can be omitted
+as shown in this command.  In this particular case, the default output
+of ‘glibc’ contains all the C header files, shared libraries, static
+libraries, Info documentation, and other supporting files.
+
+   Sometimes it is more appropriate to separate the various types of
+files produced from a single source package into separate outputs.  For
+instance, the GLib C library (used by GTK+ and related packages)
+installs more than 20 MiB of reference documentation as HTML pages.  To
+save space for users who do not need it, the documentation goes to a
+separate output, called ‘doc’.  To install the main GLib output, which
+contains everything but the documentation, one would run:
+
+     guix package -i glib
+
+   The command to install its documentation is:
+
+     guix package -i glib:doc
+
+   Some packages install programs with different “dependency
+footprints”.  For instance, the WordNet package install both
+command-line tools and graphical user interfaces (GUIs).  The former
+depend solely on the C library, whereas the latter depend on Tcl/Tk and
+the underlying X libraries.  In this case, we leave the command-line
+tools in the default output, whereas the GUIs are in a separate output.
+This allows users who do not need the GUIs to save space.
+
+   There are several such multiple-output packages in the GNU
+distribution.  Other conventional output names include ‘lib’ for
+libraries and possibly header files, ‘bin’ for stand-alone programs, and
+‘debug’ for debugging information (*note Installing Debugging Files::).
+The outputs of a packages are listed in the third column of the output
+of ‘guix package --list-available’ (*note Invoking guix package::).
+
+
+File: guix.info,  Node: Invoking guix gc,  Next: Invoking guix pull,  Prev: Packages with Multiple Outputs,  Up: Package Management
+
+3.4 Invoking ‘guix gc’
+======================
+
+Packages that are installed but not used may be "garbage-collected".
+The ‘guix gc’ command allows users to explicitly run the garbage
+collector to reclaim space from the ‘/nix/store’ directory.
+
+   The garbage collector has a set of known "roots": any file under
+‘/nix/store’ reachable from a root is considered "live" and cannot be
+deleted; any other file is considered "dead" and may be deleted.  The
+set of garbage collector roots includes default user profiles, and may
+be augmented with ‘guix build --root’, for example (*note Invoking guix
+build::).
+
+   The ‘guix gc’ command has three modes of operation: it can be used to
+garbage-collect any dead files (the default), to delete specific files
+(the ‘--delete’ option), or to print garbage-collector information.  The
+available options are listed below:
+
+‘--collect-garbage[=MIN]’
+‘-C [MIN]’
+     Collect garbage—i.e., unreachable ‘/nix/store’ files and
+     sub-directories.  This is the default operation when no option is
+     specified.
+
+     When MIN is given, stop once MIN bytes have been collected.  MIN
+     may be a number of bytes, or it may include a unit as a suffix,
+     such as ‘MiB’ for mebibytes and ‘GB’ for gigabytes.
+
+     When MIN is omitted, collect all the garbage.
+
+‘--delete’
+‘-d’
+     Attempt to delete all the store files and directories specified as
+     arguments.  This fails if some of the files are not in the store,
+     or if they are still live.
+
+‘--list-dead’
+     Show the list of dead files and directories still present in the
+     store—i.e., files and directories no longer reachable from any
+     root.
+
+‘--list-live’
+     Show the list of live store files and directories.
+
+   In addition, the references among existing store files can be
+queried:
+
+‘--references’
+‘--referrers’
+     List the references (respectively, the referrers) of store files
+     given as arguments.
+
+‘--requisites’
+‘-R’
+     List the requisites of the store files passed as arguments.
+     Requisites include the store files themselves, their references,
+     and the references of these, recursively.  In other words, the
+     returned list is the "transitive closure" of the store files.
+
+
+File: guix.info,  Node: Invoking guix pull,  Prev: Invoking guix gc,  Up: Package Management
+
+3.5 Invoking ‘guix pull’
+========================
+
+Packages are installed or upgraded to the latest version available in
+the distribution currently available on your local machine.  To update
+that distribution, along with the Guix tools, you must run ‘guix pull’:
+the command downloads the latest Guix source code and package
+descriptions, and deploys it.
+
+   On completion, ‘guix package’ will use packages and package versions
+from this just-retrieved copy of Guix.  Not only that, but all the Guix
+commands and Scheme modules will also be taken from that latest version.
+New ‘guix’ sub-commands added by the update also become available.
+
+   The ‘guix pull’ command is usually invoked with no arguments, but it
+supports the following options:
+
+‘--verbose’
+     Produce verbose output, writing build logs to the standard error
+     output.
+
+‘--bootstrap’
+     Use the bootstrap Guile to build the latest Guix.  This option is
+     only useful to Guix developers.
+
+
+File: guix.info,  Node: Programming Interface,  Next: Utilities,  Prev: Package Management,  Up: Top
+
+4 Programming Interface
+***********************
+
+GNU Guix provides several Scheme programming interfaces (APIs) to
+define, build, and query packages.  The first interface allows users to
+write high-level package definitions.  These definitions refer to
+familiar packaging concepts, such as the name and version of a package,
+its build system, and its dependencies.  These definitions can then be
+turned into concrete build actions.
+
+   Build actions are performed by the Guix daemon, on behalf of users.
+In a standard setup, the daemon has write access to the store—the
+‘/nix/store’ directory—whereas users do not.  The recommended setup also
+has the daemon perform builds in chroots, under a specific build users,
+to minimize interference with the rest of the system.
+
+   Lower-level APIs are available to interact with the daemon and the
+store.  To instruct the daemon to perform a build action, users actually
+provide it with a "derivation".  A derivation is a low-level
+representation of the build actions to be taken, and the environment in
+which they should occur—derivations are to package definitions what
+assembly is to C programs.
+
+   This chapter describes all these APIs in turn, starting from
+high-level package definitions.
+
+* Menu:
+
+* Defining Packages::   Defining new packages.
+* The Store::           Manipulating the package store.
+* Derivations::         Low-level interface to package derivations.
+
+
+File: guix.info,  Node: Defining Packages,  Next: The Store,  Up: Programming Interface
+
+4.1 Defining Packages
+=====================
+
+The high-level interface to package definitions is implemented in the
+‘(guix packages)’ and ‘(guix build-system)’ modules.  As an example, the
+package definition, or "recipe", for the GNU Hello package looks like
+this:
+
+     (use-modules (guix packages)
+                  (guix download)
+                  (guix build-system gnu)
+                  (guix licenses))
+
+     (define hello
+       (package
+         (name "hello")
+         (version "2.8")
+         (source (origin
+                  (method url-fetch)
+                  (uri (string-append "mirror://gnu/hello/hello-" version
+                                      ".tar.gz"))
+                  (sha256
+                   (base32 "0wqd8sjmxfskrflaxywc7gqw7sfawrfvdxd9skxawzfgyy0pzdz6"))))
+         (build-system gnu-build-system)
+         (inputs `(("gawk" ,gawk)))
+         (synopsis "GNU Hello")
+         (description "Yeah...")
+         (home-page "http://www.gnu.org/software/hello/")
+         (license gpl3+)))
+
+Without being a Scheme expert, the reader may have guessed the meaning
+of the various fields here.  This expression binds variable HELLO to a
+‘<package>’ object, which is essentially a record (*note Scheme records:
+(guile)SRFI-9.).  This package object can be inspected using procedures
+found in the ‘(guix packages)’ module; for instance, ‘(package-name
+hello)’ returns—surprise!—‘"hello"’.
+
+   There are a few points worth noting in the above package definition:
+
+   • The ‘source’ field of the package is an ‘<origin>’ object.  Here,
+     the ‘url-fetch’ method from ‘(guix download)’ is used, meaning that
+     the source is a file to be downloaded over FTP or HTTP.
+
+     The ‘mirror://gnu’ prefix instructs ‘url-fetch’ to use one of the
+     GNU mirrors defined in ‘(guix download)’.
+
+     The ‘sha256’ field specifies the expected SHA256 hash of the file
+     being downloaded.  It is mandatory, and allows Guix to check the
+     integrity of the file.  The ‘(base32 …)’ form introduces the base32
+     representation of the hash.  You can obtain this information with
+     ‘guix download’ (*note Invoking guix download::) and ‘guix hash’
+     (*note Invoking guix hash::).
+
+   • The ‘build-system’ field is set to GNU-BUILD-SYSTEM.  The
+     GNU-BUILD-SYSTEM variable is defined in the ‘(guix build-system
+     gnu)’ module, and is bound to a ‘<build-system>’ object.
+
+     Naturally, GNU-BUILD-SYSTEM represents the familiar GNU Build
+     System, and variants thereof (*note configuration and makefile
+     conventions: (standards)Configuration.).  In a nutshell, packages
+     using the GNU Build System may be configured, built, and installed
+     with the usual ‘./configure && make && make check && make install’
+     command sequence.  This is what GNU-BUILD-SYSTEM does.
+
+     In addition, GNU-BUILD-SYSTEM ensures that the “standard”
+     environment for GNU packages is available.  This includes tools
+     such as GCC, Coreutils, Bash, Make, Diffutils, and Patch.
+
+   • The ‘inputs’ field specifies inputs to the build process—i.e.,
+     build-time or run-time dependencies of the package.  Here, we
+     define an input called ‘"gawk"’ whose value is that of the GAWK
+     variable; GAWK is itself bound to a ‘<package>’ object.
+
+     Note that GCC, Coreutils, Bash, and other essential tools do not
+     need to be specified as inputs here.  Instead, GNU-BUILD-SYSTEM
+     takes care of ensuring that they are present.
+
+     However, any other dependencies need to be specified in the
+     ‘inputs’ field.  Any dependency not specified here will simply be
+     unavailable to the build process, possibly leading to a build
+     failure.
+
+   There are other fields that package definitions may provide.  Of
+particular interest is the ‘arguments’ field.  When specified, it must
+be bound to a list of additional arguments to be passed to the build
+system.  For instance, the above definition could be augmented with the
+following field initializer:
+
+         (arguments `(#:tests? #f
+                      #:configure-flags '("--enable-silent-rules")))
+
+These are keyword arguments (*note keyword arguments in Guile:
+(guile)Optional Arguments.).  They are passed to GNU-BUILD-SYSTEM, which
+interprets them as meaning “do not run ‘make check’”, and “run
+‘configure’ with the ‘--enable-silent-rules’ flag”.  The value of these
+keyword parameters is actually evaluated in the "build stratum"—i.e., by
+a Guile process launched by the daemon (*note Derivations::).
+
+   Once a package definition is in place(1), the package may actually be
+built using the ‘guix build’ command-line tool (*note Invoking guix
+build::).  Eventually, updating the package definition to a new upstream
+version can be partly automated by the ‘guix refresh’ command (*note
+Invoking guix refresh::).
+
+   Behind the scenes, a derivation corresponding to the ‘<package>’
+object is first computed by the ‘package-derivation’ procedure.  That
+derivation is stored in a ‘.drv’ file under ‘/nix/store’.  The build
+actions it prescribes may then be realized by using the
+‘build-derivations’ procedure (*note The Store::).
+
+ -- Scheme Procedure: package-derivation STORE PACKAGE [SYSTEM]
+     Return the derivation path and corresponding ‘<derivation>’ object
+     of PACKAGE for SYSTEM (*note Derivations::).
+
+     PACKAGE must be a valid ‘<package>’ object, and SYSTEM must be a
+     string denoting the target system type—e.g., ‘"x86_64-linux"’ for
+     an x86_64 Linux-based GNU system.  STORE must be a connection to
+     the daemon, which operates on the store (*note The Store::).
+
+Similarly, it is possible to compute a derivation that cross-builds a
+package for some other system:
+
+ -- Scheme Procedure: package-cross-derivation STORE PACKAGE TARGET
+          [SYSTEM]
+     Return the derivation path and corresponding ‘<derivation>’ object
+     of PACKAGE cross-built from SYSTEM to TARGET.
+
+     TARGET must be a valid GNU triplet denoting the target hardware and
+     operating system, such as ‘"mips64el-linux-gnu"’ (*note GNU
+     configuration triplets: (configure)Configuration Names.).
+
+   ---------- Footnotes ----------
+
+   (1) Simple package definitions like the one above may be
+automatically converted from the Nixpkgs distribution using the ‘guix
+import’ command.
+
+
+File: guix.info,  Node: The Store,  Next: Derivations,  Prev: Defining Packages,  Up: Programming Interface
+
+4.2 The Store
+=============
+
+Conceptually, the "store" is where derivations that have been
+successfully built are stored—by default, under ‘/nix/store’.
+Sub-directories in the store are referred to as "store paths".  The
+store has an associated database that contains information such has the
+store paths referred to by each store path, and the list of _valid_
+store paths—paths that result from a successful build.
+
+   The store is always accessed by the daemon on behalf of its clients
+(*note Invoking guix-daemon::).  To manipulate the store, clients
+connect to the daemon over a Unix-domain socket, send it requests, and
+read the result—these are remote procedure calls, or RPCs.
+
+   The ‘(guix store)’ module provides procedures to connect to the
+daemon, and to perform RPCs.  These are described below.
+
+ -- Scheme Procedure: open-connection [FILE] [#:reserve-space? #t]
+     Connect to the daemon over the Unix-domain socket at FILE.  When
+     RESERVE-SPACE? is true, instruct it to reserve a little bit of
+     extra space on the file system so that the garbage collector can
+     still operate, should the disk become full.  Return a server
+     object.
+
+     FILE defaults to %DEFAULT-SOCKET-PATH, which is the normal location
+     given the options that were passed to ‘configure’.
+
+ -- Scheme Procedure: close-connection SERVER
+     Close the connection to SERVER.
+
+ -- Scheme Variable: current-build-output-port
+     This variable is bound to a SRFI-39 parameter, which refers to the
+     port where build and error logs sent by the daemon should be
+     written.
+
+   Procedures that make RPCs all take a server object as their first
+argument.
+
+ -- Scheme Procedure: valid-path? SERVER PATH
+     Return ‘#t’ when PATH is a valid store path.
+
+ -- Scheme Procedure: add-text-to-store SERVER NAME TEXT REFERENCES
+     Add TEXT under file NAME in the store, and return its store path.
+     REFERENCES is the list of store paths referred to by the resulting
+     store path.
+
+ -- Scheme Procedure: build-derivations SERVER DERIVATIONS
+     Build DERIVATIONS (a list of derivation paths), and return when the
+     worker is done building them.  Return ‘#t’ on success.
+
+   This section is currently incomplete.
+
+
+File: guix.info,  Node: Derivations,  Prev: The Store,  Up: Programming Interface
+
+4.3 Derivations
+===============
+
+Low-level build actions and the environment in which they are performed
+are represented by "derivations".  A derivation contain the following
+pieces of information:
+
+   • The outputs of the derivation—derivations produce at least one file
+     or directory in the store, but may produce more.
+
+   • The inputs of the derivations, which may be other derivations or
+     plain files in the store (patches, build scripts, etc.)
+
+   • The system type targeted by the derivation—e.g., ‘x86_64-linux’.
+
+   • The file name of a build script in the store, along with the
+     arguments to be passed.
+
+   • A list of environment variables to be defined.
+
+   Derivations allow clients of the daemon to communicate build actions
+to the store.  They exist in two forms: as an in-memory representation,
+both on the client- and daemon-side, and as files in the store whose
+name end in ‘.drv’—these files are referred to as "derivation paths".
+Derivations paths can be passed to the ‘build-derivations’ procedure to
+perform the build actions they prescribe (*note The Store::).
+
+   The ‘(guix derivations)’ module provides a representation of
+derivations as Scheme objects, along with procedures to create and
+otherwise manipulate derivations.  The lowest-level primitive to create
+a derivation is the ‘derivation’ procedure:
+
+ -- Scheme Procedure: derivation STORE NAME SYSTEM BUILDER ARGS ENV-VARS
+          INPUTS [#:outputs '("out")] [#:hash #f] [#:hash-algo #f]
+          [#:hash-mode #f]
+     Build a derivation with the given arguments.  Return the resulting
+     store path and ‘<derivation>’ object.
+
+     When HASH, HASH-ALGO, and HASH-MODE are given, a "fixed-output
+     derivation" is created—i.e., one whose result is known in advance,
+     such as a file download.
+
+Here’s an example with a shell script as its builder, assuming STORE is
+an open connection to the daemon, and BASH points to a Bash executable
+in the store:
+
+     (use-modules (guix utils)
+                  (guix store)
+                  (guix derivations))
+
+     (call-with-values
+       (lambda ()
+         (let ((builder   ; add the Bash script to the store
+                (add-text-to-store store "my-builder.sh"
+                                   "echo hello world > $out\n" '())))
+           (derivation store "foo" (%current-system)
+                       bash `("-e" ,builder)
+                       '(("HOME" . "/homeless")) '())))
+       list)
+     ⇒ ("/nix/store/…-foo.drv" #<<derivation> …>)
+
+   As can be guessed, this primitive is cumbersome to use directly.  An
+improved variant is ‘build-expression->derivation’, which allows the
+caller to directly pass a Guile expression as the build script:
+
+ -- Scheme Procedure: build-expression->derivation STORE NAME SYSTEM EXP
+          INPUTS [#:outputs '("out")] [#:hash #f] [#:hash-algo #f]
+          [#:env-vars '()] [#:modules '()] [#:guile-for-build #f]
+     Return a derivation that executes Scheme expression EXP as a
+     builder for derivation NAME.  INPUTS must be a list of ‘(name
+     drv-path sub-drv)’ tuples; when SUB-DRV is omitted, ‘"out"’ is
+     assumed.  MODULES is a list of names of Guile modules from the
+     current search path to be copied in the store, compiled, and made
+     available in the load path during the execution of EXP—e.g.,
+     ‘((guix build utils) (guix build gnu-build-system))’.
+
+     EXP is evaluated in an environment where ‘%outputs’ is bound to a
+     list of output/path pairs, and where ‘%build-inputs’ is bound to a
+     list of string/output-path pairs made from INPUTS.  Optionally,
+     ENV-VARS is a list of string pairs specifying the name and value of
+     environment variables visible to the builder.  The builder
+     terminates by passing the result of EXP to ‘exit’; thus, when EXP
+     returns ‘#f’, the build is considered to have failed.
+
+     EXP is built using GUILE-FOR-BUILD (a derivation).  When
+     GUILE-FOR-BUILD is omitted or is ‘#f’, the value of the
+     ‘%guile-for-build’ fluid is used instead.
+
+Here’s an example of a single-output derivation that creates a directory
+containing one file:
+
+     (let ((builder '(let ((out (assoc-ref %outputs "out")))
+                       (mkdir out)    ; create /nix/store/…-goo
+                       (call-with-output-file (string-append out "/test")
+                         (lambda (p)
+                           (display '(hello guix) p))))))
+       (build-expression->derivation store "goo" (%current-system)
+                                     builder '()))
+
+     ⇒ "/nix/store/…-goo.drv"
+     ⇒ #<<derivation> …>
+
+   Remember that the build expression passed to
+‘build-expression->derivation’ is run by a separate Guile process than
+the one that calls ‘build-expression->derivation’: it is run by a Guile
+process launched by the daemon, typically in a chroot.  So, while there
+is a single language for both the "host" and the build side, there are
+really two "strata" of code: the host-side, and the build-side code(1).
+This distinction is important to keep in mind, notably when using
+higher-level constructs such as GNU-BUILD-SYSTEM (*note Defining
+Packages::).  For this reason, Guix modules that are meant to be used in
+the build stratum are kept in the ‘(guix build …)’ name space.
+
+   ---------- Footnotes ----------
+
+   (1) The term "stratum" in this context was coined by Manuel Serrano
+et al.  in the context of their work on Hop.
+
+
+File: guix.info,  Node: Utilities,  Next: GNU Distribution,  Prev: Programming Interface,  Up: Top
+
+5 Utilities
+***********
+
+This section describes tools primarily targeted at developers and users
+who write new package definitions.  They complement the Scheme
+programming interface of Guix in a convenient way.
+
+* Menu:
+
+* Invoking guix build::         Building packages from the command line.
+* Invoking guix download::      Downloading a file and printing its hash.
+* Invoking guix hash::          Computing the cryptographic hash of a file.
+* Invoking guix refresh::       Updating package definitions.
+
+
+File: guix.info,  Node: Invoking guix build,  Next: Invoking guix download,  Up: Utilities
+
+5.1 Invoking ‘guix build’
+=========================
+
+The ‘guix build’ command builds packages or derivations and their
+dependencies, and prints the resulting store paths.  Note that it does
+not modify the user’s profile—this is the job of the ‘guix package’
+command (*note Invoking guix package::).  Thus, it is mainly useful for
+distribution developers.
+
+   The general syntax is:
+
+     guix build OPTIONS PACKAGE-OR-DERIVATION…
+
+   PACKAGE-OR-DERIVATION may be either the name of a package found in
+the software distribution such as ‘coreutils’ or ‘coreutils-8.20’, or a
+derivation such as ‘/nix/store/…-coreutils-8.19.drv’.  Alternatively,
+the ‘--expression’ option may be used to specify a Scheme expression
+that evaluates to a package; this is useful when disambiguation among
+several same-named packages or package variants is needed.
+
+   The OPTIONS may be zero or more of the following:
+
+‘--expression=EXPR’
+‘-e EXPR’
+     Build the package EXPR evaluates to.
+
+     For example, EXPR may be ‘(@ (gnu packages guile) guile-1.8)’,
+     which unambiguously designates this specific variant of version 1.8
+     of Guile.
+
+‘--source’
+‘-S’
+     Build the packages’ source derivations, rather than the packages
+     themselves.
+
+     For instance, ‘guix build -S gcc’ returns something like
+     ‘/nix/store/…-gcc-4.7.2.tar.bz2’, which is GCC’s source tarball.
+
+‘--system=SYSTEM’
+‘-s SYSTEM’
+     Attempt to build for SYSTEM—e.g., ‘i686-linux’—instead of the
+     host’s system type.
+
+     An example use of this is on Linux-based systems, which can emulate
+     different personalities.  For instance, passing
+     ‘--system=i686-linux’ on an ‘x86_64-linux’ system allows users to
+     build packages in a complete 32-bit environment.
+
+‘--target=TRIPLET’
+     Cross-build for TRIPLET, which must be a valid GNU triplet, such as
+     ‘"mips64el-linux-gnu"’ (*note GNU configuration triplets:
+     (configure)Configuration Names.).
+
+‘--derivations’
+‘-d’
+     Return the derivation paths, not the output paths, of the given
+     packages.
+
+‘--keep-failed’
+‘-K’
+     Keep the build tree of failed builds.  Thus, if a build fail, its
+     build tree is kept under ‘/tmp’, in a directory whose name is shown
+     at the end of the build log.  This is useful when debugging build
+     issues.
+
+‘--dry-run’
+‘-n’
+     Do not build the derivations.
+
+‘--fallback’
+     When substituting a pre-built binary fails, fall back to building
+     packages locally.
+
+‘--no-substitutes’
+     Build instead of resorting to pre-built substitutes.
+
+‘--max-silent-time=SECONDS’
+     When the build or substitution process remains silent for more than
+     SECONDS, terminate it and report a build failure.
+
+‘--cores=N’
+‘-c N’
+     Allow the use of up to N CPU cores for the build.  The special
+     value ‘0’ means to use as many CPU cores as available.
+
+‘--root=FILE’
+‘-r FILE’
+     Make FILE a symlink to the result, and register it as a garbage
+     collector root.
+
+‘--verbosity=LEVEL’
+     Use the given verbosity level.  LEVEL must be an integer between 0
+     and 5; higher means more verbose output.  Setting a level of 4 or
+     more may be helpful when debugging setup issues with the build
+     daemon.
+
+   Behind the scenes, ‘guix build’ is essentially an interface to the
+‘package-derivation’ procedure of the ‘(guix packages)’ module, and to
+the ‘build-derivations’ procedure of the ‘(guix store)’ module.
+
+
+File: guix.info,  Node: Invoking guix download,  Next: Invoking guix hash,  Prev: Invoking guix build,  Up: Utilities
+
+5.2 Invoking ‘guix download’
+============================
+
+When writing a package definition, developers typically need to download
+the package’s source tarball, compute its SHA256 hash, and write that
+hash in the package definition (*note Defining Packages::).  The ‘guix
+download’ tool helps with this task: it downloads a file from the given
+URI, adds it to the store, and prints both its file name in the store
+and its SHA256 hash.
+
+   The fact that the downloaded file is added to the store saves
+bandwidth: when the developer eventually tries to build the newly
+defined package with ‘guix build’, the source tarball will not have to
+be downloaded again because it is already in the store.  It is also a
+convenient way to temporarily stash files, which may be deleted
+eventually (*note Invoking guix gc::).
+
+   The ‘guix download’ command supports the same URIs as used in package
+definitions.  In particular, it supports ‘mirror://’ URIs.  ‘https’ URIs
+(HTTP over TLS) are supported _provided_ the Guile bindings for GnuTLS
+are available in the user’s environment; when they are not available, an
+error is raised.
+
+   The following option is available:
+
+‘--format=FMT’
+‘-f FMT’
+     Write the hash in the format specified by FMT.  For more
+     information on the valid values for FMT, *note Invoking guix
+     hash::.
+
+
+File: guix.info,  Node: Invoking guix hash,  Next: Invoking guix refresh,  Prev: Invoking guix download,  Up: Utilities
+
+5.3 Invoking ‘guix hash’
+========================
+
+The ‘guix hash’ command computes the SHA256 hash of a file.  It is
+primarily a convenience tool for anyone contributing to the
+distribution: it computes the cryptographic hash of a file, which can be
+used in the definition of a package (*note Defining Packages::).
+
+   The general syntax is:
+
+     guix hash OPTION FILE
+
+   ‘guix hash’ has the following option:
+
+‘--format=FMT’
+‘-f FMT’
+     Write the hash in the format specified by FMT.
+
+     Supported formats: ‘nix-base32’, ‘base32’, ‘base16’ (‘hex’ and
+     ‘hexadecimal’ can be used as well).
+
+     If the ‘--format’ option is not specified, ‘guix hash’ will output
+     the hash in ‘nix-base32’.  This representation is used in the
+     definitions of packages.
+
+
+File: guix.info,  Node: Invoking guix refresh,  Prev: Invoking guix hash,  Up: Utilities
+
+5.4 Invoking ‘guix refresh’
+===========================
+
+The primary audience of the ‘guix refresh’ command is developers of the
+GNU software distribution.  By default, it reports any packages provided
+by the distribution that are outdated compared to the latest upstream
+version, like this:
+
+     $ guix refresh
+     gnu/packages/gettext.scm:29:13: gettext would be upgraded from 0.18.1.1 to 0.18.2.1
+     gnu/packages/glib.scm:77:12: glib would be upgraded from 2.34.3 to 2.37.0
+
+   It does so by browsing each package’s FTP directory and determining
+the highest version number of the source tarballs therein(1).
+
+   When passed ‘--update’, it modifies distribution source files to
+update the version numbers and source tarball hashes of those packages’
+recipes (*note Defining Packages::).  This is achieved by downloading
+each package’s latest source tarball and its associated OpenPGP
+signature, authenticating the downloaded tarball against its signature
+using ‘gpg’, and finally computing its hash.  When the public key used
+to sign the tarball is missing from the user’s keyring, an attempt is
+made to automatically retrieve it from a public key server; when it’s
+successful, the key is added to the user’s keyring; otherwise, ‘guix
+refresh’ reports an error.
+
+   The following options are supported:
+
+‘--update’
+‘-u’
+     Update distribution source files (package recipes) in place.  *note
+     Defining Packages::, for more information on package definitions.
+
+‘--select=[SUBSET]’
+‘-s SUBSET’
+     Select all the packages in SUBSET, one of ‘core’ or ‘non-core’.
+
+     The ‘core’ subset refers to all the packages at the core of the
+     distribution—i.e., packages that are used to build “everything
+     else”.  This includes GCC, libc, Binutils, Bash, etc.  Usually,
+     changing one of these packages in the distribution entails a
+     rebuild of all the others.  Thus, such updates are an inconvenience
+     to users in terms of build time or bandwidth used to achieve the
+     upgrade.
+
+     The ‘non-core’ subset refers to the remaining packages.  It is
+     typically useful in cases where an update of the core packages
+     would be inconvenient.
+
+   In addition, ‘guix refresh’ can be passed one or more package names,
+as in this example:
+
+     guix refresh -u emacs idutils
+
+The command above specifically updates the ‘emacs’ and ‘idutils’
+packages.  The ‘--select’ option would have no effect in this case.
+
+   The following options can be used to customize GnuPG operation:
+
+‘--key-server=HOST’
+     Use HOST as the OpenPGP key server when importing a public key.
+
+‘--gpg=COMMAND’
+     Use COMMAND as the GnuPG 2.x command.  COMMAND is searched for in
+     ‘$PATH’.
+
+   ---------- Footnotes ----------
+
+   (1) Currently, this only works for GNU packages.
+
+
+File: guix.info,  Node: GNU Distribution,  Next: Contributing,  Prev: Utilities,  Up: Top
+
+6 GNU Distribution
+******************
+
+Guix comes with a distribution of free software(1) that form the basis
+of the GNU system.  This includes core GNU packages such as GNU libc,
+GCC, and Binutils, as well as many GNU and non-GNU applications.  The
+complete list of available packages can be seen by running ‘guix
+package’ (*note Invoking guix package::):
+
+     guix package --list-available
+
+   Our goal is to build a practical 100% free software distribution of
+Linux-based and other variants of GNU, with a focus on the promotion and
+tight integration of GNU components, and an emphasis on programs and
+tools that help users exert that freedom.
+
+* Menu:
+
+* Installing Debugging Files::  Feeding the debugger.
+* Package Modules::             Packages from the programmer’s viewpoint.
+* Adding New Packages::         Growing the distribution.
+* Bootstrapping::               GNU/Linux built from scratch.
+* Porting::                     Targeting another platform or kernel.
+
+   Building this distribution is a cooperative effort, and you are
+invited to join!  *note Contributing::, for information about how you
+can help.
+
+   ---------- Footnotes ----------
+
+   (1) The term “free” here refers to the freedom provided to users of
+that software (http://www.gnu.org/philosophy/free-sw.html).
+
+
+File: guix.info,  Node: Installing Debugging Files,  Next: Package Modules,  Up: GNU Distribution
+
+6.1 Installing Debugging Files
+==============================
+
+Program binaries, as produced by the GCC compilers for instance, are
+typically written in the ELF format, with a section containing
+"debugging information".  Debugging information is what allows the
+debugger, GDB, to map binary code to source code; it is required to
+debug a compiled program in good conditions.
+
+   The problem with debugging information is that is takes up a fair
+amount of disk space.  For example, debugging information for the GNU C
+Library weighs in at more than 60 MiB. Thus, as a user, keeping all the
+debugging info of all the installed programs is usually not an option.
+Yet, space savings should not come at the cost of an impediment to
+debugging—especially in the GNU system, which should make it easier for
+users to exert their computing freedom (*note GNU Distribution::).
+
+   Thankfully, the GNU Binary Utilities (Binutils) and GDB provide a
+mechanism that allows users to get the best of both worlds: debugging
+information can be stripped from the binaries and stored in separate
+files.  GDB is then able to load debugging information from those files,
+when they are available (*note (gdb)Separate Debug Files::).
+
+   The GNU distribution takes advantage of this by storing debugging
+information in the ‘lib/debug’ sub-directory of a separate package
+output unimaginatively called ‘debug’ (*note Packages with Multiple
+Outputs::).  Users can choose to install the ‘debug’ output of a package
+when they need it.  For instance, the following command installs the
+debugging information for the GNU C Library and for GNU Guile:
+
+     guix package -i glibc:debug -i guile:debug
+
+   GDB must then be told to look for debug files in the user’s profile,
+by setting the ‘debug-file-directory’ variable (consider setting it from
+the ‘~/.gdbinit’ file, *note (gdb)Startup::):
+
+     (gdb) set debug-file-directory ~/.guix-profile/lib/debug
+
+   From there on, GDB will pick up debugging information from the
+‘.debug’ files under ‘~/.guix-profile/lib/debug’.
+
+   The ‘debug’ output mechanism in Guix is implemented by the
+‘gnu-build-system’ (*note Defining Packages::).  Currently, it is
+opt-in—debugging information is available only for those packages whose
+definition explicitly declares a ‘debug’ output.  This may be changed to
+opt-out in the future, if our build farm servers can handle the load.
+To check whether a package has a ‘debug’ output, use ‘guix package
+--list-available’ (*note Invoking guix package::).
+
+
+File: guix.info,  Node: Package Modules,  Next: Adding New Packages,  Prev: Installing Debugging Files,  Up: GNU Distribution
+
+6.2 Package Modules
+===================
+
+From a programming viewpoint, the package definitions of the
+distribution are provided by Guile modules in the ‘(gnu packages ...)’
+name space (*note Guile modules: (guile)Modules.).  For instance, the
+‘(gnu packages emacs)’ module exports a variable named ‘emacs’, which is
+bound to a ‘<package>’ object (*note Defining Packages::).  The ‘(gnu
+packages)’ module provides facilities for searching for packages.
+
+   The distribution is fully "bootstrapped" and "self-contained": each
+package is built based solely on other packages in the distribution.
+The root of this dependency graph is a small set of "bootstrap
+binaries", provided by the ‘(gnu packages bootstrap)’ module.  For more
+information on bootstrapping, *note Bootstrapping::.
+
+
+File: guix.info,  Node: Adding New Packages,  Next: Bootstrapping,  Prev: Package Modules,  Up: GNU Distribution
+
+6.3 Adding New Packages
+=======================
+
+The GNU distribution is nascent and may well lack some of your favorite
+packages.  This section describes how you can help make the distribution
+grow.  *note Contributing::, for additional information on how you can
+help.
+
+* Menu:
+
+* Packaging Guidelines::        What goes into the distribution.
+* From the Source Tarball to the Package::     The story of a package.
+
+
+File: guix.info,  Node: Packaging Guidelines,  Next: From the Source Tarball to the Package,  Up: Adding New Packages
+
+6.3.1 Packaging Guidelines
+--------------------------
+
+The GNU operating system has been developed so that users can have
+freedom in their computing.  GNU is "free software", meaning that users
+have the four essential freedoms
+(http://www.gnu.org/philosophy/free-sw.html): to run the program, to
+study and change the program in source code form, to redistribute exact
+copies, and to distribute modified versions.  Packages found in the GNU
+distribution provide only software that conveys these four freedoms.
+
+   In addition, the GNU distribution follow the free software
+distribution guidelines
+(http://www.gnu.org/distros/free-system-distribution-guidelines.html).
+Among other things, these guidelines reject non-free firmware,
+recommendations of non-free software, and discuss ways to deal with
+trademarks and patents.
+
+
+File: guix.info,  Node: From the Source Tarball to the Package,  Prev: Packaging Guidelines,  Up: Adding New Packages
+
+6.3.2 From the Source Tarball, to the Package Definition, to the Binary Package
+-------------------------------------------------------------------------------
+
+Free software packages are usually distributed in the form of "source
+code tarballs"—typically ‘tar.gz’ files that contain all the source
+files.  Adding a package to the distribution means essentially two
+things: adding a "recipe" that describes how to build the package,
+including a list of other packages required to build it, and adding
+"package meta-data" along with that recipe, such as a description and
+licensing information.
+
+   In Guix all this information is embodied in "package definitions".
+Package definitions provide a high-level view of the package.  They are
+written using the syntax of the Scheme programming language; in fact,
+for each package we define a variable bound to the package definition,
+and export that variable from a module (*note Package Modules::).
+However, in-depth Scheme knowledge is _not_ a prerequisite for creating
+packages.  For more information on package definitions, *note Defining
+Packages::.
+
+   Once a package definition is in place, stored in a file in the Guix
+source tree, it can be tested using the ‘guix build’ command (*note
+Invoking guix build::).  For example, assuming the new package is called
+‘gnew’, you may run this command from the Guix build tree:
+
+     ./pre-inst-env guix build gnew --keep-failed
+
+   Using ‘--keep-failed’ makes it easier to debug build failures since
+it provides access to the failed build tree.
+
+   Once your package builds correctly, please send us a patch (*note
+Contributing::).  Well, if you need help, we will be happy to help you
+too.  Once the patch is committed in the Guix repository, the new
+package automatically gets built on the supported platforms by our
+continuous integration system (http://hydra.gnu.org/gnu/master).
+
+   Users can obtain the new package definition simply by running ‘guix
+pull’ (*note Invoking guix pull::).  When ‘hydra.gnu.org’ is done
+building the package, installing the package automatically downloads
+binaries from there (except when using ‘--no-substitutes’).  The only
+place where human intervention is needed is to review and apply the
+patch.
+
+
+File: guix.info,  Node: Bootstrapping,  Next: Porting,  Prev: Adding New Packages,  Up: GNU Distribution
+
+6.4 Bootstrapping
+=================
+
+Bootstrapping in our context refers to how the distribution gets built
+“from nothing”.  Remember that the build environment of a derivation
+contains nothing but its declared inputs (*note Introduction::).  So
+there’s an obvious chicken-and-egg problem: how does the first package
+get built?  How does the first compiler get compiled?  Note that this is
+a question of interest only to the curious hacker, not to the regular
+user, so you can shamelessly skip this section if you consider yourself
+a “regular user”.
+
+   The GNU system is primarily made of C code, with libc at its core.
+The GNU build system itself assumes the availability of a Bourne shell
+and command-line tools provided by GNU Coreutils, Awk, Findutils, ‘sed’,
+and ‘grep’.  Furthermore, build programs—programs that run
+‘./configure’, ‘make’, etc.—are written in Guile Scheme (*note
+Derivations::).  Consequently, to be able to build anything at all, from
+scratch, Guix relies on pre-built binaries of Guile, GCC, Binutils,
+libc, and the other packages mentioned above—the "bootstrap binaries".
+
+   These bootstrap binaries are “taken for granted”, though we can also
+re-create them if needed (more on that later.)
+
+Preparing to Use the Bootstrap Binaries
+---------------------------------------
+
+ [image src="images/bootstrap-graph.png" alt="Dependency graph of the early bootstrap derivations" ]
+
+The figure above shows the very beginning of the dependency graph of the
+distribution, corresponding to the package definitions of the ‘(gnu
+packages bootstrap)’ module.  At this level of detail, things are
+slightly complex.  First, Guile itself consists of an ELF executable,
+along with many source and compiled Scheme files that are dynamically
+loaded when it runs.  This gets stored in the ‘guile-2.0.7.tar.xz’
+tarball shown in this graph.  This tarball is part of Guix’s “source”
+distribution, and gets inserted into the store with ‘add-to-store’
+(*note The Store::).
+
+   But how do we write a derivation that unpacks this tarball and adds
+it to the store?  To solve this problem, the ‘guile-bootstrap-2.0.drv’
+derivation—the first one that gets built—uses ‘bash’ as its builder,
+which runs ‘build-bootstrap-guile.sh’, which in turn calls ‘tar’ to
+unpack the tarball.  Thus, ‘bash’, ‘tar’, ‘xz’, and ‘mkdir’ are
+statically-linked binaries, also part of the Guix source distribution,
+whose sole purpose is to allow the Guile tarball to be unpacked.
+
+   Once ‘guile-bootstrap-2.0.drv’ is built, we have a functioning Guile
+that can be used to run subsequent build programs.  Its first task is to
+download tarballs containing the other pre-built binaries—this is what
+the ‘.tar.xz.drv’ derivations do.  Guix modules such as ‘ftp-client.scm’
+are used for this purpose.  The ‘module-import.drv’ derivations import
+those modules in a directory in the store, using the original layout.
+The ‘module-import-compiled.drv’ derivations compile those modules, and
+write them in an output directory with the right layout.  This
+corresponds to the ‘#:modules’ argument of
+‘build-expression->derivation’ (*note Derivations::).
+
+   Finally, the various tarballs are unpacked by the derivations
+‘gcc-bootstrap-0.drv’, ‘glibc-bootstrap-0.drv’, etc., at which point we
+have a working C tool chain.
+
+Building the Build Tools
+------------------------
+
+Bootstrapping is complete when we have a full tool chain that does not
+depend on the pre-built bootstrap tools discussed above.  This
+no-dependency requirement is verified by checking whether the files of
+the final tool chain contain references to the ‘/nix/store’ directories
+of the bootstrap inputs.  The process that leads to this “final” tool
+chain is described by the package definitions found in the ‘(gnu
+packages base)’ module.
+
+   The first tool that gets built with the bootstrap binaries is GNU
+Make, which is a prerequisite for all the following packages.  From
+there Findutils and Diffutils get built.
+
+   Then come the first-stage Binutils and GCC, built as pseudo cross
+tools—i.e., with ‘--target’ equal to ‘--host’.  They are used to build
+libc.  Thanks to this cross-build trick, this libc is guaranteed not to
+hold any reference to the initial tool chain.
+
+   From there the final Binutils and GCC are built.  GCC uses ‘ld’ from
+the final Binutils, and links programs against the just-built libc.
+This tool chain is used to build the other packages used by Guix and by
+the GNU Build System: Guile, Bash, Coreutils, etc.
+
+   And voilà!  At this point we have the complete set of build tools
+that the GNU Build System expects.  These are in the ‘%final-inputs’
+variables of the ‘(gnu packages base)’ module, and are implicitly used
+by any package that uses ‘gnu-build-system’ (*note Defining Packages::).
+
+Building the Bootstrap Binaries
+-------------------------------
+
+Because the final tool chain does not depend on the bootstrap binaries,
+those rarely need to be updated.  Nevertheless, it is useful to have an
+automated way to produce them, should an update occur, and this is what
+the ‘(gnu packages make-bootstrap)’ module provides.
+
+   The following command builds the tarballs containing the bootstrap
+binaries (Guile, Binutils, GCC, libc, and a tarball containing a mixture
+of Coreutils and other basic command-line tools):
+
+     guix build bootstrap-tarballs
+
+   The generated tarballs are those that should be referred to in the
+‘(gnu packages bootstrap)’ module mentioned at the beginning of this
+section.
+
+   Still here?  Then perhaps by now you’ve started to wonder: when do we
+reach a fixed point?  That is an interesting question!  The answer is
+unknown, but if you would like to investigate further (and have
+significant computational and storage resources to do so), then let us
+know.
+
+
+File: guix.info,  Node: Porting,  Prev: Bootstrapping,  Up: GNU Distribution
+
+6.5 Porting to a New Platform
+=============================
+
+As discussed above, the GNU distribution is self-contained, and
+self-containment is achieved by relying on pre-built “bootstrap
+binaries” (*note Bootstrapping::).  These binaries are specific to an
+operating system kernel, CPU architecture, and application binary
+interface (ABI). Thus, to port the distribution to a platform that is
+not yet supported, one must build those bootstrap binaries, and update
+the ‘(gnu packages bootstrap)’ module to use them on that platform.
+
+   Fortunately, Guix can _cross compile_ those bootstrap binaries.  When
+everything goes well, and assuming the GNU tool chain supports the
+target platform, this can be as simple as running a command like this
+one:
+
+     guix build --target=armv5tel-linux-gnueabi bootstrap-tarballs
+
+   In practice, there may be some complications.  First, it may be that
+the extended GNU triplet that specifies an ABI (like the ‘eabi’ suffix
+above) is not recognized by all the GNU tools.  Typically, glibc
+recognizes some of these, whereas GCC uses an extra ‘--with-abi’
+configure flag (see ‘gcc.scm’ for examples of how to handle this.)
+Second, some of the required packages could fail to build for that
+platform.  Lastly, the generated binaries could be broken for some
+reason.
+
+
+File: guix.info,  Node: Contributing,  Next: Acknowledgments,  Prev: GNU Distribution,  Up: Top
+
+7 Contributing
+**************
+
+This project is a cooperative effort, and we need your help to make it
+grow!  Please get in touch with us on <guix-devel@gnu.org>.  We welcome
+ideas, bug reports, patches, and anything that may be helpful to the
+project.  We particularly welcome help on packaging (*note Adding New
+Packages::).
+
+   Please see the ‘HACKING’ file
+(http://git.savannah.gnu.org/cgit/guix.git/tree/HACKING) that comes with
+the Guix source code for practical details about contributions.
+
+
+File: guix.info,  Node: Acknowledgments,  Next: GNU Free Documentation License,  Prev: Contributing,  Up: Top
+
+8 Acknowledgments
+*****************
+
+Guix is based on the Nix package manager, which was designed and
+implemented by Eelco Dolstra.  Nix pioneered functional package
+management, and promoted unprecedented features, such as transactional
+package upgrades and rollbacks, per-user profiles, and referentially
+transparent build processes.  Without this work, Guix would not exist.
+
+   The Nix-based software distributions, Nixpkgs and NixOS, have also
+been an inspiration for Guix.
+
+
+File: guix.info,  Node: GNU Free Documentation License,  Next: Concept Index,  Prev: Acknowledgments,  Up: Top
+
+Appendix A GNU Free Documentation License
+*****************************************
+
+                     Version 1.3, 3 November 2008
+
+     Copyright © 2000, 2001, 2002, 2007, 2008 Free Software Foundation, Inc.
+     <http://fsf.org/>
+
+     Everyone is permitted to copy and distribute verbatim copies
+     of this license document, but changing it is not allowed.
+
+  0. PREAMBLE
+
+     The purpose of this License is to make a manual, textbook, or other
+     functional and useful document "free" in the sense of freedom: to
+     assure everyone the effective freedom to copy and redistribute it,
+     with or without modifying it, either commercially or
+     noncommercially.  Secondarily, this License preserves for the
+     author and publisher a way to get credit for their work, while not
+     being considered responsible for modifications made by others.
+
+     This License is a kind of “copyleft”, which means that derivative
+     works of the document must themselves be free in the same sense.
+     It complements the GNU General Public License, which is a copyleft
+     license designed for free software.
+
+     We have designed this License in order to use it for manuals for
+     free software, because free software needs free documentation: a
+     free program should come with manuals providing the same freedoms
+     that the software does.  But this License is not limited to
+     software manuals; it can be used for any textual work, regardless
+     of subject matter or whether it is published as a printed book.  We
+     recommend this License principally for works whose purpose is
+     instruction or reference.
+
+  1. APPLICABILITY AND DEFINITIONS
+
+     This License applies to any manual or other work, in any medium,
+     that contains a notice placed by the copyright holder saying it can
+     be distributed under the terms of this License.  Such a notice
+     grants a world-wide, royalty-free license, unlimited in duration,
+     to use that work under the conditions stated herein.  The
+     “Document”, below, refers to any such manual or work.  Any member
+     of the public is a licensee, and is addressed as “you”.  You accept
+     the license if you copy, modify or distribute the work in a way
+     requiring permission under copyright law.
+
+     A “Modified Version” of the Document means any work containing the
+     Document or a portion of it, either copied verbatim, or with
+     modifications and/or translated into another language.
+
+     A “Secondary Section” is a named appendix or a front-matter section
+     of the Document that deals exclusively with the relationship of the
+     publishers or authors of the Document to the Document’s overall
+     subject (or to related matters) and contains nothing that could
+     fall directly within that overall subject.  (Thus, if the Document
+     is in part a textbook of mathematics, a Secondary Section may not
+     explain any mathematics.)  The relationship could be a matter of
+     historical connection with the subject or with related matters, or
+     of legal, commercial, philosophical, ethical or political position
+     regarding them.
+
+     The “Invariant Sections” are certain Secondary Sections whose
+     titles are designated, as being those of Invariant Sections, in the
+     notice that says that the Document is released under this License.
+     If a section does not fit the above definition of Secondary then it
+     is not allowed to be designated as Invariant.  The Document may
+     contain zero Invariant Sections.  If the Document does not identify
+     any Invariant Sections then there are none.
+
+     The “Cover Texts” are certain short passages of text that are
+     listed, as Front-Cover Texts or Back-Cover Texts, in the notice
+     that says that the Document is released under this License.  A
+     Front-Cover Text may be at most 5 words, and a Back-Cover Text may
+     be at most 25 words.
+
+     A “Transparent” copy of the Document means a machine-readable copy,
+     represented in a format whose specification is available to the
+     general public, that is suitable for revising the document
+     straightforwardly with generic text editors or (for images composed
+     of pixels) generic paint programs or (for drawings) some widely
+     available drawing editor, and that is suitable for input to text
+     formatters or for automatic translation to a variety of formats
+     suitable for input to text formatters.  A copy made in an otherwise
+     Transparent file format whose markup, or absence of markup, has
+     been arranged to thwart or discourage subsequent modification by
+     readers is not Transparent.  An image format is not Transparent if
+     used for any substantial amount of text.  A copy that is not
+     “Transparent” is called “Opaque”.
+
+     Examples of suitable formats for Transparent copies include plain
+     ASCII without markup, Texinfo input format, LaTeX input format,
+     SGML or XML using a publicly available DTD, and standard-conforming
+     simple HTML, PostScript or PDF designed for human modification.
+     Examples of transparent image formats include PNG, XCF and JPG.
+     Opaque formats include proprietary formats that can be read and
+     edited only by proprietary word processors, SGML or XML for which
+     the DTD and/or processing tools are not generally available, and
+     the machine-generated HTML, PostScript or PDF produced by some word
+     processors for output purposes only.
+
+     The “Title Page” means, for a printed book, the title page itself,
+     plus such following pages as are needed to hold, legibly, the
+     material this License requires to appear in the title page.  For
+     works in formats which do not have any title page as such, “Title
+     Page” means the text near the most prominent appearance of the
+     work’s title, preceding the beginning of the body of the text.
+
+     The “publisher” means any person or entity that distributes copies
+     of the Document to the public.
+
+     A section “Entitled XYZ” means a named subunit of the Document
+     whose title either is precisely XYZ or contains XYZ in parentheses
+     following text that translates XYZ in another language.  (Here XYZ
+     stands for a specific section name mentioned below, such as
+     “Acknowledgements”, “Dedications”, “Endorsements”, or “History”.)
+     To “Preserve the Title” of such a section when you modify the
+     Document means that it remains a section “Entitled XYZ” according
+     to this definition.
+
+     The Document may include Warranty Disclaimers next to the notice
+     which states that this License applies to the Document.  These
+     Warranty Disclaimers are considered to be included by reference in
+     this License, but only as regards disclaiming warranties: any other
+     implication that these Warranty Disclaimers may have is void and
+     has no effect on the meaning of this License.
+
+  2. VERBATIM COPYING
+
+     You may copy and distribute the Document in any medium, either
+     commercially or noncommercially, provided that this License, the
+     copyright notices, and the license notice saying this License
+     applies to the Document are reproduced in all copies, and that you
+     add no other conditions whatsoever to those of this License.  You
+     may not use technical measures to obstruct or control the reading
+     or further copying of the copies you make or distribute.  However,
+     you may accept compensation in exchange for copies.  If you
+     distribute a large enough number of copies you must also follow the
+     conditions in section 3.
+
+     You may also lend copies, under the same conditions stated above,
+     and you may publicly display copies.
+
+  3. COPYING IN QUANTITY
+
+     If you publish printed copies (or copies in media that commonly
+     have printed covers) of the Document, numbering more than 100, and
+     the Document’s license notice requires Cover Texts, you must
+     enclose the copies in covers that carry, clearly and legibly, all
+     these Cover Texts: Front-Cover Texts on the front cover, and
+     Back-Cover Texts on the back cover.  Both covers must also clearly
+     and legibly identify you as the publisher of these copies.  The
+     front cover must present the full title with all words of the title
+     equally prominent and visible.  You may add other material on the
+     covers in addition.  Copying with changes limited to the covers, as
+     long as they preserve the title of the Document and satisfy these
+     conditions, can be treated as verbatim copying in other respects.
+
+     If the required texts for either cover are too voluminous to fit
+     legibly, you should put the first ones listed (as many as fit
+     reasonably) on the actual cover, and continue the rest onto
+     adjacent pages.
+
+     If you publish or distribute Opaque copies of the Document
+     numbering more than 100, you must either include a machine-readable
+     Transparent copy along with each Opaque copy, or state in or with
+     each Opaque copy a computer-network location from which the general
+     network-using public has access to download using public-standard
+     network protocols a complete Transparent copy of the Document, free
+     of added material.  If you use the latter option, you must take
+     reasonably prudent steps, when you begin distribution of Opaque
+     copies in quantity, to ensure that this Transparent copy will
+     remain thus accessible at the stated location until at least one
+     year after the last time you distribute an Opaque copy (directly or
+     through your agents or retailers) of that edition to the public.
+
+     It is requested, but not required, that you contact the authors of
+     the Document well before redistributing any large number of copies,
+     to give them a chance to provide you with an updated version of the
+     Document.
+
+  4. MODIFICATIONS
+
+     You may copy and distribute a Modified Version of the Document
+     under the conditions of sections 2 and 3 above, provided that you
+     release the Modified Version under precisely this License, with the
+     Modified Version filling the role of the Document, thus licensing
+     distribution and modification of the Modified Version to whoever
+     possesses a copy of it.  In addition, you must do these things in
+     the Modified Version:
+
+       A. Use in the Title Page (and on the covers, if any) a title
+          distinct from that of the Document, and from those of previous
+          versions (which should, if there were any, be listed in the
+          History section of the Document).  You may use the same title
+          as a previous version if the original publisher of that
+          version gives permission.
+
+       B. List on the Title Page, as authors, one or more persons or
+          entities responsible for authorship of the modifications in
+          the Modified Version, together with at least five of the
+          principal authors of the Document (all of its principal
+          authors, if it has fewer than five), unless they release you
+          from this requirement.
+
+       C. State on the Title page the name of the publisher of the
+          Modified Version, as the publisher.
+
+       D. Preserve all the copyright notices of the Document.
+
+       E. Add an appropriate copyright notice for your modifications
+          adjacent to the other copyright notices.
+
+       F. Include, immediately after the copyright notices, a license
+          notice giving the public permission to use the Modified
+          Version under the terms of this License, in the form shown in
+          the Addendum below.
+
+       G. Preserve in that license notice the full lists of Invariant
+          Sections and required Cover Texts given in the Document’s
+          license notice.
+
+       H. Include an unaltered copy of this License.
+
+       I. Preserve the section Entitled “History”, Preserve its Title,
+          and add to it an item stating at least the title, year, new
+          authors, and publisher of the Modified Version as given on the
+          Title Page.  If there is no section Entitled “History” in the
+          Document, create one stating the title, year, authors, and
+          publisher of the Document as given on its Title Page, then add
+          an item describing the Modified Version as stated in the
+          previous sentence.
+
+       J. Preserve the network location, if any, given in the Document
+          for public access to a Transparent copy of the Document, and
+          likewise the network locations given in the Document for
+          previous versions it was based on.  These may be placed in the
+          “History” section.  You may omit a network location for a work
+          that was published at least four years before the Document
+          itself, or if the original publisher of the version it refers
+          to gives permission.
+
+       K. For any section Entitled “Acknowledgements” or “Dedications”,
+          Preserve the Title of the section, and preserve in the section
+          all the substance and tone of each of the contributor
+          acknowledgements and/or dedications given therein.
+
+       L. Preserve all the Invariant Sections of the Document, unaltered
+          in their text and in their titles.  Section numbers or the
+          equivalent are not considered part of the section titles.
+
+       M. Delete any section Entitled “Endorsements”.  Such a section
+          may not be included in the Modified Version.
+
+       N. Do not retitle any existing section to be Entitled
+          “Endorsements” or to conflict in title with any Invariant
+          Section.
+
+       O. Preserve any Warranty Disclaimers.
+
+     If the Modified Version includes new front-matter sections or
+     appendices that qualify as Secondary Sections and contain no
+     material copied from the Document, you may at your option designate
+     some or all of these sections as invariant.  To do this, add their
+     titles to the list of Invariant Sections in the Modified Version’s
+     license notice.  These titles must be distinct from any other
+     section titles.
+
+     You may add a section Entitled “Endorsements”, provided it contains
+     nothing but endorsements of your Modified Version by various
+     parties—for example, statements of peer review or that the text has
+     been approved by an organization as the authoritative definition of
+     a standard.
+
+     You may add a passage of up to five words as a Front-Cover Text,
+     and a passage of up to 25 words as a Back-Cover Text, to the end of
+     the list of Cover Texts in the Modified Version.  Only one passage
+     of Front-Cover Text and one of Back-Cover Text may be added by (or
+     through arrangements made by) any one entity.  If the Document
+     already includes a cover text for the same cover, previously added
+     by you or by arrangement made by the same entity you are acting on
+     behalf of, you may not add another; but you may replace the old
+     one, on explicit permission from the previous publisher that added
+     the old one.
+
+     The author(s) and publisher(s) of the Document do not by this
+     License give permission to use their names for publicity for or to
+     assert or imply endorsement of any Modified Version.
+
+  5. COMBINING DOCUMENTS
+
+     You may combine the Document with other documents released under
+     this License, under the terms defined in section 4 above for
+     modified versions, provided that you include in the combination all
+     of the Invariant Sections of all of the original documents,
+     unmodified, and list them all as Invariant Sections of your
+     combined work in its license notice, and that you preserve all
+     their Warranty Disclaimers.
+
+     The combined work need only contain one copy of this License, and
+     multiple identical Invariant Sections may be replaced with a single
+     copy.  If there are multiple Invariant Sections with the same name
+     but different contents, make the title of each such section unique
+     by adding at the end of it, in parentheses, the name of the
+     original author or publisher of that section if known, or else a
+     unique number.  Make the same adjustment to the section titles in
+     the list of Invariant Sections in the license notice of the
+     combined work.
+
+     In the combination, you must combine any sections Entitled
+     “History” in the various original documents, forming one section
+     Entitled “History”; likewise combine any sections Entitled
+     “Acknowledgements”, and any sections Entitled “Dedications”.  You
+     must delete all sections Entitled “Endorsements.”
+
+  6. COLLECTIONS OF DOCUMENTS
+
+     You may make a collection consisting of the Document and other
+     documents released under this License, and replace the individual
+     copies of this License in the various documents with a single copy
+     that is included in the collection, provided that you follow the
+     rules of this License for verbatim copying of each of the documents
+     in all other respects.
+
+     You may extract a single document from such a collection, and
+     distribute it individually under this License, provided you insert
+     a copy of this License into the extracted document, and follow this
+     License in all other respects regarding verbatim copying of that
+     document.
+
+  7. AGGREGATION WITH INDEPENDENT WORKS
+
+     A compilation of the Document or its derivatives with other
+     separate and independent documents or works, in or on a volume of a
+     storage or distribution medium, is called an “aggregate” if the
+     copyright resulting from the compilation is not used to limit the
+     legal rights of the compilation’s users beyond what the individual
+     works permit.  When the Document is included in an aggregate, this
+     License does not apply to the other works in the aggregate which
+     are not themselves derivative works of the Document.
+
+     If the Cover Text requirement of section 3 is applicable to these
+     copies of the Document, then if the Document is less than one half
+     of the entire aggregate, the Document’s Cover Texts may be placed
+     on covers that bracket the Document within the aggregate, or the
+     electronic equivalent of covers if the Document is in electronic
+     form.  Otherwise they must appear on printed covers that bracket
+     the whole aggregate.
+
+  8. TRANSLATION
+
+     Translation is considered a kind of modification, so you may
+     distribute translations of the Document under the terms of section
+     4.  Replacing Invariant Sections with translations requires special
+     permission from their copyright holders, but you may include
+     translations of some or all Invariant Sections in addition to the
+     original versions of these Invariant Sections.  You may include a
+     translation of this License, and all the license notices in the
+     Document, and any Warranty Disclaimers, provided that you also
+     include the original English version of this License and the
+     original versions of those notices and disclaimers.  In case of a
+     disagreement between the translation and the original version of
+     this License or a notice or disclaimer, the original version will
+     prevail.
+
+     If a section in the Document is Entitled “Acknowledgements”,
+     “Dedications”, or “History”, the requirement (section 4) to
+     Preserve its Title (section 1) will typically require changing the
+     actual title.
+
+  9. TERMINATION
+
+     You may not copy, modify, sublicense, or distribute the Document
+     except as expressly provided under this License.  Any attempt
+     otherwise to copy, modify, sublicense, or distribute it is void,
+     and will automatically terminate your rights under this License.
+
+     However, if you cease all violation of this License, then your
+     license from a particular copyright holder is reinstated (a)
+     provisionally, unless and until the copyright holder explicitly and
+     finally terminates your license, and (b) permanently, if the
+     copyright holder fails to notify you of the violation by some
+     reasonable means prior to 60 days after the cessation.
+
+     Moreover, your license from a particular copyright holder is
+     reinstated permanently if the copyright holder notifies you of the
+     violation by some reasonable means, this is the first time you have
+     received notice of violation of this License (for any work) from
+     that copyright holder, and you cure the violation prior to 30 days
+     after your receipt of the notice.
+
+     Termination of your rights under this section does not terminate
+     the licenses of parties who have received copies or rights from you
+     under this License.  If your rights have been terminated and not
+     permanently reinstated, receipt of a copy of some or all of the
+     same material does not give you any rights to use it.
+
+  10. FUTURE REVISIONS OF THIS LICENSE
+
+     The Free Software Foundation may publish new, revised versions of
+     the GNU Free Documentation License from time to time.  Such new
+     versions will be similar in spirit to the present version, but may
+     differ in detail to address new problems or concerns.  See
+     <http://www.gnu.org/copyleft/>.
+
+     Each version of the License is given a distinguishing version
+     number.  If the Document specifies that a particular numbered
+     version of this License “or any later version” applies to it, you
+     have the option of following the terms and conditions either of
+     that specified version or of any later version that has been
+     published (not as a draft) by the Free Software Foundation.  If the
+     Document does not specify a version number of this License, you may
+     choose any version ever published (not as a draft) by the Free
+     Software Foundation.  If the Document specifies that a proxy can
+     decide which future versions of this License can be used, that
+     proxy’s public statement of acceptance of a version permanently
+     authorizes you to choose that version for the Document.
+
+  11. RELICENSING
+
+     “Massive Multiauthor Collaboration Site” (or “MMC Site”) means any
+     World Wide Web server that publishes copyrightable works and also
+     provides prominent facilities for anybody to edit those works.  A
+     public wiki that anybody can edit is an example of such a server.
+     A “Massive Multiauthor Collaboration” (or “MMC”) contained in the
+     site means any set of copyrightable works thus published on the MMC
+     site.
+
+     “CC-BY-SA” means the Creative Commons Attribution-Share Alike 3.0
+     license published by Creative Commons Corporation, a not-for-profit
+     corporation with a principal place of business in San Francisco,
+     California, as well as future copyleft versions of that license
+     published by that same organization.
+
+     “Incorporate” means to publish or republish a Document, in whole or
+     in part, as part of another Document.
+
+     An MMC is “eligible for relicensing” if it is licensed under this
+     License, and if all works that were first published under this
+     License somewhere other than this MMC, and subsequently
+     incorporated in whole or in part into the MMC, (1) had no cover
+     texts or invariant sections, and (2) were thus incorporated prior
+     to November 1, 2008.
+
+     The operator of an MMC Site may republish an MMC contained in the
+     site under CC-BY-SA on the same site at any time before August 1,
+     2009, provided the MMC is eligible for relicensing.
+
+ADDENDUM: How to use this License for your documents
+====================================================
+
+To use this License in a document you have written, include a copy of
+the License in the document and put the following copyright and license
+notices just after the title page:
+
+       Copyright (C)  YEAR  YOUR NAME.
+       Permission is granted to copy, distribute and/or modify this document
+       under the terms of the GNU Free Documentation License, Version 1.3
+       or any later version published by the Free Software Foundation;
+       with no Invariant Sections, no Front-Cover Texts, and no Back-Cover
+       Texts.  A copy of the license is included in the section entitled ``GNU
+       Free Documentation License''.
+
+   If you have Invariant Sections, Front-Cover Texts and Back-Cover
+Texts, replace the “with…Texts.” line with this:
+
+         with the Invariant Sections being LIST THEIR TITLES, with
+         the Front-Cover Texts being LIST, and with the Back-Cover Texts
+         being LIST.
+
+   If you have Invariant Sections without Cover Texts, or some other
+combination of the three, merge those two alternatives to suit the
+situation.
+
+   If your document contains nontrivial examples of program code, we
+recommend releasing these examples in parallel under your choice of free
+software license, such as the GNU General Public License, to permit
+their use in free software.
+
+
+File: guix.info,  Node: Concept Index,  Next: Function Index,  Prev: GNU Free Documentation License,  Up: Top
+
+Concept Index
+*************
+
+ [index ]
+* Menu:
+
+* bootstrap binaries:                    Bootstrapping.       (line  15)
+* bootstrapping:                         Bootstrapping.       (line   6)
+* build users:                           Setting Up the Daemon.
+                                                              (line  21)
+* cross-compilation:                     Defining Packages.   (line 122)
+* cross-compilation <1>:                 Invoking guix build. (line  52)
+* daemon:                                Setting Up the Daemon.
+                                                              (line   6)
+* derivation:                            Programming Interface.
+                                                              (line  19)
+* derivation path:                       Derivations.         (line  23)
+* derivations:                           Derivations.         (line   6)
+* functional package management:         Introduction.        (line  13)
+* garbage collector:                     Invoking guix gc.    (line   6)
+* GNU Build System:                      Defining Packages.   (line  56)
+* multiple-output packages:              Packages with Multiple Outputs.
+                                                              (line   6)
+* package outputs:                       Packages with Multiple Outputs.
+                                                              (line   6)
+* propagated inputs:                     Invoking guix package.
+                                                              (line  46)
+* search paths:                          Invoking guix package.
+                                                              (line 110)
+* store:                                 Introduction.        (line  26)
+* store <1>:                             The Store.           (line   6)
+* store paths:                           The Store.           (line   6)
+* strata of code:                        Derivations.         (line 105)
+* substituter:                           From the Source Tarball to the Package.
+                                                              (line  39)
+
+
+File: guix.info,  Node: Function Index,  Prev: Concept Index,  Up: Top
+
+Function Index
+**************
+
+ [index ]
+* Menu:
+
+* add-text-to-store:                     The Store.           (line  45)
+* build-derivations:                     The Store.           (line  50)
+* build-expression->derivation:          Derivations.         (line  68)
+* close-connection:                      The Store.           (line  31)
+* derivation:                            Derivations.         (line  35)
+* open-connection:                       The Store.           (line  21)
+* package-cross-derivation:              Defining Packages.   (line 125)
+* package-derivation:                    Defining Packages.   (line 113)
+* valid-path?:                           The Store.           (line  42)
+
+
+
+Tag Table:
+Node: Top858
+Node: Introduction2109
+Ref: Introduction-Footnote-14362
+Node: Installation4479
+Node: Requirements5227
+Node: Setting Up the Daemon6493
+Node: Invoking guix-daemon10035
+Node: Package Management14532
+Node: Features15374
+Node: Invoking guix package18226
+Node: Packages with Multiple Outputs26082
+Node: Invoking guix gc28270
+Node: Invoking guix pull30701
+Node: Programming Interface31791
+Node: Defining Packages33325
+Ref: Defining Packages-Footnote-139752
+Node: The Store39904
+Node: Derivations42261
+Ref: Derivations-Footnote-147772
+Node: Utilities47889
+Node: Invoking guix build48498
+Node: Invoking guix download52179
+Node: Invoking guix hash53662
+Node: Invoking guix refresh54608
+Ref: Invoking guix refresh-Footnote-157525
+Node: GNU Distribution57578
+Ref: GNU Distribution-Footnote-158839
+Node: Installing Debugging Files58975
+Node: Package Modules61633
+Node: Adding New Packages62568
+Node: Packaging Guidelines63102
+Node: From the Source Tarball to the Package64046
+Node: Bootstrapping66428
+Node: Porting72473
+Node: Contributing73875
+Node: Acknowledgments74476
+Node: GNU Free Documentation License75068
+Node: Concept Index100422
+Node: Function Index102666
+
+End Tag Table
+
+
+Local Variables:
+coding: utf-8
+End:

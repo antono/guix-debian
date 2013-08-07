@@ -1,0 +1,73 @@
+#!/bin/sh
+
+# GNU Guix --- Functional package management for GNU
+# Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+#
+# This file is part of GNU Guix.
+#
+# GNU Guix is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or (at
+# your option) any later version.
+#
+# GNU Guix is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
+
+# Usage: ./test-env COMMAND ARG...
+#
+# Run the daemon in the build directory, and run COMMAND within
+# `pre-inst-env'.  This is used to run unit tests with the just-built
+# daemon, unless `--disable-daemon' was passed at configure time.
+
+if [ -x "@abs_top_builddir@/guix-daemon" ]
+then
+    NIX_SETUID_HELPER="@abs_top_builddir@/nix-setuid-helper" # normally unused
+    NIX_IGNORE_SYMLINK_STORE=1	# in case the store is a symlink
+    NIX_STORE_DIR="@GUIX_TEST_ROOT@/store"
+    NIX_LOCALSTATE_DIR="@GUIX_TEST_ROOT@/var"
+    NIX_LOG_DIR="@GUIX_TEST_ROOT@/var/log/nix"
+    NIX_DB_DIR="@GUIX_TEST_ROOT@/db"
+    NIX_ROOT_FINDER="@abs_top_builddir@/nix/scripts/list-runtime-roots"
+
+    # Choose a PID-dependent name to allow for parallel builds.  Note
+    # that the directory name must be chosen so that the socket's file
+    # name is less than 108-char long (the size of `sun_path' in glibc).
+    # Currently, in Nix builds, we're at ~106 chars...
+    NIX_STATE_DIR="@GUIX_TEST_ROOT@/var/$$"
+
+    # A place to store data of the substituter.
+    GUIX_BINARY_SUBSTITUTE_URL="file://$NIX_STATE_DIR/substituter-data"
+    rm -rf "$NIX_STATE_DIR/substituter-data"
+    mkdir -p "$NIX_STATE_DIR/substituter-data"
+
+    # Place for the substituter's cache.
+    XDG_CACHE_HOME="$NIX_STATE_DIR/cache-$$"
+
+    export NIX_IGNORE_SYMLINK_STORE NIX_STORE_DIR			\
+	NIX_LOCALSTATE_DIR NIX_LOG_DIR NIX_STATE_DIR NIX_DB_DIR		\
+	NIX_ROOT_FINDER NIX_SETUID_HELPER GUIX_BINARY_SUBSTITUTE_URL	\
+        XDG_CACHE_HOME
+
+    # Do that because store.scm calls `canonicalize-path' on it.
+    mkdir -p "$NIX_STORE_DIR"
+
+    # Set the umask to avoid "suspicious ownership or permission" errors.
+    # See <http://lists.gnu.org/archive/html/bug-guix/2013-07/msg00033.html>.
+    umask 0022
+
+    # Launch the daemon without chroot support because is may be
+    # unavailable, for instance if we're not running as root.
+    "@abs_top_builddir@/pre-inst-env"				\
+	"@abs_top_builddir@/guix-daemon" --disable-chroot &
+
+    daemon_pid=$!
+    trap "kill $daemon_pid ; rm -rf $NIX_STATE_DIR" EXIT
+fi
+
+"@abs_top_builddir@/pre-inst-env" "$@"
+exit $?
