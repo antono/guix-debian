@@ -20,7 +20,6 @@
 (define-module (test-store)
   #:use-module (guix store)
   #:use-module (guix utils)
-  #:use-module (guix hash)
   #:use-module (guix base32)
   #:use-module (guix packages)
   #:use-module (guix derivations)
@@ -32,7 +31,6 @@
   #:use-module (web uri)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-11)
-  #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-64))
 
 ;; Test the (guix store) module.
@@ -106,24 +104,6 @@
          (equal? (list t2) (referrers %store t1))
          (null? (references %store t1))
          (null? (referrers %store t2)))))
-
-(test-assert "requisites"
-  (let* ((t1 (add-text-to-store %store "random1"
-                                (random-text) '()))
-         (t2 (add-text-to-store %store "random2"
-                                (random-text) (list t1)))
-         (t3 (add-text-to-store %store "random3"
-                                (random-text) (list t2)))
-         (t4 (add-text-to-store %store "random4"
-                                (random-text) (list t1 t3))))
-    (define (same? x y)
-      (and (= (length x) (length y))
-           (lset= equal? x y)))
-
-    (and (same? (requisites %store t1) (list t1))
-         (same? (requisites %store t2) (list t1 t2))
-         (same? (requisites %store t3) (list t1 t2 t3))
-         (same? (requisites %store t4) (list t1 t2 t3 t4)))))
 
 (test-assert "derivers"
   (let* ((b (add-text-to-store %store "build" "echo $foo > $out" '()))
@@ -245,56 +225,6 @@ Deriver: ~a~%"
     (and (has-substitutes? s o)
          (build-derivations s (list d))
          (equal? c (call-with-input-file o get-string-all)))))
-
-(test-assert "substitute --fallback"
-  (let* ((s   (open-connection))
-         (t   (random-text))                      ; contents of the output
-         (d   (build-expression->derivation
-               s "substitute-me-not" (%current-system)
-               `(call-with-output-file %output
-                  (lambda (p)
-                    (display ,t p)))
-               '()
-               #:guile-for-build
-               (package-derivation s %bootstrap-guile (%current-system))))
-         (o   (derivation-path->output-path d))
-         (dir (and=> (getenv "GUIX_BINARY_SUBSTITUTE_URL")
-                     (compose uri-path string->uri))))
-    ;; Create fake substituter data, to be read by `substitute-binary'.
-    (call-with-output-file (string-append dir "/nix-cache-info")
-      (lambda (p)
-        (format p "StoreDir: ~a\nWantMassQuery: 0\n"
-                (%store-prefix))))
-    (call-with-output-file (string-append dir "/" (store-path-hash-part o)
-                                          ".narinfo")
-      (lambda (p)
-        (format p "StorePath: ~a
-URL: ~a
-Compression: none
-NarSize: 1234
-NarHash: sha256:0mdqa9w1p6cmli6976v4wi0sw9r4p5prkj7lzfd1877wk11c9c73
-References: 
-System: ~a
-Deriver: ~a~%"
-                o                                   ; StorePath
-                "does-not-exist.nar"                ; relative URL
-                (%current-system)                   ; System
-                (basename d))))                     ; Deriver
-
-    ;; Make sure we use `substitute-binary'.
-    (set-build-options s #:use-substitutes? #t)
-    (and (has-substitutes? s o)
-         (guard (c ((nix-protocol-error? c)
-                    ;; The substituter failed as expected.  Now make sure that
-                    ;; #:fallback? #t works correctly.
-                    (set-build-options s
-                                       #:use-substitutes? #t
-                                       #:fallback? #t)
-                    (and (build-derivations s (list d))
-                         (equal? t (call-with-input-file o get-string-all)))))
-           ;; Should fail.
-           (build-derivations s (list d))
-           #f))))
 
 (test-end "store")
 

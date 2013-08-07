@@ -21,7 +21,6 @@
   #:use-module (guix derivations)
   #:use-module (guix store)
   #:use-module (guix utils)
-  #:use-module (guix hash)
   #:use-module (guix base32)
   #:use-module ((guix packages) #:select (package-derivation))
   #:use-module ((gnu packages) #:select (search-bootstrap-binary))
@@ -353,21 +352,6 @@
          (let ((p (derivation-path->output-path drv-path)))
            (equal? '(hello guix)
                    (call-with-input-file (string-append p "/test") read))))))
-
-(test-assert "build-expression->derivation and max-silent-time"
-  (let* ((store      (let ((s (open-connection)))
-                       (set-build-options s #:max-silent-time 1)
-                       s))
-         (builder    '(sleep 100))
-         (drv-path   (build-expression->derivation %store "silent"
-                                                   (%current-system)
-                                                   builder '()))
-         (out-path   (derivation-path->output-path drv-path)))
-    (guard (c ((nix-protocol-error? c)
-               (and (string-contains (nix-protocol-error-message c)
-                                     "failed")
-                    (not (valid-path? store out-path)))))
-      (build-derivations %store (list drv-path)))))
 
 (test-assert "build-expression->derivation and derivation-prerequisites-to-build"
   (let-values (((drv-path drv)

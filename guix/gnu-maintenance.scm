@@ -22,12 +22,13 @@
   #:use-module (web client)
   #:use-module (web response)
   #:use-module (ice-9 regex)
+  #:use-module (ice-9 rdelim)
   #:use-module (ice-9 match)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-11)
   #:use-module (srfi srfi-26)
   #:use-module (system foreign)
-  #:use-module (guix http-client)
+  #:use-module (guix web)
   #:use-module (guix ftp-client)
   #:use-module (guix ui)
   #:use-module (guix utils)
@@ -48,7 +49,6 @@
             gnu-package-logo
             gnu-package-doc-category
             gnu-package-doc-summary
-            gnu-package-doc-description
             gnu-package-doc-urls
             gnu-package-download-url
 
@@ -81,11 +81,6 @@
                   "viewvc/*checkout*/gnumaint/"
                   "gnupackages.txt?root=womb")))
 
-(define %gsrc-package-list-url
-  ;; This file is normally kept in sync with GSRC.
-  ;; See <http://lists.gnu.org/archive/html/bug-guix/2013-04/msg00117.html>.
-  (string->uri "http://www.gnu.org/software/gsrc/MANIFEST.rec"))
-
 (define-record-type* <gnu-package-descriptor>
   gnu-package-descriptor
   make-gnu-package-descriptor
@@ -97,48 +92,75 @@
   (copyright-holder gnu-package-copyright-holder)
   (savannah         gnu-package-savannah)
   (fsd              gnu-package-fsd)
-  (language         gnu-package-language)         ; list of strings
+  (language         gnu-package-language)
   (logo             gnu-package-logo)
   (doc-category     gnu-package-doc-category)
   (doc-summary      gnu-package-doc-summary)
-  (doc-description  gnu-package-doc-description)  ; taken from GSRC
-  (doc-urls         gnu-package-doc-urls)         ; list of strings
+  (doc-urls         gnu-package-doc-urls)
   (download-url     gnu-package-download-url))
 
 (define (official-gnu-packages)
   "Return a list of records, which are GNU packages."
-  (define (read-records port)
+  (define (group-package-fields port state)
     ;; Return a list of alists.  Each alist contains fields of a GNU
     ;; package.
-    (let loop ((alist  (recutils->alist port))
-               (result '()))
-      (if (null? alist)
-          (reverse result)
-          (loop (recutils->alist port)
-                (cons alist result)))))
+    (let ((line        (read-line port))
+          (field-rx    (make-regexp "^([[:graph:]]+): (.*)$"))
+          (doc-urls-rx (make-regexp "^doc-url: (.*)$"))
+          (end-rx      (make-regexp "^# End. .+Do not remove this line.+")))
 
-  (define gsrc-description
-    (let ((gsrc (read-records (http-fetch %gsrc-package-list-url
-                                          #:text? #t))))
-      (lambda (name)
-        ;; Return the description found in GSRC for package NAME, or #f.
-        (and=> (find (lambda (alist)
-                       (equal? name (assoc-ref alist "Upstream_name")))
-                     gsrc)
-               (cut assoc-ref <> "Blurb")))))
+      (define (match-field str)
+        ;; Packages are separated by empty strings.  If STR is an
+        ;; empty string, create a new list to store fields of a
+        ;; different package.  Otherwise, match and create a key-value
+        ;; pair.
+        (match str
+          (""
+           (group-package-fields port (cons '() state)))
+          (str
+           (cond ((regexp-exec doc-urls-rx str)
+                  =>
+                  (lambda (match)
+                    (if (equal? (assoc-ref (first state) "doc-urls") #f)
+                        (group-package-fields
+                         port (cons (cons (cons "doc-urls"
+                                                (list
+                                                 (match:substring match 1)))
+                                          (first state))
+                                    (drop state 1)))
+                        (group-package-fields
+                         port (cons (cons (cons "doc-urls"
+                                                (cons (match:substring match 1)
+                                                      (assoc-ref (first state)
+                                                                 "doc-urls")))
+                                          (assoc-remove! (first state)
+                                                         "doc-urls"))
+                                    (drop state 1))))))
+                 ((regexp-exec field-rx str)
+                  =>
+                  (lambda (match)
+                    (group-package-fields
+                     port (cons (cons (cons (match:substring match 1)
+                                            (match:substring match 2))
+                                      (first state))
+                                (drop state 1)))))
+                 (else (group-package-fields port state))))))
 
-  (map (lambda (alist)
-         (let ((name (assoc-ref alist "package")))
-           (alist->record `(("description" . ,(gsrc-description name))
-                            ,@alist)
-                          make-gnu-package-descriptor
-                          (list "package" "mundane-name" "copyright-holder"
-                                "savannah" "fsd" "language" "logo"
-                                "doc-category" "doc-summary" "description"
-                                "doc-url"
-                                "download-url")
-                          '("doc-url" "language"))))
-       (read-records (http-fetch %package-list-url #:text? #t))))
+      (if (or (eof-object? line)
+              (regexp-exec end-rx line)) ; don't include dummy fields
+          (remove null-list? state)
+          (match-field line))))
+
+  (reverse
+   (map (lambda (alist)
+          (alist->record alist
+                         make-gnu-package-descriptor
+                         (list "package" "mundane-name" "copyright-holder"
+                               "savannah" "fsd" "language" "logo"
+                               "doc-category" "doc-summary" "doc-urls"
+                               "download-url")))
+        (group-package-fields (http-fetch %package-list-url #:text? #t)
+                              '(())))))
 
 (define (find-packages regexp)
   "Find GNU packages which satisfy REGEXP."
@@ -252,10 +274,8 @@ pairs.  Example: (\"mit-scheme-9.0.1\" . \"/gnu/mit-scheme/stable.pkg/9.0.1\"). 
                               files)
                   result))))))))
 
-(define* (latest-release project
-                         #:key (ftp-open ftp-open) (ftp-close ftp-close))
-  "Return (\"FOO-X.Y\" . \"/bar/foo\") or #f.  Use FTP-OPEN and FTP-CLOSE to
-open (resp. close) FTP connections; this can be useful to reuse connections."
+(define (latest-release project)
+  "Return (\"FOO-X.Y\" . \"/bar/foo\") or #f."
   (define (latest a b)
     (if (version>? a b) a b))
 
@@ -283,18 +303,14 @@ open (resp. close) FTP connections; this can be useful to reuse connections."
                                       (release-file project file))
                                      (_ #f))
                                     entries)))
-             (ftp-close conn)
              (and=> (reduce latest #f files)
                     (cut cons <> directory))))
           ((subdirs ...)
            ;; Assume that SUBDIRS correspond to versions, and jump into the
            ;; one with the highest version number.
            (let ((target (reduce latest #f subdirs)))
-             (if target
-                 (loop (string-append directory "/" target))
-                 (begin
-                   (ftp-close conn)
-                   #f)))))))))
+             (and target
+                  (loop (string-append directory "/" target))))))))))
 
 (define %package-name-rx
   ;; Regexp for a package name, e.g., "foo-X.Y".  Since TeXmacs uses
@@ -325,19 +341,16 @@ open (resp. close) FTP connections; this can be useful to reuse connections."
          (_ #f))))
 
 (define* (download-tarball store project directory version
-                           #:key (archive-type "gz")
-                                 (key-download 'interactive))
+                           #:optional (archive-type "gz"))
   "Download PROJECT's tarball over FTP and check its OpenPGP signature.  On
-success, return the tarball file name.  KEY-DOWNLOAD specifies a download
-policy for missing OpenPGP keys; allowed values: 'interactive' (default),
-'always', and 'never'."
+success, return the tarball file name."
   (let* ((server  (ftp-server/directory project))
          (base    (string-append project "-" version ".tar." archive-type))
          (url     (string-append "ftp://" server "/" directory "/" base))
          (sig-url (string-append url ".sig"))
          (tarball (download-to-store store url))
          (sig     (download-to-store store sig-url)))
-    (let ((ret (gnupg-verify* sig tarball #:key-download key-download)))
+    (let ((ret (gnupg-verify* sig tarball)))
       (if ret
           tarball
           (begin
@@ -346,11 +359,9 @@ policy for missing OpenPGP keys; allowed values: 'interactive' (default),
             (warning (_ "(could be because the public key is not in your keyring)~%"))
             #f)))))
 
-(define* (package-update store package #:key (key-download 'interactive))
+(define (package-update store package)
   "Return the new version and the file name of the new version tarball for
-PACKAGE, or #f and #f when PACKAGE is up-to-date.  KEY-DOWNLOAD specifies a
-download policy for missing OpenPGP keys; allowed values: 'always', 'never',
-and 'interactive' (default)."
+PACKAGE, or #f and #f when PACKAGE is up-to-date."
   (match (package-update-path package)
     ((version . directory)
      (let-values (((name)
@@ -361,8 +372,7 @@ and 'interactive' (default)."
                               (file-extension (origin-uri source)))
                          "gz"))))
        (let ((tarball (download-tarball store name directory version
-                                        #:archive-type archive-type
-                                        #:key-download key-download)))
+                                        archive-type)))
          (values version tarball))))
     (_
      (values #f #f))))

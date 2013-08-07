@@ -48,28 +48,15 @@
                     #f
                     dir))
 
-(define* (set-paths #:key target inputs native-inputs
-                    (search-paths '()) (native-search-paths '())
+(define* (set-paths #:key inputs (search-paths '())
                     #:allow-other-keys)
   (define input-directories
     (match inputs
       (((_ . dir) ...)
        dir)))
 
-  (define native-input-directories
-    (match native-inputs
-      (((_ . dir) ...)
-       dir)
-      (#f                                         ; not cross compiling
-       '())))
-
-  ;; When cross building, $PATH must refer only to native (host) inputs since
-  ;; target inputs are not executable.
   (set-path-environment-variable "PATH" '("bin" "sbin")
-                                 (append native-input-directories
-                                         (if target
-                                             '()
-                                             input-directories)))
+                                 input-directories)
 
   (for-each (match-lambda
              ((env-var (directories ...) separator)
@@ -78,16 +65,8 @@
                                              #:separator separator)))
             search-paths)
 
-  (when native-search-paths
-    ;; Search paths for native inputs, when cross building.
-    (for-each (match-lambda
-               ((env-var (directories ...) separator)
-                (set-path-environment-variable env-var directories
-                                               native-input-directories
-                                               #:separator separator)))
-              native-search-paths))
-
-  #t)
+  ;; Dump the environment variables as a shell script, for handy debugging.
+  (system "export > environment-variables"))
 
 (define* (unpack #:key source #:allow-other-keys)
   (and (zero? (system* "tar" "xvf" source))
@@ -123,8 +102,7 @@ makefiles."
                          (append patch-flags (list "--input" p)))))
          patches))
 
-(define* (configure #:key target native-inputs inputs outputs
-                    (configure-flags '()) out-of-source?
+(define* (configure #:key inputs outputs (configure-flags '()) out-of-source?
                     #:allow-other-keys)
   (define (package-name)
     (let* ((out  (assoc-ref outputs "out"))
@@ -141,7 +119,7 @@ makefiles."
          (libdir     (assoc-ref outputs "lib"))
          (includedir (assoc-ref outputs "include"))
          (docdir     (assoc-ref outputs "doc"))
-         (bash       (or (and=> (assoc-ref (or native-inputs inputs) "bash")
+         (bash       (or (and=> (assoc-ref inputs "bash")
                                 (cut string-append <> "/bin/bash"))
                          "/bin/sh"))
          (flags      `(,(string-append "CONFIG_SHELL=" bash)
@@ -169,9 +147,6 @@ makefiles."
                        ,@(if docdir
                              (list (string-append "--docdir=" docdir
                                                   "/doc/" (package-name)))
-                             '())
-                       ,@(if target               ; cross building
-                             (list (string-append "--host=" target))
                              '())
                        ,@configure-flags))
          (abs-srcdir (getcwd))
@@ -214,8 +189,8 @@ makefiles."
                         '())
                   ,@make-flags))))
 
-(define* (check #:key target (make-flags '()) (tests? (not target))
-                (test-target "check") (parallel-tests? #t)
+(define* (check #:key (make-flags '()) (tests? #t) (test-target "check")
+                (parallel-tests? #t)
                 #:allow-other-keys)
   (if tests?
       (zero? (apply system* "make" test-target
@@ -255,70 +230,18 @@ makefiles."
                 bindirs)))
   #t)
 
-(define* (strip #:key target outputs (strip-binaries? #t)
-                (strip-command (if target
-                                   (string-append target "-strip")
-                                   "strip"))
-                (objcopy-command (if target
-                                     (string-append target "-objcopy")
-                                     "objcopy"))
+(define* (strip #:key outputs (strip-binaries? #t)
                 (strip-flags '("--strip-debug"))
                 (strip-directories '("lib" "lib64" "libexec"
                                      "bin" "sbin"))
                 #:allow-other-keys)
-  (define debug-output
-    ;; If an output is called "debug", then that's where debugging information
-    ;; will be stored instead of being discarded.
-    (assoc-ref outputs "debug"))
-
-  (define debug-file-extension
-    ;; File name extension for debugging information.
-    ".debug")
-
-  (define (debug-file file)
-    ;; Return the name of the debug file for FILE, an absolute file name.
-    ;; Once installed in the user's profile, it is in $PROFILE/lib/debug/FILE,
-    ;; which is where GDB looks for it (info "(gdb) Separate Debug Files").
-    (string-append debug-output "/lib/debug/"
-                   file debug-file-extension))
-
-  (define (make-debug-file file)
-    ;; Create a file in DEBUG-OUTPUT containing the debugging info of FILE.
-    (let ((debug (debug-file file)))
-      (mkdir-p (dirname debug))
-      (copy-file file debug)
-      (and (zero? (system* strip-command "--only-keep-debug" debug))
-           (begin
-             (chmod debug #o400)
-             #t))))
-
-  (define (add-debug-link file)
-    ;; Add a debug link in FILE (info "(binutils) strip").
-
-    ;; `objcopy --add-gnu-debuglink' wants to have the target of the debug
-    ;; link around so it can compute a CRC of that file (see the
-    ;; `bfd_fill_in_gnu_debuglink_section' function.)  No reference to
-    ;; DEBUG-OUTPUT is kept because bfd keeps only the basename of the debug
-    ;; file.
-    (zero? (system* objcopy-command
-                    (string-append "--add-gnu-debuglink="
-                                   (debug-file file))
-                    file)))
-
   (define (strip-dir dir)
-    (format #t "stripping binaries in ~s with ~s and flags ~s~%"
-            dir strip-command strip-flags)
-    (when debug-output
-      (format #t "debugging output written to ~s using ~s~%"
-              debug-output objcopy-command))
+    (format #t "stripping binaries in ~s with flags ~s~%"
+            dir strip-flags)
     (file-system-fold (const #t)
                       (lambda (path stat result)  ; leaf
-                        (and (or (not debug-output)
-                                 (make-debug-file path))
-                             (zero? (apply system* strip-command
-                                           (append strip-flags (list path))))
-                             (or (not debug-output)
-                                 (add-debug-link path))))
+                        (zero? (apply system* "strip"
+                                      (append strip-flags (list path)))))
                       (const #t)                  ; down
                       (const #t)                  ; up
                       (const #t)                  ; skip
@@ -364,13 +287,10 @@ in order.  Return #t if all the PHASES succeeded, #f otherwise."
   (every (match-lambda
           ((name . proc)
            (let ((start (gettimeofday)))
-             (format #t "starting phase `~a'~%" name)
-             (let ((result (apply proc args))
-                   (end    (gettimeofday)))
-               (format #t "phase `~a' ~:[failed~;succeeded~] after ~a seconds~%"
-                       name result (- (car end) (car start)))
-
-               ;; Dump the environment variables as a shell script, for handy debugging.
-               (system "export > $NIX_BUILD_TOP/environment-variables")
-               result))))
+            (format #t "starting phase `~a'~%" name)
+            (let ((result (apply proc args))
+                  (end    (gettimeofday)))
+              (format #t "phase `~a' ~:[failed~;succeeded~] after ~a seconds~%"
+                      name result (- (car end) (car start)))
+              result))))
          phases))

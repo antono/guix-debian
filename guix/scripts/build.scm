@@ -38,11 +38,9 @@
 (define %store
   (make-parameter #f))
 
-(define (derivations-from-package-expressions str package-derivation
-                                              system source?)
+(define (derivations-from-package-expressions str system source?)
   "Read/eval STR and return the corresponding derivation path for SYSTEM.
-When SOURCE? is true, return the derivations of the package sources;
-otherwise, use PACKAGE-DERIVATION to compute the derivation of a package."
+When SOURCE? is true, return the derivations of the package sources."
   (let ((p (read/eval-package-expression str)))
     (if source?
         (let ((source (package-source p)))
@@ -61,7 +59,6 @@ otherwise, use PACKAGE-DERIVATION to compute the derivation of a package."
   ;; Alist of default option values.
   `((system . ,(%current-system))
     (substitutes? . #t)
-    (max-silent-time . 3600)
     (verbosity . 0)))
 
 (define (show-help)
@@ -74,20 +71,13 @@ Build the given PACKAGE-OR-DERIVATION and return their output paths.\n"))
   (display (_ "
   -s, --system=SYSTEM    attempt to build for SYSTEM--e.g., \"i686-linux\""))
   (display (_ "
-      --target=TRIPLET   cross-build for TRIPLET--e.g., \"armel-linux-gnu\""))
-  (display (_ "
   -d, --derivations      return the derivation paths of the given packages"))
   (display (_ "
   -K, --keep-failed      keep build tree of failed builds"))
   (display (_ "
   -n, --dry-run          do not build the derivations"))
   (display (_ "
-      --fallback         fall back to building when the substituter fails"))
-  (display (_ "
       --no-substitutes   build instead of resorting to pre-built substitutes"))
-  (display (_ "
-      --max-silent-time=SECONDS
-                         mark the build as failed after SECONDS of silence"))
   (display (_ "
   -c, --cores=N          allow the use of up to N CPU cores for the build"))
   (display (_ "
@@ -120,10 +110,6 @@ Build the given PACKAGE-OR-DERIVATION and return their output paths.\n"))
                 (lambda (opt name arg result)
                   (alist-cons 'system arg
                               (alist-delete 'system result eq?))))
-        (option '("target") #t #f
-                (lambda (opt name arg result)
-                  (alist-cons 'target arg
-                              (alist-delete 'target result eq?))))
         (option '(#\d "derivations") #f #f
                 (lambda (opt name arg result)
                   (alist-cons 'derivations-only? #t result)))
@@ -142,18 +128,10 @@ Build the given PACKAGE-OR-DERIVATION and return their output paths.\n"))
         (option '(#\n "dry-run") #f #f
                 (lambda (opt name arg result)
                   (alist-cons 'dry-run? #t result)))
-        (option '("fallback") #f #f
-                (lambda (opt name arg result)
-                  (alist-cons 'fallback? #t
-                              (alist-delete 'fallback? result))))
         (option '("no-substitutes") #f #f
                 (lambda (opt name arg result)
                   (alist-cons 'substitutes? #f
                               (alist-delete 'substitutes? result))))
-        (option '("max-silent-time") #t #f
-                (lambda (opt name arg result)
-                  (alist-cons 'max-silent-time (string->number* arg)
-                              result)))
         (option '(#\r "root") #t #f
                 (lambda (opt name arg result)
                   (alist-cons 'gc-root arg result)))
@@ -236,19 +214,13 @@ Build the given PACKAGE-OR-DERIVATION and return their output paths.\n"))
 
   (with-error-handling
     (let ((opts (parse-options)))
-      (define package->derivation
-        (match (assoc-ref opts 'target)
-          (#f package-derivation)
-          (triplet
-           (cut package-cross-derivation <> <> triplet <>))))
-
       (parameterize ((%store (open-connection)))
         (let* ((src? (assoc-ref opts 'source?))
                (sys  (assoc-ref opts 'system))
                (drv  (filter-map (match-lambda
                                   (('expression . str)
-                                   (derivations-from-package-expressions
-                                    str package->derivation sys src?))
+                                   (derivations-from-package-expressions str sys
+                                                                         src?))
                                   (('argument . (? derivation-path? drv))
                                    drv)
                                   (('argument . (? string? x))
@@ -257,7 +229,7 @@ Build the given PACKAGE-OR-DERIVATION and return their output paths.\n"))
                                          (let ((s (package-source p)))
                                            (package-source-derivation
                                             (%store) s))
-                                         (package->derivation (%store) p sys))))
+                                         (package-derivation (%store) p sys))))
                                   (_ #f))
                                  opts))
                (roots (filter-map (match-lambda
@@ -273,9 +245,7 @@ Build the given PACKAGE-OR-DERIVATION and return their output paths.\n"))
           (set-build-options (%store)
                              #:keep-failed? (assoc-ref opts 'keep-failed?)
                              #:build-cores (or (assoc-ref opts 'cores) 0)
-                             #:fallback? (assoc-ref opts 'fallback?)
                              #:use-substitutes? (assoc-ref opts 'substitutes?)
-                             #:max-silent-time (assoc-ref opts 'max-silent-time)
                              #:verbosity (assoc-ref opts 'verbosity))
 
           (if (assoc-ref opts 'derivations-only?)

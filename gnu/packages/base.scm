@@ -101,18 +101,16 @@ lines.")
    (build-system gnu-build-system)
    (synopsis "Stream editor")
    (arguments
-    (if (%current-target-system)
-        '()
-        `(#:phases (alist-cons-before
-                    'patch-source-shebangs 'patch-test-suite
-                    (lambda* (#:key inputs #:allow-other-keys)
-                      (let ((bash (assoc-ref inputs "bash")))
-                        (patch-makefile-SHELL "testsuite/Makefile.tests")
-                        (substitute* '("testsuite/bsd.sh"
-                                       "testsuite/bug-regex9.c")
-                          (("/bin/sh")
-                           (string-append bash "/bin/bash")))))
-                    %standard-phases))))
+    `(#:phases (alist-cons-before
+                'patch-source-shebangs 'patch-test-suite
+                (lambda* (#:key inputs #:allow-other-keys)
+                  (let ((bash (assoc-ref inputs "bash")))
+                    (patch-makefile-SHELL "testsuite/Makefile.tests")
+                    (substitute* '("testsuite/bsd.sh"
+                                   "testsuite/bug-regex9.c")
+                      (("/bin/sh")
+                       (string-append bash "/bin/bash")))))
+                %standard-phases)))
    (description
     "Sed (stream editor) isn't really a true text editor or text processor.
 Instead, it is used to filter text, i.e., it takes text input and performs
@@ -236,13 +234,13 @@ You can use the sdiff command to merge two files interactively.")
     `(("patch/absolute-paths"
        ,(search-patch "findutils-absolute-paths.patch"))))
    (arguments
-    `(#:patches (list (assoc-ref %build-inputs "patch/absolute-paths"))
+    `(#:patches (list (assoc-ref %build-inputs "patch/absolute-paths")))
 
-      ;; Work around cross-compilation failure.
-      ;; See <http://savannah.gnu.org/bugs/?27299#comment1>.
-      ,@(if (%current-target-system)
-            '(#:configure-flags '("gl_cv_func_wcwidth_works=yes"))
-            '())))
+    ;; TODO: Work around cross-compilation failure.
+    ;; See <http://savannah.gnu.org/bugs/?27299#comment1>.
+    ;; `(#:configure-flags '("gl_cv_func_wcwidth_works=yes")
+    ;;   ,@(arguments cross-system))
+    )
    (synopsis "Operating on files matching given criteria")
    (description
     "The GNU Find Utilities are the basic directory searching utilities of
@@ -272,14 +270,9 @@ The tools supplied with this package are:
              (base32
               "064f512185iysqqcvhnhaf3bfmzrvcgs7n405qsyp99zmfyl9amd"))))
    (build-system gnu-build-system)
-   (inputs `(("acl"  ,acl)                        ; TODO: add SELinux
+   (inputs `(("acl"  ,acl)
              ("gmp"  ,gmp)
-
-             ;; Perl is needed to run tests; remove it from cross builds.
-             ,@(if (%current-target-system)
-                   '()
-                   `(("perl" ,perl)))))
-   (outputs '("out" "debug"))
+             ("perl" ,perl)))                     ; TODO: add SELinux
    (arguments
     `(#:parallel-build? #f            ; help2man may be called too early
       #:phases (alist-cons-before
@@ -317,7 +310,6 @@ are expected to exist on every operating system.")
    (build-system gnu-build-system)
    (native-inputs
     `(("patch/impure-dirs" ,(search-patch "make-impure-dirs.patch"))))
-   (outputs '("out" "debug"))
    (arguments
     '(#:patches (list (assoc-ref %build-inputs "patch/impure-dirs"))
       #:phases (alist-cons-before
@@ -405,7 +397,7 @@ BFD (Binary File Descriptor) library, `gprof', `nm', `strip', etc.")
    ;; reference to them anyway, so there's no space savings here.
    ;; TODO: Eventually we may want to add a $LOCALE_ARCHIVE search path like
    ;; Nixpkgs does.
-   (outputs '("out" "locales" "debug"))
+   (outputs '("out" "locales"))
 
    (arguments
     `(#:out-of-source? #t
@@ -511,7 +503,7 @@ with the Linux kernel.")
 (define-public tzdata
   (package
     (name "tzdata")
-    (version "2013d")
+    (version "2013c")
     (source (origin
              (method url-fetch)
              (uri (string-append
@@ -519,7 +511,7 @@ with the Linux kernel.")
                    version ".tar.gz"))
              (sha256
               (base32
-               "011v63ppr73vhjgxv00inkn5pc7z48i8lhbapkpdq3kfczq9c76d"))))
+               "11swq6fg20m2dh520qcr8vb23gqhzbvqhizx8wifnmci4gmsg5z5"))))
     (build-system gnu-build-system)
     (arguments
      '(#:tests? #f
@@ -566,7 +558,7 @@ with the Linux kernel.")
                                 version ".tar.gz"))
                           (sha256
                            (base32
-                            "13xd30ngwhqmj7w216ghd5knvg047hzpc0xca5l297g5cwb62hza"))))))
+                            "1w6nkdwhi6k9llshp4baac1yj43jqf3apdf6n66i0wvjj8qyjvp4"))))))
     (home-page "http://www.iana.org/time-zones")
     (synopsis "Database of current and historical time zones")
     (description "The Time Zone Database (often called tz or zoneinfo)
@@ -756,11 +748,7 @@ identifier SYSTEM."
                ;; Call it differently so that the builder can check whether
                ;; the "libc" input is #f.
                ("libc-native" ,@(assoc-ref %boot0-inputs "libc"))
-               ,@(alist-delete "libc" %boot0-inputs)))
-
-     ;; No need for Texinfo at this stage.
-     (native-inputs (alist-delete "texinfo"
-                                  (package-native-inputs gcc-4.7))))))
+               ,@(alist-delete "libc" %boot0-inputs))))))
 
 (define linux-libre-headers-boot0
   (package-with-bootstrap-guile

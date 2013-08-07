@@ -41,10 +41,8 @@ Like scripts/build-remote.pl in Nix.
 * user interface
 ** Add a package.el (Emacs) back-end
 
-package.el is quite monolithic, but we may be able to reuse/extend
-‘package-menu-mode’ or at least ‘tabulated-list-mode’.
-
-** add guile-ncurses interface
+Unfortunately package.el is monolithic, so most likely we’d have to
+write a new one based on it, as opposed to actually using it.
 
 * extend <origin>
 ** add OpenPGP signatures:
@@ -58,12 +56,6 @@ package.el is quite monolithic, but we may be able to reuse/extend
 ** allow <origin> to be a derivation/package or a file
 
 * extend <package>
-
-** add ‘recommends’ field
-
-For instance, glibc, binutils, gcc, and ld-wrapper would recommend each other.
-‘guix package -i’ could ask interactively (?), or allow users to follow all or
-none of the recommendations.
 
 ** add a ‘user-environment-hook’
 
@@ -84,7 +76,6 @@ create a new ‘dir’.
       ("i3" ,p3)))
 #+END_SRC
 
-
 * synchronize package descriptions with GSRC and/or the [[http://directory.fsf.org][FSD]]
 
 Meta-data for GNU packages, including descriptions and synopses, can be
@@ -92,8 +83,11 @@ dumped from the FSD:
 http://directory.fsf.org/wiki?title=GNU/Export&action=purge .
 We could periodically synchronize with that.
 
-See http://lists.gnu.org/archive/html/bug-guix/2013-04/msg00120.html for info
-on how to synchronize with GSRC's descriptions.
+* support cross-compilation
+
+Implement ‘package-cross-derivation’, and add the corresponding code in
+‘gnu-build-system’.  Then, actually bootstrap a cross-compilation
+environment–e.g., a cross-GNU environment.
 
 * add a guildhall build system
 

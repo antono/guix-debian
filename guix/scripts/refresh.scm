@@ -1,6 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013 Ludovic Courtès <ludo@gnu.org>
-;;; Copyright © 2013 Nikita Karetnikov <nikita@karetnikov.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -19,7 +18,6 @@
 
 (define-module (guix scripts refresh)
   #:use-module (guix ui)
-  #:use-module (guix hash)
   #:use-module (guix store)
   #:use-module (guix utils)
   #:use-module (guix packages)
@@ -66,15 +64,6 @@
         (option '("gpg") #t #f
                 (lambda (opt name arg result)
                   (alist-cons 'gpg-command arg result)))
-        (option '("key-download") #t #f
-                (lambda (opt name arg result)
-                  (match arg
-                    ((or "interactive" "always" "never")
-                     (alist-cons 'key-download (string->symbol arg)
-                                 result))
-                    (_
-                     (leave (_ "unsupported policy: ~a~%")
-                            arg)))))
 
         (option '(#\h "help") #f #f
                 (lambda args
@@ -101,11 +90,6 @@ specified with `--select'.\n"))
       --key-server=HOST  use HOST as the OpenPGP key server"))
   (display (_ "
       --gpg=COMMAND      use COMMAND as the GnuPG 2.x command"))
-  (display (_ "
-      --key-download=POLICY
-                         handle missing OpenPGP keys according to POLICY:
-                         'always', 'never', and 'interactive', which is also
-                         used when 'key-download' is not specified"))
   (newline)
   (display (_ "
   -h, --help             display this help and exit"))
@@ -114,14 +98,12 @@ specified with `--select'.\n"))
   (newline)
   (show-bug-report-information))
 
-(define* (update-package store package #:key (key-download 'interactive))
-  "Update the source file that defines PACKAGE with the new version.
-KEY-DOWNLOAD specifies a download policy for missing OpenPGP keys; allowed
-values: 'interactive' (default), 'always', and 'never'."
+(define (update-package store package)
+  "Update the source file that defines PACKAGE with the new version."
   (let-values (((version tarball)
                 (catch #t
                   (lambda ()
-                    (package-update store package #:key-download key-download))
+                    (package-update store package))
                   (lambda _
                     (values #f #f))))
                ((loc)
@@ -137,7 +119,7 @@ values: 'interactive' (default), 'always', and 'never'."
                     (package-name package)
                     (package-version package) version)
             (let ((hash (call-with-input-file tarball
-                          port-sha256)))
+                          (compose sha256 get-bytevector-all))))
               (update-package-source package version hash)))
           (warning (_ "~a: version ~a could not be \
 downloaded and authenticated; not updating")
@@ -159,20 +141,6 @@ downloaded and authenticated; not updating")
                   (alist-cons 'argument arg result))
                 %default-options))
 
-  (define (keep-newest package lst)
-    ;; If a newer version of PACKAGE is already in LST, return LST; otherwise
-    ;; return LST minus the other version of PACKAGE in it, plus PACKAGE.
-    (let ((name (package-name package)))
-      (match (find (lambda (p)
-                     (string=? (package-name p) name))
-                   lst)
-        ((? package? other)
-         (if (version>? (package-version other) (package-version package))
-             lst
-             (cons package (delq other lst))))
-        (_
-         (cons package lst)))))
-
   (define core-package?
     (let* ((input->package (match-lambda
                             ((name (? package? package) _ ...) package)
@@ -193,32 +161,31 @@ update would trigger a complete rebuild."
         ;; XXX: Fails to catch MPFR/MPC, whose *source* is used as input.
         (member (package-name package) names))))
 
-  (let* ((opts         (parse-options))
-         (update?      (assoc-ref opts 'update?))
-         (key-download (assoc-ref opts 'key-download))
-         (packages
-          (match (concatenate
-                  (filter-map (match-lambda
-                               (('argument . value)
-                                (let ((p (find-packages-by-name value)))
-                                  (unless p
-                                    (leave (_ "~a: no package by that name")
-                                           value))
-                                  p))
-                               (_ #f))
-                              opts))
-                 (()                          ; default to all packages
-                  (let ((select? (match (assoc-ref opts 'select)
-                                        ('core core-package?)
-                                        ('non-core (negate core-package?))
-                                        (_ (const #t)))))
-                    (fold-packages (lambda (package result)
-                                     (if (select? package)
-                                         (keep-newest package result)
-                                         result))
-                                   '())))
-                 (some                        ; user-specified packages
-                  some))))
+  (let* ((opts     (parse-options))
+         (update?  (assoc-ref opts 'update?))
+         (packages (match (concatenate
+                           (filter-map (match-lambda
+                                        (('argument . value)
+                                         (let ((p (find-packages-by-name value)))
+                                           (unless p
+                                             (leave (_ "~a: no package by that name")
+                                                    value))
+                                           p))
+                                        (_ #f))
+                                       opts))
+                     (()                          ; default to all packages
+                      (let ((select? (match (assoc-ref opts 'select)
+                                       ('core core-package?)
+                                       ('non-core (negate core-package?))
+                                       (_ (const #t)))))
+                        ;; TODO: Keep only the newest of each package.
+                        (fold-packages (lambda (package result)
+                                         (if (select? package)
+                                             (cons package result)
+                                             result))
+                                       '())))
+                     (some                        ; user-specified packages
+                      some))))
     (with-error-handling
       (if update?
           (let ((store (open-connection)))
@@ -228,9 +195,7 @@ update would trigger a complete rebuild."
                            (%gpg-command
                             (or (assoc-ref opts 'gpg-command)
                                 (%gpg-command))))
-              (for-each
-               (cut update-package store <> #:key-download key-download)
-               packages)))
+              (for-each (cut update-package store <>) packages)))
           (for-each (lambda (package)
                       (match (false-if-exception (package-update-path package))
                         ((new-version . directory)

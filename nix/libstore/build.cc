@@ -786,12 +786,6 @@ private:
     /* Outputs that are already valid. */
     PathSet validPaths;
 
-    /* Outputs that are corrupt or not valid. */
-    PathSet missingPaths;
-
-    /* Paths that have been subject to hash rewriting. */
-    PathSet rewrittenPaths;
-
     /* User selected for running the builder. */
     UserLock buildUser;
 
@@ -843,11 +837,6 @@ private:
        if its outputs are valid but corrupt or missing. */
     bool repair;
     map<Path, Path> redirectedBadOutputs;
-
-    /* Set of inodes seen during calls to canonicalisePathMetaData()
-       for this build's outputs.  This needs to be shared between
-       outputs to allow hard links between outputs. */
-    InodesSeen inodesSeen;
 
     /* Magic exit code denoting that setting up the child environment
        failed.  (It's possible that the child actually returns the
@@ -1316,9 +1305,6 @@ void DerivationGoal::tryToBuild()
         return;
     }
 
-    missingPaths = outputPaths(drv.outputs);
-    foreach (PathSet::iterator, i, validPaths) missingPaths.erase(*i);
-
     /* If any of the outputs already exist but are not valid, delete
        them. */
     foreach (DerivationOutputs::iterator, i, drv.outputs) {
@@ -1456,8 +1442,8 @@ void DerivationGoal::buildDone()
         /* Some cleanup per path.  We do this here and not in
            computeClosure() for convenience when the build has
            failed. */
-        foreach (PathSet::iterator, i, missingPaths) {
-            Path path = *i;
+        foreach (DerivationOutputs::iterator, i, drv.outputs) {
+            Path path = i->second.path;
 
             /* If the output was already valid, just skip (discard) it. */
             if (validPaths.find(path) != validPaths.end()) continue;
@@ -1494,12 +1480,6 @@ void DerivationGoal::buildDone()
             /* Apply hash rewriting if necessary. */
             if (!rewritesFromTmp.empty()) {
                 printMsg(lvlError, format("warning: rewriting hashes in `%1%'; cross fingers") % path);
-
-                /* Canonicalise first.  This ensures that the path
-                   we're rewriting doesn't contain a hard link to
-                   /etc/shadow or something like that. */
-                canonicalisePathMetaData(path, buildUser.enabled() ? buildUser.getUID() : -1, inodesSeen);
-
                 /* FIXME: this is in-memory. */
                 StringSink sink;
                 dumpPath(path, sink);
@@ -1507,8 +1487,6 @@ void DerivationGoal::buildDone()
                 sink.s = rewriteHashes(sink.s, rewritesFromTmp);
                 StringSource source(sink.s);
                 restorePath(path, source);
-
-                rewrittenPaths.insert(path);
             }
 
             /* Gain ownership of the build result using the setuid
@@ -1693,7 +1671,9 @@ int childEntry(void * arg)
 
 void DerivationGoal::startBuilder()
 {
-    startNest(nest, lvlInfo, format(repair ? "repairing path(s) %1%" : "building path(s) %1%") % showPaths(missingPaths));
+    PathSet missing = outputPaths(drv.outputs);
+    foreach (PathSet::iterator, i, validPaths) missing.erase(*i);
+    startNest(nest, lvlInfo, format("building path(s) %1%") % showPaths(missing));
 
     /* Right platform? */
     if (!canBuildLocally(drv.platform))
@@ -1984,7 +1964,7 @@ void DerivationGoal::startBuilder()
         /* If we're repairing, then we don't want to delete the
            corrupt outputs in advance.  So rewrite them as well. */
         if (repair)
-            foreach (PathSet::iterator, i, missingPaths)
+            foreach (PathSet::iterator, i, missing)
                 if (worker.store.isValidPath(*i) && pathExists(*i))
                     redirectedBadOutputs[*i] = addHashRewrite(*i);
     }
@@ -2269,8 +2249,6 @@ void DerivationGoal::computeClosure()
        output paths read-only. */
     foreach (DerivationOutputs::iterator, i, drv.outputs) {
         Path path = i->second.path;
-        if (missingPaths.find(path) == missingPaths.end()) continue;
-
         if (!pathExists(path)) {
             throw BuildError(
                 format("builder for `%1%' failed to produce output path `%2%'")
@@ -2309,10 +2287,8 @@ void DerivationGoal::computeClosure()
                     % path % i->second.hashAlgo % printHash16or32(h) % printHash16or32(h2));
         }
 
-        /* Get rid of all weird permissions.  This also checks that
-           all files are owned by the build user, if applicable. */
-        canonicalisePathMetaData(path,
-            buildUser.enabled() && rewrittenPaths.find(path) == rewrittenPaths.end() ? buildUser.getUID() : -1, inodesSeen);
+        /* Get rid of all weird permissions. */
+        canonicalisePathMetaData(path, buildUser.enabled() ? buildUser.getUID() : -1);
 
         /* For this output path, find the references to other paths
            contained in it.  Compute the SHA-256 NAR hash at the same
@@ -2354,12 +2330,12 @@ void DerivationGoal::computeClosure()
        paths referenced by each of them.  If there are cycles in the
        outputs, this will fail. */
     ValidPathInfos infos;
-    foreach (PathSet::iterator, i, missingPaths) {
+    foreach (DerivationOutputs::iterator, i, drv.outputs) {
         ValidPathInfo info;
-        info.path = *i;
-        info.hash = contentHashes[*i].first;
-        info.narSize = contentHashes[*i].second;
-        info.references = allReferences[*i];
+        info.path = i->second.path;
+        info.hash = contentHashes[i->second.path].first;
+        info.narSize = contentHashes[i->second.path].second;
+        info.references = allReferences[i->second.path];
         info.deriver = drvPath;
         infos.push_back(info);
     }

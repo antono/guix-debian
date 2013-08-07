@@ -30,7 +30,6 @@
   #:use-module (gnu packages bootstrap)
   #:use-module (srfi srfi-11)
   #:use-module (srfi srfi-26)
-  #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-64)
   #:use-module (rnrs io ports)
   #:use-module (ice-9 match))
@@ -70,14 +69,10 @@
             (goto port line column)
             (read port))))))
 
-    ;; Until Guile 2.0.6 included, source properties were added only to pairs.
-    ;; Thus, check against both VALUE and (FIELD VALUE).
-    (and (member (read-at (package-field-location %bootstrap-guile 'name))
-                 (let ((name (package-name %bootstrap-guile)))
-                   (list name `(name ,name))))
-         (member (read-at (package-field-location %bootstrap-guile 'version))
-                 (let ((version (package-version %bootstrap-guile)))
-                   (list version `(version ,version))))
+    (and (equal? (read-at (package-field-location %bootstrap-guile 'name))
+                 (package-name %bootstrap-guile))
+         (equal? (read-at (package-field-location %bootstrap-guile 'version))
+                 (package-version %bootstrap-guile))
          (not (package-field-location %bootstrap-guile 'does-not-exist)))))
 
 (test-assert "package-transitive-inputs"
@@ -99,7 +94,7 @@
                    ("d" ,d) ("d/x" "something.drv"))
                  (pk 'x (package-transitive-inputs e))))))
 
-(test-skip (if (not %store) 6 0))
+(test-skip (if (not %store) 4 0))
 
 (test-assert "return values"
   (let-values (((drv-path drv)
@@ -200,32 +195,6 @@
       (and (null? (collect (package-derivation %store a)))
            (equal? x (collect (package-derivation %store b)))
            (equal? x (collect (package-derivation %store c)))))))
-
-(test-assert "package-cross-derivation"
-  (let-values (((drv-path drv)
-                (package-cross-derivation %store (dummy-package "p")
-                                          "mips64el-linux-gnu")))
-    (and (derivation-path? drv-path)
-         (derivation? drv))))
-
-(test-assert "package-cross-derivation, trivial-build-system"
-  (let ((p (package (inherit (dummy-package "p"))
-             (build-system trivial-build-system)
-             (arguments '(#:builder (exit 1))))))
-    (let-values (((drv-path drv)
-                  (package-cross-derivation %store p "mips64el-linux-gnu")))
-      (and (derivation-path? drv-path)
-           (derivation? drv)))))
-
-(test-assert "package-cross-derivation, no cross builder"
-  (let* ((b (build-system (inherit trivial-build-system)
-              (cross-build #f)))
-         (p (package (inherit (dummy-package "p"))
-              (build-system b))))
-    (guard (c ((package-cross-build-system-error? c)
-               (eq? (package-error-package c) p)))
-      (package-cross-derivation %store p "mips64el-linux-gnu")
-      #f)))
 
 (unless (false-if-exception (getaddrinfo "www.gnu.org" "80" AI_NUMERICSERV))
   (test-skip 1))

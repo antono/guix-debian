@@ -23,7 +23,6 @@
   #:use-module (guix store)
   #:use-module (guix config)
   #:use-module (guix packages)
-  #:use-module (guix build-system)
   #:use-module (guix derivations)
   #:use-module ((guix licenses) #:select (license? license-name))
   #:use-module (srfi srfi-1)
@@ -39,7 +38,6 @@
             leave
             show-version-and-exit
             show-bug-report-information
-            string->number*
             show-what-to-build
             call-with-error-handling
             with-error-handling
@@ -77,19 +75,17 @@ messages."
       (define (augmented-format-string fmt)
         (string-append "~:[~*~;guix ~a: ~]~a" (syntax->datum fmt)))
 
-      (syntax-case x ()
-        ((name (underscore fmt) args (... ...))
-         (and (string? (syntax->datum #'fmt))
-              (free-identifier=? #'underscore #'_))
+      (syntax-case x (N_ _)                    ; these are literals, yeah...
+        ((name (_ fmt) args (... ...))
+         (string? (syntax->datum #'fmt))
          (with-syntax ((fmt*   (augmented-format-string #'fmt))
                        (prefix (datum->syntax x prefix)))
            #'(format (guix-warning-port) (gettext fmt*)
                      (program-name) (program-name) prefix
                      args (... ...))))
-        ((name (N-underscore singular plural n) args (... ...))
+        ((name (N_ singular plural n) args (... ...))
          (and (string? (syntax->datum #'singular))
-              (string? (syntax->datum #'plural))
-              (free-identifier=? #'N-underscore #'N_))
+              (string? (syntax->datum #'plural)))
          (with-syntax ((s      (augmented-format-string #'singular))
                        (p      (augmented-format-string #'plural))
                        (prefix (datum->syntax x prefix)))
@@ -120,11 +116,6 @@ messages."
   "Perform the usual initialization for stand-alone Guix commands."
   (install-locale)
   (textdomain "guix")
-
-  ;; Ignore SIGPIPE.  If the daemon closes the connection, we prefer to be
-  ;; notified via an EPIPE later.
-  (sigaction SIGPIPE SIG_IGN)
-
   (setvbuf (current-output-port) _IOLBF)
   (setvbuf (current-error-port) _IOLBF))
 
@@ -143,11 +134,6 @@ Report bugs to: ~a.") %guix-bug-report-address)
 General help using GNU software: <http://www.gnu.org/gethelp/>"))
   (newline))
 
-(define (string->number* str)
-  "Like `string->number', but error out with an error message on failure."
-  (or (string->number str)
-      (leave (_ "~a: invalid number~%") str)))
-
 (define (call-with-error-handling thunk)
   "Call THUNK within a user-friendly error handler."
   (guard (c ((package-input-error? c)
@@ -160,14 +146,6 @@ General help using GNU software: <http://www.gnu.org/gethelp/>"))
                (leave (_ "~a:~a:~a: package `~a' has an invalid input: ~s~%")
                       file line column
                       (package-full-name package) input)))
-            ((package-cross-build-system-error? c)
-             (let* ((package (package-error-package c))
-                    (loc     (package-location package))
-                    (system  (package-build-system package)))
-               (leave (_ "~a: ~a: build system `~a' does not support cross builds~%")
-                      (location->string loc)
-                      (package-full-name package)
-                      (build-system-name system))))
             ((nix-connection-error? c)
              (leave (_ "failed to connect to `~a': ~a~%")
                     (nix-connection-error-file c)
@@ -176,12 +154,7 @@ General help using GNU software: <http://www.gnu.org/gethelp/>"))
              ;; FIXME: Server-provided error messages aren't i18n'd.
              (leave (_ "build failed: ~a~%")
                     (nix-protocol-error-message c))))
-    ;; Catch EPIPE and the likes.
-    (catch 'system-error
-      thunk
-      (lambda args
-        (leave (_ "~a~%")
-               (strerror (system-error-errno args)))))))
+    (thunk)))
 
 (define (read/eval-package-expression str)
   "Read and evaluate STR and return the package it refers to, or exit an
@@ -233,15 +206,12 @@ available for download."
                                   drv)
                           (map derivation-input-path build))))
                 ((download)                   ; add the references of DOWNLOAD
-                 (if use-substitutes?
-                     (delete-duplicates
-                      (append download
-                              (remove (cut valid-path? store <>)
-                                      (append-map
-                                       substitutable-references
-                                       (substitutable-path-info store
-                                                                download)))))
-                     download)))
+                 (delete-duplicates
+                  (append download
+                          (remove (cut valid-path? store <>)
+                                  (append-map
+                                   substitutable-references
+                                   (substitutable-path-info store download)))))))
     (if dry-run?
         (begin
           (format (current-error-port)
@@ -427,14 +397,8 @@ reporting."
            (compose (cut string-append <> "/guix/scripts")
                     dirname)))
 
-  (define dot-scm?
-    (cut string-suffix? ".scm" <>))
-
-  ;; In Guile 2.0.5 `scandir' would return "." and ".." regardless even though
-  ;; they don't match `dot-scm?'.  Work around it by doing additional
-  ;; filtering.
   (if directory
-      (filter dot-scm? (scandir directory dot-scm?))
+      (scandir directory (cut string-suffix? ".scm" <>))
       '()))
 
 (define (commands)
@@ -450,7 +414,7 @@ Run COMMAND with ARGS.\n"))
   (format #t (_ "COMMAND must be one of the sub-commands listed below:\n"))
   (newline)
   ;; TODO: Display a synopsis of each command.
-  (format #t "~{   ~a~%~}" (sort (commands) string<?))
+  (format #t "~{   ~a~%~}" (commands))
   (show-bug-report-information))
 
 (define program-name

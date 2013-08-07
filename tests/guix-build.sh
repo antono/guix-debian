@@ -51,9 +51,6 @@ then false; else true; fi
 
 rm -f "$result"
 
-# Cross building.
-guix build coreutils --target=mips64el-linux-gnu --dry-run --no-substitutes
-
 # Parsing package names and versions.
 guix build -n time		# PASS
 guix build -n time-1.7		# PASS, version found

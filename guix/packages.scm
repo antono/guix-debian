@@ -27,11 +27,9 @@
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9 gnu)
   #:use-module (srfi srfi-11)
-  #:use-module (srfi srfi-26)
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-35)
-  #:re-export (%current-system
-               %current-target-system)
+  #:re-export (%current-system)
   #:export (origin
             origin?
             origin-uri
@@ -70,8 +68,6 @@
             package-field-location
 
             package-transitive-inputs
-            package-transitive-target-inputs
-            package-transitive-native-inputs
             package-transitive-propagated-inputs
             package-source-derivation
             package-derivation
@@ -83,9 +79,7 @@
             package-error-package
             &package-input-error
             package-input-error?
-            package-error-invalid-input
-            &package-cross-build-system-error
-            package-cross-build-system-error?))
+            package-error-invalid-input))
 
 ;;; Commentary:
 ;;;
@@ -147,9 +141,9 @@ corresponds to the arguments expected by `set-path-environment-variable'."
   (inputs package-inputs                  ; input packages or derivations
           (default '()) (thunked))
   (propagated-inputs package-propagated-inputs    ; same, but propagated
-                     (default '()) (thunked))
+                     (default '()))
   (native-inputs package-native-inputs    ; native input packages/derivations
-                 (default '()) (thunked))
+                 (default '()))
   (self-native-input? package-self-native-input?  ; whether to use itself as
                                                   ; a native input when cross-
                       (default #f))               ; compiling
@@ -236,9 +230,6 @@ corresponds to the arguments expected by `set-path-environment-variable'."
   package-input-error?
   (input package-error-invalid-input))
 
-(define-condition-type &package-cross-build-system-error &package-error
-  package-cross-build-system-error?)
-
 
 (define (package-full-name package)
   "Return the full name of PACKAGE--i.e., `NAME-VERSION'."
@@ -275,19 +266,6 @@ with their propagated inputs, recursively."
   (transitive-inputs (append (package-native-inputs package)
                              (package-inputs package)
                              (package-propagated-inputs package))))
-
-(define (package-transitive-target-inputs package)
-  "Return the transitive target inputs of PACKAGE---i.e., its direct inputs
-along with their propagated inputs, recursively.  This only includes inputs
-for the target system, and not native inputs."
-  (transitive-inputs (append (package-inputs package)
-                             (package-propagated-inputs package))))
-
-(define (package-transitive-native-inputs package)
-  "Return the transitive native inputs of PACKAGE---i.e., its direct inputs
-along with their propagated inputs, recursively.  This only includes inputs
-for the host system (\"native inputs\"), and not target inputs."
-  (transitive-inputs (package-native-inputs package)))
 
 (define (package-transitive-propagated-inputs package)
   "Return the propagated inputs of PACKAGE, and their propagated inputs,
@@ -327,47 +305,41 @@ Return the cached result when available."
       (#f
        (cache package system thunk)))))
 
-(define* (expand-input store package input system #:optional cross-system)
-  "Expand INPUT, an input tuple, such that it contains only references to
-derivation paths or store paths.  PACKAGE is only used to provide contextual
-information in exceptions."
+(define* (package-derivation store package
+                             #:optional (system (%current-system)))
+  "Return the derivation path and corresponding <derivation> object of
+PACKAGE for SYSTEM."
   (define (intern file)
     ;; Add FILE to the store.  Set the `recursive?' bit to #t, so that
     ;; file permissions are preserved.
     (add-to-store store (basename file) #t "sha256" file))
 
-  (define derivation
-    (if cross-system
-        (cut package-cross-derivation store <> cross-system system)
-        (cut package-derivation store <> system)))
+  (define expand-input
+    ;; Expand the given input tuple such that it contains only
+    ;; references to derivation paths or store paths.
+    (match-lambda
+     (((? string? name) (? package? package))
+      (list name (package-derivation store package system)))
+     (((? string? name) (? package? package)
+       (? string? sub-drv))
+      (list name (package-derivation store package system)
+            sub-drv))
+     (((? string? name)
+       (and (? string?) (? derivation-path?) drv))
+      (list name drv))
+     (((? string? name)
+       (and (? string?) (? file-exists? file)))
+      ;; Add FILE to the store.  When FILE is in the sub-directory of a
+      ;; store path, it needs to be added anyway, so it can be used as a
+      ;; source.
+      (list name (intern file)))
+     (((? string? name) (? origin? source))
+      (list name (package-source-derivation store source system)))
+     (x
+      (raise (condition (&package-input-error
+                         (package package)
+                         (input   x)))))))
 
-  (match input
-    (((? string? name) (? package? package))
-     (list name (derivation package)))
-    (((? string? name) (? package? package)
-      (? string? sub-drv))
-     (list name (derivation package)
-           sub-drv))
-    (((? string? name)
-      (and (? string?) (? derivation-path?) drv))
-     (list name drv))
-    (((? string? name)
-      (and (? string?) (? file-exists? file)))
-     ;; Add FILE to the store.  When FILE is in the sub-directory of a
-     ;; store path, it needs to be added anyway, so it can be used as a
-     ;; source.
-     (list name (intern file)))
-    (((? string? name) (? origin? source))
-     (list name (package-source-derivation store source system)))
-    (x
-     (raise (condition (&package-input-error
-                        (package package)
-                        (input   x)))))))
-
-(define* (package-derivation store package
-                             #:optional (system (%current-system)))
-  "Return the derivation path and corresponding <derivation> object of
-PACKAGE for SYSTEM."
   ;; Compute the derivation and cache the result.  Caching is important
   ;; because some derivations, such as the implicit inputs of the GNU build
   ;; system, will be queried many, many times in a row.
@@ -375,16 +347,13 @@ PACKAGE for SYSTEM."
 
           ;; Bind %CURRENT-SYSTEM so that thunked field values can refer
           ;; to it.
-          (parameterize ((%current-system system)
-                         (%current-target-system #f))
+          (parameterize ((%current-system system))
             (match package
               (($ <package> name version source (= build-system-builder builder)
                   args inputs propagated-inputs native-inputs self-native-input?
                   outputs)
                (let* ((inputs     (package-transitive-inputs package))
-                      (input-drvs (map (cut expand-input
-                                            store package <> system)
-                                       inputs))
+                      (input-drvs (map expand-input inputs))
                       (paths      (delete-duplicates
                                    (append-map (match-lambda
                                                 ((_ (? package? p) _ ...)
@@ -402,62 +371,9 @@ PACKAGE for SYSTEM."
                         #:outputs outputs #:system system
                         (args))))))))
 
-(define* (package-cross-derivation store package target
-                                   #:optional (system (%current-system)))
-  "Cross-build PACKAGE for TARGET (a GNU triplet) from host SYSTEM (a Guix
-system identifying string)."
-  (cached package (cons system target)
-
-          ;; Bind %CURRENT-SYSTEM so that thunked field values can refer
-          ;; to it.
-          (parameterize ((%current-system system)
-                         (%current-target-system target))
-            (match package
-              (($ <package> name version source
-                  (= build-system-cross-builder builder)
-                  args inputs propagated-inputs native-inputs self-native-input?
-                  outputs)
-               (unless builder
-                 (raise (condition
-                         (&package-cross-build-system-error
-                          (package package)))))
-
-               (let* ((inputs     (package-transitive-target-inputs package))
-                      (input-drvs (map (cut expand-input
-                                            store package <>
-                                            system target)
-                                       inputs))
-                      (host       (append (if self-native-input?
-                                              `(("self" ,package))
-                                              '())
-                                          (package-transitive-native-inputs package)))
-                      (host-drvs  (map (cut expand-input
-                                            store package <> system)
-                                       host))
-                      (all        (append host inputs))
-                      (paths      (delete-duplicates
-                                   (append-map (match-lambda
-                                                ((_ (? package? p) _ ...)
-                                                 (package-search-paths p))
-                                                (_ '()))
-                                               all)))
-                      (npaths     (delete-duplicates
-                                   (append-map (match-lambda
-                                                ((_ (? package? p) _ ...)
-                                                 (package-native-search-paths
-                                                  p))
-                                                (_ '()))
-                                               all))))
-
-                 (apply builder
-                        store (package-full-name package) target
-                        (and source
-                             (package-source-derivation store source system))
-                        input-drvs host-drvs
-                        #:search-paths paths
-                        #:native-search-paths npaths
-                        #:outputs outputs #:system system
-                        (args))))))))
+(define* (package-cross-derivation store package)
+  ;; TODO
+  #f)
 
 (define* (package-output store package output
                          #:optional (system (%current-system)))

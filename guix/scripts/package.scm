@@ -26,7 +26,6 @@
   #:use-module (guix utils)
   #:use-module (guix config)
   #:use-module ((guix build utils) #:select (directory-exists? mkdir-p))
-  #:use-module ((guix ftp-client) #:select (ftp-open))
   #:use-module (ice-9 ftw)
   #:use-module (ice-9 format)
   #:use-module (ice-9 match)
@@ -296,10 +295,7 @@ return its return value."
                         (lambda (signum)
                           (sigaction SIGINT SIG_DFL)
                           (abort-to-prompt %sigint-prompt signum)))
-                      (dynamic-wind
-                        (const #t)
-                        thunk
-                        (cut sigaction SIGINT SIG_DFL)))
+                      (thunk))
                     (lambda (k signum)
                       (handler signum))))
 
@@ -311,24 +307,16 @@ return its return value."
     (force-output (current-error-port))
     (call-with-sigint-handler
      (lambda ()
-       (dynamic-wind
-         (const #f)
-         (lambda () exp)
-         (lambda ()
-           ;; Clear the line.
-           (display #\cr (current-error-port))
-           (display blank (current-error-port))
-           (display #\cr (current-error-port))
-           (force-output (current-error-port)))))
+       (let ((result exp))
+         ;; Clear the line.
+         (display #\cr (current-error-port))
+         (display blank (current-error-port))
+         (display #\cr (current-error-port))
+         (force-output (current-error-port))
+         exp))
      (lambda (signum)
        (format (current-error-port) "  interrupted by signal ~a~%" SIGINT)
        #f))))
-
-(define ftp-open*
-  ;; Memoizing version of `ftp-open'.  The goal is to avoid initiating a new
-  ;; FTP connection for each package, esp. since most of them are to the same
-  ;; server.  This has a noticeable impact when doing "guix upgrade -u".
-  (memoize ftp-open))
 
 (define (check-package-freshness package)
   "Check whether PACKAGE has a newer version available upstream, and report
@@ -340,9 +328,7 @@ it."
       (when (false-if-exception (gnu-package? package))
         (let ((name      (package-name package))
               (full-name (package-full-name package)))
-          (match (waiting (latest-release name
-                                          #:ftp-open ftp-open*
-                                          #:ftp-close (const #f))
+          (match (waiting (latest-release name)
                           (_ "looking for the latest release of GNU ~a...") name)
             ((latest-version . _)
              (when (version>? latest-version full-name)
@@ -422,7 +408,6 @@ PACKAGES, in the context of PROFILE."
 (define %default-options
   ;; Alist of default option values.
   `((profile . ,%current-profile)
-    (max-silent-time . 3600)
     (substitutes? . #t)))
 
 (define (show-help)
@@ -447,12 +432,7 @@ Install, remove, or upgrade PACKAGES in a single transaction.\n"))
   (display (_ "
   -n, --dry-run          show what would be done without actually doing it"))
   (display (_ "
-      --fallback         fall back to building when the substituter fails"))
-  (display (_ "
       --no-substitutes   build instead of resorting to pre-built substitutes"))
-  (display (_ "
-      --max-silent-time=SECONDS
-                         mark the build as failed after SECONDS of silence"))
   (display (_ "
       --bootstrap        use the bootstrap Guile to build the profile"))
   (display (_ "
@@ -510,18 +490,10 @@ Install, remove, or upgrade PACKAGES in a single transaction.\n"))
         (option '(#\n "dry-run") #f #f
                 (lambda (opt name arg result)
                   (alist-cons 'dry-run? #t result)))
-        (option '("fallback") #f #f
-                (lambda (opt name arg result)
-                  (alist-cons 'fallback? #t
-                              (alist-delete 'fallback? result))))
         (option '("no-substitutes") #f #f
                 (lambda (opt name arg result)
                   (alist-cons 'substitutes? #f
                               (alist-delete 'substitutes? result))))
-        (option '("max-silent-time") #t #f
-                (lambda (opt name arg result)
-                  (alist-cons 'max-silent-time (string->number* arg)
-                              result)))
         (option '("bootstrap") #f #f
                 (lambda (opt name arg result)
                   (alist-cons 'bootstrap? #t result)))
@@ -623,14 +595,7 @@ Install, remove, or upgrade PACKAGES in a single transaction.\n"))
       (#f #f)))
 
   (define (ensure-default-profile)
-    ;; Ensure the default profile symlink and directory exist and are
-    ;; writable.
-
-    (define (rtfm)
-      (format (current-error-port)
-              (_ "Try \"info '(guix) Invoking guix package'\" for \
-more information.~%"))
-      (exit 1))
+    ;; Ensure the default profile symlink and directory exist.
 
     ;; Create ~/.guix-profile if it doesn't exist yet.
     (when (and %user-environment-directory
@@ -639,34 +604,23 @@ more information.~%"))
                      (lstat %user-environment-directory))))
       (symlink %current-profile %user-environment-directory))
 
-    (let ((s (stat %profile-directory #f)))
-      ;; Attempt to create /…/profiles/per-user/$USER if needed.
-      (unless (and s (eq? 'directory (stat:type s)))
-        (catch 'system-error
-          (lambda ()
-            (mkdir-p %profile-directory))
-          (lambda args
-            ;; Often, we cannot create %PROFILE-DIRECTORY because its
-            ;; parent directory is root-owned and we're running
-            ;; unprivileged.
-            (format (current-error-port)
-                    (_ "error: while creating directory `~a': ~a~%")
-                    %profile-directory
-                    (strerror (system-error-errno args)))
-            (format (current-error-port)
-                    (_ "Please create the `~a' directory, with you as the owner.~%")
-                    %profile-directory)
-            (rtfm))))
-
-      ;; Bail out if it's not owned by the user.
-      (unless (or (not s) (= (stat:uid s) (getuid)))
-        (format (current-error-port)
-                (_ "error: directory `~a' is not owned by you~%")
-                %profile-directory)
-        (format (current-error-port)
-                (_ "Please change the owner of `~a' to user ~s.~%")
-                %profile-directory (or (getenv "USER") (getuid)))
-        (rtfm))))
+    ;; Attempt to create /…/profiles/per-user/$USER if needed.
+    (unless (directory-exists? %profile-directory)
+      (catch 'system-error
+        (lambda ()
+          (mkdir-p %profile-directory))
+        (lambda args
+          ;; Often, we cannot create %PROFILE-DIRECTORY because its
+          ;; parent directory is root-owned and we're running
+          ;; unprivileged.
+          (format (current-error-port)
+                  (_ "error: while creating directory `~a': ~a~%")
+                  %profile-directory
+                  (strerror (system-error-errno args)))
+          (format (current-error-port)
+                  (_ "Please create the `~a' directory, with you as the owner.~%")
+                  %profile-directory)
+          (exit 1)))))
 
   (define (process-actions opts)
     ;; Process any install/remove/upgrade action from OPTS.
@@ -693,12 +647,6 @@ more information.~%"))
 
       (delete-duplicates deps same?))
 
-    (define (same-package? tuple name out)
-      (match tuple
-        ((tuple-name _ tuple-output _ ...)
-         (and (equal? name tuple-name)
-              (equal? out tuple-output)))))
-
     (define (package->tuple p)
       ;; Convert package P to a tuple.
       ;; When given a package via `-e', install the first of its
@@ -709,7 +657,7 @@ more information.~%"))
         `(,(package-name p)
           ,(package-version p)
           ,out
-          ,p
+          ,path
           ,(canonicalize-deps deps))))
 
     (define (show-what-to-remove/install remove install dry-run?)
@@ -777,7 +725,7 @@ more information.~%"))
                           upgrade
                           (filter-map (match-lambda
                                        (('install . (? package? p))
-                                        (package->tuple p))
+                                        #f)
                                        (('install . (? store-path?))
                                         #f)
                                        (('install . package)
@@ -795,7 +743,7 @@ more information.~%"))
                (install* (append
                           (filter-map (match-lambda
                                        (('install . (? package? p))
-                                        #f)
+                                        (package->tuple p))
                                        (('install . (? store-path? path))
                                         (let-values (((name version)
                                                       (package-name->name+version
@@ -822,11 +770,8 @@ more information.~%"))
                (packages (append install*
                                  (fold (lambda (package result)
                                          (match package
-                                           ((name _ out _ ...)
-                                            (filter (negate
-                                                     (cut same-package? <>
-                                                          name out))
-                                                    result))))
+                                           ((name _ ...)
+                                            (alist-delete name result))))
                                        (fold alist-delete installed remove)
                                        install*))))
 
@@ -864,13 +809,9 @@ more information.~%"))
                                                   (current-error-port)
                                                   (%make-void-port "w"))))
                                 (build-derivations (%store) (list prof-drv)))
-                              (let ((count (length packages)))
+                              (begin
                                 (switch-symlinks name prof)
                                 (switch-symlinks profile name)
-                                (format #t (N_ "~a package in profile~%"
-                                               "~a packages in profile~%"
-                                               count)
-                                        count)
                                 (display-search-paths packages
                                                       profile))))))))))
 
@@ -937,11 +878,8 @@ more information.~%"))
         (with-error-handling
           (parameterize ((%store (open-connection)))
             (set-build-options (%store)
-                               #:fallback? (assoc-ref opts 'fallback?)
                                #:use-substitutes?
-                               (assoc-ref opts 'substitutes?)
-                               #:max-silent-time
-                               (assoc-ref opts 'max-silent-time))
+                               (assoc-ref opts 'substitutes?))
 
             (parameterize ((%guile-for-build
                             (package-derivation (%store)

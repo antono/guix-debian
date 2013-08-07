@@ -63,8 +63,6 @@ struct BufferedSource : Source
     
     /* Underlying read call, to be overriden. */
     virtual size_t readUnbuffered(unsigned char * data, size_t len) = 0;
-
-    bool hasData();
 };
 
 

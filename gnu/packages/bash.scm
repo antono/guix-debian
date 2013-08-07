@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -26,29 +26,19 @@
   #:use-module (guix build-system gnu))
 
 (define-public bash
-  (let* ((cppflags (string-join '("-DSYS_BASHRC='\"/etc/bashrc\"'"
-                                  "-DSYS_BASH_LOGOUT='\"/etc/bash_logout\"'"
-                                  "-DDEFAULT_PATH_VALUE='\"/no-such-path\"'"
-                                  "-DSTANDARD_UTILS_PATH='\"/no-such-path\"'"
-                                  "-DNON_INTERACTIVE_LOGIN_SHELLS"
-                                  "-DSSH_SOURCE_BASHRC")
-                                " "))
-         (configure-flags
-          ``("--with-installed-readline"
-             ,,(string-append "CPPFLAGS=" cppflags)
-             ,(string-append
-               "LDFLAGS=-Wl,-rpath -Wl,"
-               (assoc-ref %build-inputs "readline")
-               "/lib"
-               " -Wl,-rpath -Wl,"
-               (assoc-ref %build-inputs "ncurses")
-               "/lib")))
-         (post-install-phase
-          '(lambda* (#:key outputs #:allow-other-keys)
-             ;; Add a `bash' -> `sh' link.
-             (let ((out (assoc-ref outputs "out")))
-               (with-directory-excursion (string-append out "/bin")
-                 (symlink "bash" "sh"))))))
+  (let ((cppflags (string-join '("-DSYS_BASHRC='\"/etc/bashrc\"'"
+                                 "-DSYS_BASH_LOGOUT='\"/etc/bash_logout\"'"
+                                 "-DDEFAULT_PATH_VALUE='\"/no-such-path\"'"
+                                 "-DSTANDARD_UTILS_PATH='\"/no-such-path\"'"
+                                 "-DNON_INTERACTIVE_LOGIN_SHELLS"
+                                 "-DSSH_SOURCE_BASHRC")
+                               " "))
+        (post-install-phase
+         '(lambda* (#:key outputs #:allow-other-keys)
+            ;; Add a `bash' -> `sh' link.
+            (let ((out (assoc-ref outputs "out")))
+              (with-directory-excursion (string-append out "/bin")
+                (symlink "bash" "sh"))))))
     (package
      (name "bash")
      (version "4.2")
@@ -63,12 +53,15 @@
      (inputs `(("readline" ,readline)
                ("ncurses" ,ncurses)))             ; TODO: add texinfo
      (arguments
-      `(;; When cross-compiling, `configure' incorrectly guesses that job
-        ;; control is missing.
-        #:configure-flags ,(if (%current-target-system)
-                               `(cons* "bash_cv_job_control_missing=no"
-                                       ,configure-flags)
-                               configure-flags)
+      `(#:configure-flags `("--with-installed-readline"
+                            ,,(string-append "CPPFLAGS=" cppflags)
+                            ,(string-append
+                              "LDFLAGS=-Wl,-rpath -Wl,"
+                              (assoc-ref %build-inputs "readline")
+                              "/lib"
+                              " -Wl,-rpath -Wl,"
+                              (assoc-ref %build-inputs "ncurses")
+                              "/lib"))
 
         ;; Bash is reportedly not parallel-safe.  See, for instance,
         ;; <http://patches.openembedded.org/patch/32745/> and
@@ -105,7 +98,7 @@ modification.")
                               (guix build utils)
                               (srfi srfi-1)
                               (srfi srfi-26))
-                   ,@(package-arguments bash))))
+                             ,@(package-arguments bash))))
        (substitute-keyword-arguments args
          ((#:configure-flags flags)
           `(list "--without-bash-malloc"
@@ -114,8 +107,4 @@ modification.")
                  "--disable-help-builtin"
                  "--disable-progcomp"
                  "--disable-net-redirections"
-                 "--disable-nls"
-
-                 ,@(if (%current-target-system)
-                       '("bash_cv_job_control_missing=no")
-                       '()))))))))
+                 "--disable-nls")))))))

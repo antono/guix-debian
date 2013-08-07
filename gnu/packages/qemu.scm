@@ -34,7 +34,6 @@
   #:use-module (gnu packages attr)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages samba)
-  #:use-module (gnu packages xorg)
   #:use-module (gnu packages perl))
 
 (define-public qemu-kvm
@@ -63,7 +62,6 @@
                      (setenv "LDFLAGS" "-lrt")
                      (zero?
                       (system* "./configure"
-                               (string-append "--cc=" (which "gcc"))
                                (string-append "--prefix=" out)
                                (string-append "--smbd=" samba
                                               "/sbin/smbd")))))
@@ -76,12 +74,11 @@
        ("ncurses" ,ncurses)
        ("libpng" ,libpng)
        ("libjpeg" ,libjpeg-8)
-       ("pixman" ,pixman)
        ;; ("vde2" ,vde2)
        ("util-linux" ,util-linux)
        ;; ("pciutils" ,pciutils)
        ("pkg-config" ,pkg-config)
-       ("alsa-lib" ,alsa-lib)
+       ;; ("alsa-lib" ,alsa-lib)
        ;; ("SDL" ,SDL)
        ("zlib" ,zlib)
        ("attr" ,attr)
@@ -116,7 +113,7 @@ underway to get the required changes upstream.")
   ;; The real one, with a complete target list.
   (package (inherit qemu-kvm)
     (name "qemu")
-    (version "1.5.1")
+    (version "1.3.1")
     (location (source-properties->location (current-source-location)))
     (source (origin
              (method url-fetch)
@@ -124,18 +121,31 @@ underway to get the required changes upstream.")
                                  version ".tar.bz2"))
              (sha256
               (base32
-               "1s7316pgizpayr472la8p8a4vhv7ymmzd5qlbkmq6y9q5zpa25ac"))))
+               "1bqfrb5dlsxm8gxhkksz8qzi5fhj3xqhxyfwbqcphhcv1kpyfwip"))))
     (arguments
      (substitute-keyword-arguments (package-arguments qemu-kvm)
        ((#:phases phases)
         `(alist-cons-before
           'build 'pre-build
           (lambda* (#:key inputs #:allow-other-keys)
-            (substitute* "tests/libqtest.c"
-              (("/bin/sh") (which "sh"))))
+            (let ((libtool    (assoc-ref inputs "libtool"))
+                  (pkg-config (assoc-ref inputs "pkg-config")))
+              ;; XXX: For lack of generic search path handling.
+              (setenv "ACLOCAL_PATH"
+                      (format #f "~a/share/aclocal:~a/share/aclocal"
+                              libtool pkg-config)))
+
+            ;; For pixman's `configure' script.
+            (setenv "CONFIG_SHELL" (which "bash"))
+
+            (substitute* "pixman/configure.ac"
+              (("AM_CONFIG_HEADER") "AC_CONFIG_HEADERS")))
           ,phases))))
-    (native-inputs `(("perl" ,perl)))
-    (home-page "http://www.qemu-project.org")
+    (native-inputs `(("autoconf" ,autoconf-wrapper) ; for "pixman"
+                     ("automake" ,automake)
+                     ("libtool" ,libtool)
+                     ("libtool-bin" ,libtool "bin")
+                     ("perl" ,perl)))
     (description
      "QEMU is a generic and open source machine emulator and virtualizer.
 

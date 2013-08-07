@@ -44,10 +44,8 @@ struct OptimiseStats
 
 struct RunningSubstituter
 {
-    Path program;
     Pid pid;
     AutoCloseFD to, from, error;
-    FdSource fromBuf;
 };
 
 
@@ -291,10 +289,6 @@ private:
     void startSubstituter(const Path & substituter,
         RunningSubstituter & runningSubstituter);
 
-    string getLineFromSubstituter(RunningSubstituter & run);
-
-    template<class T> T getIntLineFromSubstituter(RunningSubstituter & run);
-
     Path createTempDirInStore();
 
     Path importPath(bool requireSignature, Source & source);
@@ -305,10 +299,6 @@ private:
 };
 
 
-typedef std::pair<dev_t, ino_t> Inode;
-typedef set<Inode> InodesSeen;
-
-
 /* "Fix", or canonicalise, the meta-data of the files in a store path
    after it has been built.  In particular:
    - the last modification date on each file is set to 1 (i.e.,
@@ -317,7 +307,6 @@ typedef set<Inode> InodesSeen;
      without execute permission; setuid bits etc. are cleared)
    - the owner and group are set to the Nix user and group, if we're
      in a setuid Nix installation. */
-void canonicalisePathMetaData(const Path & path, uid_t fromUid, InodesSeen & inodesSeen);
 void canonicalisePathMetaData(const Path & path, uid_t fromUid);
 
 void canonicaliseTimestampAndPermissions(const Path & path);

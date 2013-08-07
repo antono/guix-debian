@@ -26,7 +26,6 @@
   #:use-module (ice-9 rdelim)
   #:use-module (guix store)
   #:use-module (guix utils)
-  #:use-module (guix hash)
   #:use-module (guix base32)
   #:export (<derivation>
             derivation?
@@ -469,14 +468,9 @@ in SIZE bytes."
                            inputs))
               (drv    (make-derivation outputs inputs sources
                                        system builder args env-vars)))
-
-         ;; XXX: At this point this remains faster than `port-sha256', because
-         ;; the SHA256 port's `write' method gets called for every single
-         ;; character.
          (sha256
-          (with-fluids ((%default-port-encoding "UTF-8"))
-            (string->utf8 (call-with-output-string
-                           (cut write-derivation drv <>)))))))))))
+          (string->utf8 (call-with-output-string
+                         (cut write-derivation drv <>))))))))))
 
 (define (store-path type hash name)               ; makeStorePath
   "Return the store path for NAME/HASH/TYPE."

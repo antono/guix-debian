@@ -52,33 +52,26 @@
                            "install"
                            "install-lib"
                            "install-dev")))
+         (alist-replace
+          'check
+          (lambda _
+            ;; Use the right shell.
+            (substitute* "test/run"
+              (("/bin/sh")
+               (which "bash")))
 
-         ;; When building natively, adjust the test cases.
-         ,(if (%current-target-system)
-              '%standard-phases
-              '(alist-replace 'check
-                              (lambda _
-                                ;; Use the right shell.
-                                (substitute* "test/run"
-                                  (("/bin/sh")
-                                   (which "bash")))
+            (system* "make" "tests" "-C" "test")
 
-                                (system* "make" "tests" "-C" "test")
-
-                                ;; XXX: Ignore the test result since this is
-                                ;; dependent on the underlying file system.
-                                #t)
-                              %standard-phases))))))
-    (inputs
-     ;; Perl is needed to run tests; remove it from cross builds.
-     (if (%current-target-system)
-         '()
-         `(("perl" ,perl))))
-    (native-inputs
-     `(("gettext" ,guix:gettext)))
-
-    (home-page "http://savannah.nongnu.org/projects/attr/")
-    (synopsis "Library and tools for manipulating extended attributes")
+            ;; XXX: Ignore the test result since this is dependent on the
+            ;; underlying file system.
+            #t)
+          %standard-phases)))))
+    (inputs `(("perl" ,perl)
+              ("gettext" ,guix:gettext)))
+    (home-page
+     "http://savannah.nongnu.org/projects/attr/")
+    (synopsis
+     "Library and tools for manipulating extended attributes")
     (description
      "Portable library and tools for manipulating extended attributes.")
     (license (list gpl2+ lgpl2.1+))))

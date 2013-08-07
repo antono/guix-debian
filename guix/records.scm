@@ -21,12 +21,9 @@
   #:use-module (srfi srfi-9)
   #:use-module (srfi srfi-26)
   #:use-module (ice-9 match)
-  #:use-module (ice-9 regex)
-  #:use-module (ice-9 rdelim)
   #:export (define-record-type*
             alist->record
-            object->fields
-            recutils->alist))
+            object->fields))
 
 ;;; Commentary:
 ;;;
@@ -198,19 +195,9 @@ thunked fields."
                                                          #'((field options ...)
                                                             ...))))))))))
 
-(define* (alist->record alist make keys
-                        #:optional (multiple-value-keys '()))
-  "Apply MAKE to the values associated with KEYS in ALIST.  Items in KEYS that
-are also in MULTIPLE-VALUE-KEYS are considered to occur possibly multiple
-times in ALIST, and thus their value is a list."
-  (let ((args (map (lambda (key)
-                     (if (member key multiple-value-keys)
-                         (filter-map (match-lambda
-                                      ((k . v)
-                                       (and (equal? k key) v)))
-                                     alist)
-                         (assoc-ref alist key)))
-                   keys)))
+(define (alist->record alist make keys)
+  "Apply MAKE to the values associated with KEYS in ALIST."
+  (let ((args (map (cut assoc-ref alist <>) keys)))
     (apply make args)))
 
 (define (object->fields object fields port)
@@ -223,47 +210,5 @@ PORT, according to FIELDS.  FIELDS must be a list of field name/getter pairs."
       (((field . get) rest ...)
        (format port "~a: ~a~%" field (get object))
        (loop rest)))))
-
-(define %recutils-field-rx
-  (make-regexp "^([[:graph:]]+): (.*)$"))
-
-(define %recutils-comment-rx
-  ;; info "(recutils) Comments"
-  (make-regexp "^#"))
-
-(define %recutils-plus-rx
-  (make-regexp "^\\+ ?(.*)$"))
-
-(define (recutils->alist port)
-  "Read a recutils-style record from PORT and return it as a list of key/value
-pairs.  Stop upon an empty line (after consuming it) or EOF."
-  (let loop ((line   (read-line port))
-             (result '()))
-    (cond ((eof-object? line)
-           (reverse result))
-          ((string-null? line)
-           (if (null? result)
-               (loop (read-line port) result)     ; leading space: ignore it
-               (reverse result)))                 ; end-of-record marker
-          ((regexp-exec %recutils-comment-rx line)
-           (loop (read-line port) result))
-          ((regexp-exec %recutils-plus-rx line)
-           =>
-           (lambda (m)
-             (match result
-               (((field . value) rest ...)
-                (loop (read-line port)
-                      `((,field . ,(string-append value "\n"
-                                                  (match:substring m 1)))
-                        ,@rest))))))
-          ((regexp-exec %recutils-field-rx line)
-           =>
-           (lambda (match)
-             (loop (read-line port)
-                   (alist-cons (match:substring match 1)
-                               (match:substring match 2)
-                               result))))
-          (else
-           (error "unmatched line" line)))))
 
 ;;; records.scm ends here

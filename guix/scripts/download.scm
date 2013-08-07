@@ -19,7 +19,6 @@
 (define-module (guix scripts download)
   #:use-module (guix ui)
   #:use-module (guix store)
-  #:use-module (guix hash)
   #:use-module (guix utils)
   #:use-module (guix base32)
   #:use-module (guix download)
@@ -116,7 +115,7 @@ Supported formats: 'nix-base32' (default), 'base32', and 'base16'
                       (or path
                           (leave (_ "~a: download failed~%")
                                  arg))
-                    port-sha256))
+                    (compose sha256 get-bytevector-all)))
            (fmt   (assq-ref opts 'format)))
       (format #t "~a~%~a~%" path (fmt hash))
       #t)))

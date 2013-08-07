@@ -23,10 +23,8 @@
   #:use-module ((gnu packages compression)
                 #:renamer (symbol-prefix-proc 'guix:))
   #:use-module (gnu packages flex)
-  #:use-module (gnu packages bison)
   #:use-module (gnu packages libusb)
   #:use-module (gnu packages ncurses)
-  #:use-module (gnu packages bdb)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
   #:use-module (guix packages)
@@ -41,22 +39,6 @@
           ((string-prefix? "mips" arch) "mips")
           ((string-prefix? "arm" arch) "arm")
           (else arch))))
-
-(define (linux-libre-urls version)
-  "Return a list of URLs for Linux-Libre VERSION."
-  (list (string-append
-         "http://linux-libre.fsfla.org/pub/linux-libre/releases/"
-         version "-gnu/linux-libre-" version "-gnu.tar.xz")
-
-        ;; XXX: Work around <http://bugs.gnu.org/14851>.
-        (string-append
-         "ftp://alpha.gnu.org/gnu/guix/mirror/linux-libre-"
-         version "-gnu.tar.xz")
-
-        ;; Maybe this URL will become valid eventually.
-        (string-append
-         "mirror://gnu/linux-libre/" version "-gnu/linux-libre-"
-         version "-gnu.tar.xz")))
 
 (define-public linux-libre-headers
   (let* ((version* "3.3.8")
@@ -85,7 +67,9 @@
     (version version*)
     (source (origin
              (method url-fetch)
-             (uri (linux-libre-urls version))
+             (uri (string-append
+                   "http://linux-libre.fsfla.org/pub/linux-libre/releases/3.3.8-gnu/linux-libre-"
+                   version "-gnu.tar.xz"))
              (sha256
               (base32
                "0jkfh0z1s6izvdnc3njm39dhzp1cg8i06jv06izwqz9w9qsprvnl"))))
@@ -189,7 +173,9 @@
     (version version*)
     (source (origin
              (method url-fetch)
-             (uri (linux-libre-urls version))
+             (uri (string-append
+                   "http://linux-libre.fsfla.org/pub/linux-libre/releases/3.3.8-gnu/linux-libre-"
+                   version "-gnu.tar.xz"))
              (sha256
               (base32
                "0jkfh0z1s6izvdnc3njm39dhzp1cg8i06jv06izwqz9w9qsprvnl"))))
@@ -298,7 +284,8 @@ providing the system administrator with some help in common tasks.")
               ("ncurses" ,ncurses)
               ("perl" ,perl)))
     (home-page "https://www.kernel.org/pub/linux/utils/util-linux/")
-    (synopsis "Collection of utilities for the Linux kernel")
+    (synopsis
+     "util-linux is a random collection of utilities for the Linux kernel")
     (description
      "util-linux is a random collection of utilities for the Linux kernel.")
 
@@ -355,7 +342,8 @@ providing the system administrator with some help in common tasks.")
        ;; What did you expect?  Tests?
        #:tests? #f))
     (home-page "http://procps.sourceforge.net/")
-    (synopsis "Utilities that give information about processes")
+    (synopsis
+     "Utilities that give information about processes using the /proc filesystem")
     (description
      "procps is the package that has a bunch of small useful utilities
 that give information about processes using the Linux /proc file system.
@@ -417,134 +405,9 @@ slabtop, and skill.")
        ;; filesystem is mounted due to missing mtab file".
        #:tests? #f))
     (home-page "http://e2fsprogs.sourceforge.net/")
-    (synopsis "Creating and checking ext2/ext3/ext4 file systems")
+    (synopsis "Tools for creating and checking ext2/ext3/ext4 filesystems")
     (description
      "This package provides tools for manipulating ext2/ext3/ext4 file systems.")
     (license (list gpl2                           ; programs
                    lgpl2.0                        ; libext2fs
                    x11))))                        ; libuuid
-
-(define-public strace
-  (package
-    (name "strace")
-    (version "4.7")
-    (source (origin
-             (method url-fetch)
-             (uri (string-append "mirror://sourceforge/strace/strace-"
-                                 version ".tar.xz"))
-             (sha256
-              (base32
-               "158iwk0pl2mfw93m1843xb7a2zb8p6lh0qim07rca6f1ff4dk764"))))
-    (build-system gnu-build-system)
-    (inputs `(("perl" ,perl)))
-    (home-page "http://strace.sourceforge.net/")
-    (synopsis "System call tracer for Linux")
-    (description
-     "strace is a system call tracer, i.e. a debugging tool which prints out a
-trace of all the system calls made by a another process/program.")
-    (license bsd-3)))
-
-(define-public alsa-lib
-  (package
-    (name "alsa-lib")
-    (version "1.0.27.1")
-    (source (origin
-             (method url-fetch)
-             (uri (string-append
-                   "ftp://ftp.alsa-project.org/pub/lib/alsa-lib-"
-                   version ".tar.bz2"))
-             (sha256
-              (base32
-               "0fx057746dj7rjdi0jnvx2m9b0y1lgdkh1hks87d8w32xyihf3k9"))))
-    (build-system gnu-build-system)
-    (home-page "http://www.alsa-project.org/")
-    (synopsis "The Advanced Linux Sound Architecture libraries")
-    (description
-     "The Advanced Linux Sound Architecture (ALSA) provides audio and
-MIDI functionality to the Linux-based operating system.")
-    (license lgpl2.1+)))
-
-(define-public iptables
-  (package
-    (name "iptables")
-    (version "1.4.16.2")
-    (source (origin
-             (method url-fetch)
-             (uri (string-append
-                   "http://www.netfilter.org/projects/iptables/files/iptables-"
-                   version ".tar.bz2"))
-             (sha256
-              (base32
-               "0vkg5lzkn4l3i1sm6v3x96zzvnv9g7mi0qgj6279ld383mzcws24"))))
-    (build-system gnu-build-system)
-    (arguments '(#:tests? #f))                    ; no test suite
-    (home-page "http://www.netfilter.org/projects/iptables/index.html")
-    (synopsis "Program to configure the Linux IP packet filtering rules")
-    (description
-     "iptables is the userspace command line program used to configure the
-Linux 2.4.x and later IPv4 packet filtering ruleset.  It is targeted towards
-system administrators.  Since Network Address Translation is also configured
-from the packet filter ruleset, iptables is used for this, too.  The iptables
-package also includes ip6tables.  ip6tables is used for configuring the IPv6
-packet filter.")
-    (license gpl2+)))
-
-(define-public iproute
-  (package
-    (name "iproute2")
-    (version "3.8.0")
-    (source (origin
-             (method url-fetch)
-             (uri (string-append
-                   "mirror://kernel.org/linux/utils/net/iproute2/iproute2-"
-                   version ".tar.xz"))
-             (sha256
-              (base32
-               "0kqy30wz2krbg4y7750hjq5218hgy2vj9pm5qzkn1bqskxs4b4ap"))))
-    (build-system gnu-build-system)
-    (arguments
-     `(#:tests? #f                                ; no test suite
-       #:make-flags (let ((out (assoc-ref %outputs "out")))
-                      (list "DESTDIR="
-                            (string-append "LIBDIR=" out "/lib")
-                            (string-append "SBINDIR=" out "/sbin")
-                            (string-append "CONFDIR=" out "/etc")
-                            (string-append "DOCDIR=" out "/share/doc/"
-                                           ,name "-" ,version)
-                            (string-append "MANDIR=" out "/share/man")))
-       #:phases (alist-cons-before
-                 'install 'pre-install
-                 (lambda _
-                   ;; Don't attempt to create /var/lib/arpd.
-                   (substitute* "Makefile"
-                     (("^.*ARPDDIR.*$") "")))
-                 %standard-phases)))
-    (inputs
-     `(("iptables" ,iptables)
-       ("db4" ,bdb)
-       ("pkg-config" ,pkg-config)
-       ("flex" ,flex)
-       ("bison" ,bison)))
-    (home-page
-     "http://www.linuxfoundation.org/collaborate/workgroups/networking/iproute2")
-    (synopsis
-     "A collection of utilities for controlling TCP/IP networking and traffic control in Linux")
-    (description
-     "Iproute2 is a collection of utilities for controlling TCP/IP
-networking and traffic with the Linux kernel.
-
-Most network configuration manuals still refer to ifconfig and route as the
-primary network configuration tools, but ifconfig is known to behave
-inadequately in modern network environments.  They should be deprecated, but
-most distros still include them.  Most network configuration systems make use
-of ifconfig and thus provide a limited feature set.  The /etc/net project aims
-to support most modern network technologies, as it doesn't use ifconfig and
-allows a system administrator to make use of all iproute2 features, including
-traffic control.
-
-iproute2 is usually shipped in a package called iproute or iproute2 and
-consists of several tools, of which the most important are ip and tc.  ip
-controls IPv4 and IPv6 configuration and tc stands for traffic control.  Both
-tools print detailed usage messages and are accompanied by a set of
-manpages.")
-    (license gpl2+)))

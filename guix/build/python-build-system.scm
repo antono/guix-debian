@@ -45,14 +45,6 @@
           (zero? (apply system* "python" args)))
         (error "no setup.py found"))))
 
-(define* (check #:key outputs #:allow-other-keys)
-  "Run the test suite of a given Python package."
-  (if (file-exists? "setup.py")
-      (let ((args `("setup.py" "check")))
-        (format #t "running 'python' with arguments ~s~%" args)
-        (zero? (apply system* "python" args)))
-      (error "no setup.py found")))
-
 (define* (wrap #:key outputs python-version #:allow-other-keys)
   (define (list-of-files dir)
     (map (cut string-append dir "/" <>)
@@ -86,12 +78,10 @@
   (alist-cons-after
    'install 'wrap
    wrap
-   (alist-replace
-    'check check
-    (alist-replace 'install install
-                   (alist-delete 'configure
+   (alist-replace 'install install
+                  (alist-delete 'configure
                                 (alist-delete 'build
-                                              gnu:%standard-phases))))))
+                                              gnu:%standard-phases)))))
 
 (define* (python-build #:key inputs (phases %standard-phases)
                        #:allow-other-keys #:rest args)

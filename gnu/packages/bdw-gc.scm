@@ -25,7 +25,7 @@
 (define-public libgc
   (package
    (name "libgc")
-   (version "7.2d")
+   (version "7.2alpha6")
    (source (origin
             (method url-fetch)
             (uri (string-append
@@ -33,13 +33,9 @@
                   version ".tar.gz"))
             (sha256
              (base32
-              "0phwa5driahnpn79zqff14w9yc8sn3599cxz91m78hqdcpl0mznr"))))
+              "05jwadjbrv8pr7z9cb4miskicxqpxm0pca4h2rg5cgbpajr2bx7b"))))
    (build-system gnu-build-system)
-   (arguments
-    ;; Make it so that we don't rely on /proc.  This is especially useful in
-    ;; an initrd run before /proc is mounted.
-    '(#:configure-flags '("CPPFLAGS=-DUSE_LIBC_PRIVATES")))
-   (outputs '("out" "debug"))
+   ;; TODO: Build with -DUSE_LIBC_PRIVATES (see make-bootstrap.scm).
    (synopsis "The Boehm-Demers-Weiser conservative garbage collector
 for C and C++")
    (description

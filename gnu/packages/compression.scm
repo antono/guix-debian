@@ -30,10 +30,8 @@
     (source
      (origin
       (method url-fetch)
-      (uri (list (string-append "http://zlib.net/zlib-"
-                                 version ".tar.gz")
-                 (string-append "mirror://sourceforge/libpng/zlib-"
-                                 version ".tar.gz")))
+      (uri (string-append "http://zlib.net/zlib-"
+                          version ".tar.gz"))
       (sha256
        (base32
         "1i96gsdvxqb6skp9a58bacf1wxamwi9m9pg4yn7cpf7g7239r77s"))))
@@ -66,14 +64,14 @@ in compression.")
 (define-public gzip
   (package
    (name "gzip")
-   (version "1.6")
+   (version "1.5")
    (source (origin
             (method url-fetch)
             (uri (string-append "mirror://gnu/gzip/gzip-"
                                 version ".tar.gz"))
             (sha256
              (base32
-              "0zlgdm4v3dndrbiz7b67mbbj25dpwqbmbzjiycssvrfrcfvq7swp"))))
+              "18rm80kar7n016g8bsyy1a3zk50i2826xdgs874yh64rzj7nxmdm"))))
    (build-system gnu-build-system)
    (synopsis "General file (de)compression (using lzw)")
    (arguments

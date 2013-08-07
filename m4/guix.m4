@@ -40,8 +40,6 @@ dnl Determine the Guix host system type, and store it in the
 dnl `guix_system' variable.
 AC_DEFUN([GUIX_SYSTEM_TYPE], [
   AC_REQUIRE([AC_CANONICAL_HOST])
-  AC_PATH_PROG([SED], [sed])
-
   AC_ARG_WITH(system, AC_HELP_STRING([--with-system=SYSTEM],
     [Platform identifier (e.g., `i686-linux').]),
     [guix_system="$withval"],
@@ -61,42 +59,13 @@ AC_DEFUN([GUIX_SYSTEM_TYPE], [
        *)
 	  # Strip the version number from names such as `gnu0.3',
 	  # `darwin10.2.0', etc.
-	  guix_system="$machine_name-`echo $host_os | "$SED" -e's/[0-9.]*$//g'`";;
+	  guix_system="$machine_name-`echo $host_os | "$SED" -e's/@<:@0-9.@:>@*$//g'`";;
      esac])
 
   AC_MSG_CHECKING([for the Guix system type])
   AC_MSG_RESULT([$guix_system])
 
   AC_SUBST([guix_system])
-])
-
-dnl GUIX_ASSERT_SUPPORTED_SYSTEM
-dnl
-dnl Assert that this is a system to which the distro is ported.
-AC_DEFUN([GUIX_ASSERT_SUPPORTED_SYSTEM], [
-  AC_REQUIRE([GUIX_SYSTEM_TYPE])
-
-  AC_ARG_WITH([courage], [AC_HELP_STRING([--with-courage],
-    [Assert that even if this platform is unsupported, you will be
-courageous and port the GNU System distribution to it (see
-"GNU Distribution" in the manual.)])],
-    [guix_courageous="$withval"],
-    [guix_courageous="no"])
-
-  # Currently only Linux-based systems are supported, and only on some
-  # platforms.
-  case "$guix_system" in
-    x86_64-linux|i686-linux)
-      ;;
-    *)
-      if test "x$guix_courageous" = "xyes"; then
-        AC_MSG_WARN([building Guix on `$guix_system', which is not supported])
-      else
-        AC_MSG_ERROR([`$guix_system' is not a supported platform.
-See "GNU Distribution" in the manual, or try `--with-courage'.])
-      fi
-      ;;
-  esac
 ])
 
 dnl GUIX_ASSERT_GUILE_FEATURES FEATURES
@@ -114,23 +83,4 @@ AC_DEFUN([GUIX_ASSERT_GUILE_FEATURES], [
       AC_MSG_ERROR([$GUILE does not support feature '$guix_guile_feature', which is required.])
     fi
   done
-])
-
-dnl GUIX_CHECK_SRFI_37
-dnl
-dnl Check whether SRFI-37 suffers from <http://bugs.gnu.org/13176>.
-dnl This bug was fixed in Guile 2.0.9.
-AC_DEFUN([GUIX_CHECK_SRFI_37], [
-  AC_CACHE_CHECK([whether (srfi srfi-37) is affected by http://bugs.gnu.org/13176],
-    [ac_cv_guix_srfi_37_broken],
-    [if "$GUILE" -c "(use-modules (srfi srfi-37))			\
-       (sigaction SIGALRM (lambda _ (primitive-exit 1)))		\
-       (alarm 1)							\
-       (define opts (list (option '(#\I) #f #t (lambda _ #t))))		\
-       (args-fold '(\"-I\") opts (lambda _ (error)) (lambda _ #f) '())"
-     then
-       ac_cv_guix_srfi_37_broken=no
-     else
-       ac_cv_guix_srfi_37_broken=yes
-     fi])
 ])

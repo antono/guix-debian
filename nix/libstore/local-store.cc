@@ -500,6 +500,10 @@ void canonicaliseTimestampAndPermissions(const Path & path)
 }
 
 
+typedef std::pair<dev_t, ino_t> Inode;
+typedef set<Inode> InodesSeen;
+
+
 static void canonicalisePathMetaData_(const Path & path, uid_t fromUid, InodesSeen & inodesSeen)
 {
     checkInterrupt();
@@ -557,8 +561,10 @@ static void canonicalisePathMetaData_(const Path & path, uid_t fromUid, InodesSe
 }
 
 
-void canonicalisePathMetaData(const Path & path, uid_t fromUid, InodesSeen & inodesSeen)
+void canonicalisePathMetaData(const Path & path, uid_t fromUid)
 {
+    InodesSeen inodesSeen;
+
     canonicalisePathMetaData_(path, fromUid, inodesSeen);
 
     /* On platforms that don't have lchown(), the top-level path can't
@@ -571,13 +577,6 @@ void canonicalisePathMetaData(const Path & path, uid_t fromUid, InodesSeen & ino
         assert(S_ISLNK(st.st_mode));
         throw Error(format("wrong ownership of top-level store path `%1%'") % path);
     }
-}
-
-
-void canonicalisePathMetaData(const Path & path, uid_t fromUid)
-{
-    InodesSeen inodesSeen;
-    canonicalisePathMetaData(path, fromUid, inodesSeen);
 }
 
 
@@ -1008,6 +1007,10 @@ void LocalStore::startSubstituter(const Path & substituter, RunningSubstituter &
     fromPipe.create();
     errorPipe.create();
 
+    /* Hack: prevent substituters that write too much to stderr from
+       deadlocking our read() from stdout. */
+    fcntl(errorPipe.writeSide, F_SETFL, O_NONBLOCK);
+
     setSubstituterEnv();
 
     run.pid = maybeVfork();
@@ -1035,72 +1038,15 @@ void LocalStore::startSubstituter(const Path & substituter, RunningSubstituter &
 
     /* Parent. */
 
-    run.program = baseNameOf(substituter);
     run.to = toPipe.writeSide.borrow();
-    run.from = run.fromBuf.fd = fromPipe.readSide.borrow();
+    run.from = fromPipe.readSide.borrow();
     run.error = errorPipe.readSide.borrow();
 }
 
 
-/* Read a line from the substituter's stdout, while also processing
-   its stderr. */
-string LocalStore::getLineFromSubstituter(RunningSubstituter & run)
+template<class T> T getIntLine(int fd)
 {
-    string res, err;
-
-    /* We might have stdout data left over from the last time. */
-    if (run.fromBuf.hasData()) goto haveData;
-
-    while (1) {
-        fd_set fds;
-        FD_ZERO(&fds);
-        FD_SET(run.from, &fds);
-        FD_SET(run.error, &fds);
-
-        /* Wait for data to appear on the substituter's stdout or
-           stderr. */
-        if (select(run.from > run.error ? run.from + 1 : run.error + 1, &fds, 0, 0, 0) == -1) {
-            if (errno == EINTR) continue;
-            throw SysError("waiting for input from the substituter");
-        }
-
-        /* Completely drain stderr before dealing with stdout. */
-        if (FD_ISSET(run.error, &fds)) {
-            char buf[4096];
-            ssize_t n = read(run.error, (unsigned char *) buf, sizeof(buf));
-            if (n == -1) {
-                if (errno == EINTR) continue;
-                throw SysError("reading from substituter's stderr");
-            }
-            if (n == 0) throw Error(format("substituter `%1%' died unexpectedly") % run.program);
-            err.append(buf, n);
-            string::size_type p;
-            while ((p = err.find('\n')) != string::npos) {
-                printMsg(lvlError, run.program + ": " + string(err, 0, p));
-                err = string(err, p + 1);
-            }
-        }
-
-        /* Read from stdout until we get a newline or the buffer is empty. */
-        else if (run.fromBuf.hasData() || FD_ISSET(run.from, &fds)) {
-        haveData:
-            do {
-                unsigned char c;
-                run.fromBuf(&c, 1);
-                if (c == '\n') {
-                    if (!err.empty()) printMsg(lvlError, run.program + ": " + err);
-                    return res;
-                }
-                res += c;
-            } while (run.fromBuf.hasData());
-        }
-    }
-}
-
-
-template<class T> T LocalStore::getIntLineFromSubstituter(RunningSubstituter & run)
-{
-    string s = getLineFromSubstituter(run);
+    string s = readLine(fd);
     T res;
     if (!string2Int(s, res)) throw Error("integer expected from stream");
     return res;
@@ -1123,9 +1069,13 @@ PathSet LocalStore::querySubstitutablePaths(const PathSet & paths)
                substituters should only write (short) messages to
                stderr when they fail.  I.e. they shouldn't write debug
                output. */
-            Path path = getLineFromSubstituter(run);
-            if (path == "") break;
-            res.insert(path);
+            try {
+                Path path = readLine(run.from);
+                if (path == "") break;
+                res.insert(path);
+            } catch (EndOfFile e) {
+                throw Error(format("substituter `%1%' failed: %2%") % *i % chomp(drainFD(run.error)));
+            }
         }
     }
     return res;
@@ -1144,22 +1094,26 @@ void LocalStore::querySubstitutablePathInfos(const Path & substituter,
     writeLine(run.to, s);
 
     while (true) {
-        Path path = getLineFromSubstituter(run);
-        if (path == "") break;
-        if (paths.find(path) == paths.end())
-            throw Error(format("got unexpected path `%1%' from substituter") % path);
-        paths.erase(path);
-        SubstitutablePathInfo & info(infos[path]);
-        info.deriver = getLineFromSubstituter(run);
-        if (info.deriver != "") assertStorePath(info.deriver);
-        int nrRefs = getIntLineFromSubstituter<int>(run);
-        while (nrRefs--) {
-            Path p = getLineFromSubstituter(run);
-            assertStorePath(p);
-            info.references.insert(p);
+        try {
+            Path path = readLine(run.from);
+            if (path == "") break;
+            if (paths.find(path) == paths.end())
+                throw Error(format("got unexpected path `%1%' from substituter") % path);
+            paths.erase(path);
+            SubstitutablePathInfo & info(infos[path]);
+            info.deriver = readLine(run.from);
+            if (info.deriver != "") assertStorePath(info.deriver);
+            int nrRefs = getIntLine<int>(run.from);
+            while (nrRefs--) {
+                Path p = readLine(run.from);
+                assertStorePath(p);
+                info.references.insert(p);
+            }
+            info.downloadSize = getIntLine<long long>(run.from);
+            info.narSize = getIntLine<long long>(run.from);
+        } catch (EndOfFile e) {
+            throw Error(format("substituter `%1%' failed: %2%") % substituter % chomp(drainFD(run.error)));
         }
-        info.downloadSize = getIntLineFromSubstituter<long long>(run);
-        info.narSize = getIntLineFromSubstituter<long long>(run);
     }
 }
 
@@ -1203,10 +1157,9 @@ void LocalStore::registerValidPaths(const ValidPathInfos & infos)
 
             foreach (ValidPathInfos::const_iterator, i, infos) {
                 assert(i->hash.type == htSHA256);
-                if (isValidPath(i->path))
-                    updatePathInfo(*i);
-                else
-                    addValidPath(*i);
+                /* !!! Maybe the registration info should be updated if the
+                   path is already valid. */
+                if (!isValidPath(i->path)) addValidPath(*i);
                 paths.insert(i->path);
             }
 

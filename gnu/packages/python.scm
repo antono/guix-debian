@@ -18,7 +18,7 @@
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (gnu packages python)
-  #:use-module ((guix licenses) #:select (bsd-3 psfl x11))
+  #:use-module ((guix licenses) #:select (psfl))
   #:use-module (gnu packages)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages gdbm)
@@ -27,8 +27,7 @@
   #:use-module (gnu packages patchelf)
   #:use-module (guix packages)
   #:use-module (guix download)
-  #:use-module (guix build-system gnu)
-  #:use-module (guix build-system python))
+  #:use-module (guix build-system gnu))
 
 (define-public python
   (package
@@ -107,49 +106,3 @@ expression of procedural code; full modularity, supporting hierarchical
 packages; exception-based error handling; and very high level dynamic
 data types.")
     (license psfl)))
-
-(define-public pytz
-  (package
-    (name "pytz")
-    (version "2013b")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "https://launchpad.net/pytz/main/" version
-                          "/+download/pytz-" version ".tar.bz2"))
-      (sha256
-       (base32
-        "19giwgfcrg0nr1gdv49qnmf2jb2ilkcfc7qyqvfpz4dp0p64ksv5"))))
-    (build-system python-build-system)
-    (home-page "https://launchpad.net/pytz")
-    (synopsis "The Python timezone library.")
-    (description
-     "This library allows accurate and cross platform timezone calculations
-using Python 2.4 or higher and provides access to the Olson timezone database.")
-    (license x11)))
-
-(define-public babel
-  (package
-    (name "babel")
-    (version "0.9.6")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "http://ftp.edgewall.com/pub/babel/Babel-"
-                          version ".tar.gz"))
-      (sha256
-       (base32
-        "03vmr54jq5vf3qw6kpdv7cdk7x7i2jhzyf1mawv2gk8zrxg0hfja"))))
-    (build-system python-build-system)
-    (inputs
-     `(("pytz" ,pytz)))
-    (home-page "http://babel.edgewall.org/")
-    (synopsis
-     "Tools for internationalizing Python applications")
-    (description
-     "Babel is composed of two major parts:
-- tools to build and work with gettext message catalogs
-- a Python interface to the CLDR (Common Locale Data Repository), providing
-access to various locale display names, localized number and date formatting,
-etc. ")
-    (license bsd-3)))

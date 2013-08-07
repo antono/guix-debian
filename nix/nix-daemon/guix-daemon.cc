@@ -171,10 +171,10 @@ parse_opt (int key, char *arg, struct argp_state *state)
       settings.thisSystem = arg;
       break;
     default:
-      return (error_t) ARGP_ERR_UNKNOWN;
+      return ARGP_ERR_UNKNOWN;
     }
 
-  return (error_t) 0;
+  return 0;
 }
 
 /* Argument parsing.  */

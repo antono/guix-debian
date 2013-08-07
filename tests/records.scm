@@ -131,49 +131,6 @@
              (parameterize ((mark (cons 'a 'b)))
                (eq? (foo-baz y) (mark))))))))
 
-(test-equal "recutils->alist"
-  '((("Name" . "foo")
-     ("Version" . "0.1")
-     ("Synopsis" . "foo bar")
-     ("Something_else" . "chbouib"))
-    (("Name" . "bar")
-     ("Version" . "1.5")))
-  (let ((p (open-input-string "
-# Comment following an empty line, and
-# preceding a couple of empty lines, all of
-# which should be silently consumed.
-
-
-Name: foo
-Version: 0.1
-# Comment right in the middle,
-# spanning two lines.
-Synopsis: foo bar
-Something_else: chbouib
-
-# Comment right before.
-Name: bar
-Version: 1.5
-# Comment at the end.")))
-    (list (recutils->alist p)
-          (recutils->alist p))))
-
-(test-equal "recutils->alist with + lines"
-  '(("Name" . "foo")
-    ("Description" . "1st line,\n2nd line,\n 3rd line with extra space,\n4th line without space."))
-  (recutils->alist (open-input-string "
-Name: foo
-Description: 1st line,
-+ 2nd line,
-+  3rd line with extra space,
-+4th line without space.")))
-
-(test-equal "alist->record" '((1 2) b c)
-  (alist->record '(("a" . 1) ("b" . b) ("c" . c) ("a" . 2))
-                 list
-                 '("a" "b" "c")
-                 '("a")))
-
 (test-end)
 
 
