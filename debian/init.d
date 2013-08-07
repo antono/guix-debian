@@ -13,10 +13,10 @@
 
 # PATH should only include /usr/* if it runs after the mountnfs.sh script
 
-GUIX_GROUP='guix-builders'
+GUIX_GROUP='guix'
 PATH=/sbin:/usr/sbin:/bin:/usr/bin
-DESC=guix-worker
-NAME=guix-worker
+DESC=guix
+NAME=guix
 DAEMON=/usr/bin/guix-daemon
 DAEMON_ARGS="--max-jobs=4 --build-users-group=$GUIX_GROUP"
 PIDFILE=/var/run/$NAME.pid
