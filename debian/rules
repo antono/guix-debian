@@ -12,5 +12,5 @@ export DH_VERBOSE=1
 %:
 	dh $@  --with autotools-dev --parallel
 
-#override_dh_auto_test:
-override_dh_autotools-dev_updateconfig:
+override_dh_auto_test:
+#override_dh_autotools-dev_updateconfig:
