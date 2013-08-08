@@ -23,6 +23,7 @@ case "$1" in
         fi
 
         mkdir -p /nix/store
+        chmod 1775 /nix/store
         chown -R root.$GUIX_GROUP /nix/
 
         for i in $(seq 1 5); do
