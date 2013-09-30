@@ -25,6 +25,7 @@
   #:use-module (rnrs io ports)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9)
+  #:use-module (srfi srfi-9 gnu)
   #:use-module (srfi srfi-26)
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-35)
@@ -242,6 +243,14 @@
   (ats-cache  nix-server-add-to-store-cache)
   (atts-cache nix-server-add-text-to-store-cache))
 
+(set-record-type-printer! <nix-server>
+                          (lambda (obj port)
+                            (format port "#<build-daemon ~a.~a ~a>"
+                                    (nix-server-major-version obj)
+                                    (nix-server-minor-version obj)
+                                    (number->string (object-address obj)
+                                                    16))))
+
 (define-condition-type &nix-error &error
   nix-error?)
 
@@ -443,7 +452,7 @@ encoding conversion errors."
                                        (string-list references))
                     #f
                     store-path)))
-    (lambda (server name text references)
+    (lambda* (server name text #:optional (references '()))
       "Add TEXT under file NAME in the store, and return its store path.
 REFERENCES is the list of store paths referred to by the resulting store
 path."

@@ -5,6 +5,7 @@ exec guile -l "$0"                              \
 !#
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013 Alex Sassmannshausen <alex.sassmannshausen@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -28,6 +29,7 @@ exec guile -l "$0"                              \
   #:use-module (guix gnu-maintenance)
   #:use-module (gnu packages)
   #:use-module (sxml simple)
+  #:use-module (sxml fold)
   #:use-module (web uri)
   #:use-module (ice-9 match)
   #:use-module (srfi srfi-1)
@@ -47,8 +49,13 @@ exec guile -l "$0"                              \
               (equal? (gnu-package-name package) name))
             gnu))))
 
-(define (package->sxml package)
-  "Return HTML-as-SXML representing PACKAGE."
+(define (package->sxml package previous description-ids remaining)
+  "Return 3 values: the HTML-as-SXML for PACKAGE added to all previously
+collected package output in PREVIOUS, a list of DESCRIPTION-IDS and the number
+of packages still to be processed in REMAINING.  Also Introduces a call to the
+JavaScript prep_pkg_descs function as part of the output of PACKAGE, every
+time the length of DESCRIPTION-IDS, increasing, is 15 or when REMAINING,
+decreasing, is 1."
   (define (source-url package)
     (let ((loc (package-location package)))
       (and loc
@@ -65,7 +72,8 @@ exec guile -l "$0"                              \
         (let ((uri (license-uri license)))
           (case (and=> (and uri (string->uri uri)) uri-scheme)
             ((http https)
-             `(div (a (@ (href ,uri))
+             `(div (a (@ (href ,uri)
+                         (title "Link to the full license"))
                       ,(license-name license))))
             (else
              `(div ,(license-name license) " ("
@@ -78,7 +86,8 @@ exec guile -l "$0"                              \
     (define (url system)
       `(a (@ (href ,(string-append "http://hydra.gnu.org/job/gnu/master/"
                                    (package-full-name package) "."
-                                   system)))
+                                   system))
+             (title "View the status of this architecture's build at Hydra"))
           ,system))
 
     `(div "status: "
@@ -89,53 +98,223 @@ exec guile -l "$0"                              \
     (and=> (lookup-gnu-package name)
            gnu-package-logo))
 
+  (define (insert-tr description-id js?)
+    (define (insert-js-call description-ids)
+      "Return an sxml call to prep_pkg_descs, with up to 15 elements of
+description-ids as formal parameters."
+      `(script (@ (type "text/javascript"))
+               ,(format #f "prep_pkg_descs(~a)"
+                        (string-append "'"
+                                       (string-join description-ids "', '")
+                                       "'"))))
+
+    (let ((description-ids (cons description-id description-ids)))
+      `(tr (td ,(if (gnu-package? package)
+                    `(img (@ (src "/graphics/gnu-head-mini.png")
+                             (alt "Part of GNU")
+                             (title "Part of GNU")))
+                    ""))
+           (td (a (@ (href ,(source-url package))
+                     (title "Link to the Guix package source code"))
+                  ,(package-name package) " "
+                  ,(package-version package)))
+           (td (span ,(package-synopsis package))
+               (div (@ (id ,description-id))
+                    ,(match (package-logo (package-name package))
+                       ((? string? url)
+                        `(img (@ (src ,url)
+                                 (height "35")
+                                 (class "package-logo")
+                                 (alt ("Logo of " ,(package-name package))))))
+                       (_ #f))
+                    (p ,(package-description package))
+                    ,(license package)
+                    (a (@ (href ,(package-home-page package))
+                          (title "Link to the package's website"))
+                       ,(package-home-page package))
+                    ,(status package)
+                    ,(if js?
+                         (insert-js-call description-ids)
+                         ""))))))
+
   (let ((description-id (symbol->string
                          (gensym (package-name package)))))
-   `(tr (td ,(if (gnu-package? package)
-                 `(img (@ (src "/graphics/gnu-head-mini.png")))
-                 ""))
-        (td (a (@ (href ,(source-url package)))
-               ,(package-name package) " "
-               ,(package-version package)))
-        (td (@ (colspan "2") (height "0"))
-            (a (@ (href "javascript:void(0)")
-                  (title "show/hide package description")
-                  (onClick ,(format #f "javascript:show_hide('~a')"
-                                    description-id)))
-               ,(package-synopsis package))
-            (div (@ (id ,description-id)
-                    (style "position: relative; display: none;"))
-                 ,(match (package-logo (package-name package))
-                    ((? string? url)
-                     `(img (@ (src ,url)
-                              (height "35em")
-                              (style "float: left; padding-right: 1em;"))))
-                    (_ #f))
-                 (p ,(package-description package))
-                 ,(license package)
-                 (a (@ (href ,(package-home-page package)))
-                    ,(package-home-page package))
-                 ,(status package))))))
+    (cond ((= remaining 1)              ; Last package in packages
+           (values
+            (reverse                              ; Fold has reversed packages
+             (cons (insert-tr description-id 'js) ; Prefix final sxml
+                   previous))
+            '()                            ; No more work to do
+            0))                            ; End of the line
+          ((= (length description-ids) 15) ; Time for a JS call
+           (values
+            (cons (insert-tr description-id 'js)
+                  previous)    ; Prefix new sxml
+            '()                ; Reset description-ids
+            (1- remaining)))   ; Reduce remaining
+          (else                ; Insert another row, and build description-ids
+           (values
+            (cons (insert-tr description-id #f)
+                  previous)                       ; Prefix new sxml
+            (cons description-id description-ids) ; Update description-ids
+            (1- remaining))))))                   ; Reduce remaining
 
 (define (packages->sxml packages)
   "Return an HTML page as SXML describing PACKAGES."
   `(div
     (h2 "GNU Guix Package List")
-    (div (@ (style "margin-bottom: 5em;"))
+    (div (@ (id "intro"))
          (div
           (img (@ (src "graphics/guix-logo.small.png")
                   (alt "GNU Guix and the GNU System")
-                  (height "83em"))))
-         "This web page lists the packages currently provided by the "
-         (a (@ (href "manual/guix.html#GNU-Distribution"))
-            "GNU system distribution")
-         " of "
-         (a (@ (href "/software/guix/guix.html")) "GNU Guix") ".  "
-         "Our " (a (@ (href "http://hydra.gnu.org/jobset/gnu/master"))
-                   "continuous integration system")
-         " shows their current build status.")
-    (table (@ (style "border: none;"))
-           ,@(map package->sxml packages))))
+                  (height "83"))))
+         (p "This web page lists the packages currently provided by the "
+            (a (@ (href "manual/guix.html#GNU-Distribution"))
+               "GNU system distribution")
+            " of "
+            (a (@ (href "/software/guix/guix.html")) "GNU Guix") ".  "
+            "Our " (a (@ (href "http://hydra.gnu.org/jobset/gnu/master"))
+                      "continuous integration system")
+            " shows their current build status."))
+    (table (@ (id "packages"))
+           (tr (th "GNU?")
+               (th "Package version")
+               (th "Package details"))
+           ,@(fold-values package->sxml packages '() '() (length packages)))
+    (a (@ (href "#intro")
+          (title "Back to top.")
+          (id "top"))
+       "^")))
+
+
+(define (insert-css)
+  "Return the CSS for the list-packages page."
+  (format #t
+"<style>
+/* license: CC0 */
+a {
+    transition: all 0.3s;
+}
+div#intro {
+    margin-bottom: 2em;
+}
+div#intro div, div#intro p {
+    padding:0.5em;
+}
+div#intro div {
+    float:left;
+}
+div#intro img {
+    float:left;
+    padding:0.75em;
+}
+table#packages, table#packages tr, table#packages tbody, table#packages td, table#packages th {
+    border: 0px solid black;
+    clear: both;
+}
+table#packages tr:nth-child(even) {
+    background-color: #FFF;
+}
+table#packages tr:nth-child(odd) {
+    background-color: #EEE;
+}
+table#packages tr:hover, table#packages tr:focus, table#packages tr:active {
+    background-color: #DDD;
+}
+table#packages tr:first-child, table#packages tr:first-child:hover, table#packages tr:first-child:focus, table#packages tr:first-child:active {
+    background-color: #333;
+    color: #fff;
+}
+table#packages td {
+    margin:0px;
+    padding:0.2em 0.5em;
+}
+table#packages td:first-child {
+    width:10%;
+    text-align:center;
+}
+table#packages td:nth-child(2) {
+    width:30%;
+}
+table#packages td:last-child {
+    width:60%;
+}
+img.package-logo {
+    float: left;
+    padding: 0.75em;
+}
+table#packages span {
+    font-weight: 700;
+}
+table#packages span a {
+    float: right;
+    font-weight: 500;
+}
+a#top {
+    position:fixed;
+    right:10px;
+    bottom:10px;
+    font-size:150%;
+    background-color:#EEE;
+    padding:10px 7.5px 0 7.5px;
+    text-decoration:none;
+    color:#000;
+    border-radius:5px;
+}
+a#top:hover, a#top:focus {
+    background-color:#333;
+    color:#fff;
+}
+</style>"))
+
+(define (insert-js)
+  "Return the JavaScript for the list-packages page."
+  (format #t
+"<script type=\"text/javascript\">
+// license: CC0
+function show_hide(idThing)
+{
+  if(document.getElementById && document.createTextNode) {
+    var thing = document.getElementById(idThing);
+    /* Used to change the link text, depending on whether description is
+       collapsed or expanded */
+    var thingLink = thing.previousSibling.lastChild.firstChild;
+    if (thing) {
+      if (thing.style.display == \"none\") {
+        thing.style.display = \"\";
+        thingLink.data = 'Collapse';
+      } else {
+        thing.style.display = \"none\";
+        thingLink.data = 'Expand';
+      }
+    }
+  }
+}
+/* Add controllers used for collapse/expansion of package descriptions */
+function prep(idThing)
+{
+  var tdThing = document.getElementById(idThing).parentNode;
+  if (tdThing) {
+    var aThing = tdThing.firstChild.appendChild(document.createElement('a'));
+    aThing.setAttribute('href', 'javascript:void(0)');
+    aThing.setAttribute('title', 'show/hide package description');
+    aThing.appendChild(document.createTextNode('Expand'));
+    aThing.onclick=function(){show_hide(idThing);};
+    /* aThing.onkeypress=function(){show_hide(idThing);}; */
+  }
+}
+/* Take n element IDs, prepare them for javascript enhanced
+   display and hide the IDs by default. */
+function prep_pkg_descs()
+{
+  if(document.getElementById && document.createTextNode) {
+    for(var i=0; i<arguments.length; i++) {
+      prep(arguments[i])
+      show_hide(arguments[i]);
+    }
+  }
+}
+</script>"))
 
 
 (define (list-packages . args)
@@ -153,26 +332,15 @@ with gnu.org server-side include and all that."
                           (string<? (package-name p1) (package-name p2))))))
    (format #t "<!--#include virtual=\"/server/html5-header.html\" -->
 <!-- Parent-Version: 1.70 $ -->
-
 <title>GNU Guix - GNU Distribution - GNU Project</title>
-<!--#include virtual=\"/server/banner.html\" -->
+")
+   (insert-css)
+   (insert-js)
+   (format #t "<!--#include virtual=\"/server/banner.html\" -->")
 
-<script language=\"javascript\" type=\"text/javascript\">
-// license: CC0
-function show_hide(idThing)
-{
-  var thing = document.getElementById(idThing);
-  if (thing) {
-    if (thing.style.display == \"none\") {
-      thing.style.display = \"\";
-    } else {
-      thing.style.display = \"none\";
-    }
-  }
-}
-</script>")
-   (display (sxml->xml (packages->sxml packages)))
-   (format #t "<!--#include virtual=\"/server/footer.html\" -->
+   (sxml->xml (packages->sxml packages))
+   (format #t "</div>
+<!--#include virtual=\"/server/footer.html\" -->
 <div id=\"footer\">
 
 <p>Please send general FSF &amp; GNU inquiries to

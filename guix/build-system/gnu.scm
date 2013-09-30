@@ -32,7 +32,8 @@
             package-with-explicit-inputs
             package-with-extra-configure-variable
             static-libgcc-package
-            static-package))
+            static-package
+            dist-package))
 
 ;; Commentary:
 ;;
@@ -40,6 +41,11 @@
 ;; something compatible ("./configure && make && make install").
 ;;
 ;; Code:
+
+(define %default-modules
+  ;; Build-side modules imported and used by default.
+  '((guix build gnu-build-system)
+    (guix build utils)))
 
 (define* (package-with-explicit-inputs p inputs
                                        #:optional
@@ -152,6 +158,38 @@ use `--strip-all' as the arguments to `strip'."
               ''("--strip-all")
               flags)))))))
 
+(define* (dist-package p source)
+  "Return a package that runs takes source files from the SOURCE directory,
+runs `make distcheck' and whose result is one or more source tarballs."
+  (let ((s source))
+    (package (inherit p)
+      (name (string-append (package-name p) "-dist"))
+      (source s)
+      (arguments
+       ;; Use the right phases and modules.
+       (let* ((args (default-keyword-arguments (package-arguments p)
+                      `(#:phases #f
+                        #:modules ,%default-modules
+                        #:imported-modules ,%default-modules))))
+         (substitute-keyword-arguments args
+           ((#:modules modules)
+            `((guix build gnu-dist)
+              ,@modules))
+           ((#:imported-modules modules)
+            `((guix build gnu-dist)
+              ,@modules))
+           ((#:phases _)
+            '%dist-phases))))
+      (native-inputs
+       ;; Add autotools & co. as inputs.
+       (let ((ref (lambda (module var)
+                    (module-ref (resolve-interface module) var))))
+         `(("autoconf" ,(ref '(gnu packages autotools) 'autoconf))
+           ("automake" ,(ref '(gnu packages autotools) 'automake))
+           ("libtool"  ,(ref '(gnu packages autotools) 'libtool) "bin")
+           ("gettext"  ,(ref '(gnu packages gettext) 'gettext))
+           ("texinfo"  ,(ref '(gnu packages texinfo) 'texinfo))))))))
+
 
 (define %store
   ;; Store passed to STANDARD-INPUTS.
@@ -227,10 +265,8 @@ System: GCC, GNU Make, Bash, Coreutils, etc."
                     (phases '%standard-phases)
                     (system (%current-system))
                     (implicit-inputs? #t)    ; useful when bootstrapping
-                    (imported-modules '((guix build gnu-build-system)
-                                        (guix build utils)))
-                    (modules '((guix build gnu-build-system)
-                               (guix build utils))))
+                    (imported-modules %default-modules)
+                    (modules %default-modules))
   "Return a derivation called NAME that builds from tarball SOURCE, with
 input derivation INPUTS, using the usual procedure of the GNU Build
 System.  The builder is run with GUILE, or with the distro's final Guile
@@ -255,8 +291,8 @@ which could lead to gratuitous input divergence."
   (define builder
     `(begin
        (use-modules ,@modules)
-       (gnu-build #:source ,(if (and source (derivation-path? source))
-                                (derivation-path->output-path source)
+       (gnu-build #:source ,(if (derivation? source)
+                                (derivation->output-path source)
                                 source)
                   #:system ,system
                   #:outputs %outputs
@@ -283,8 +319,8 @@ which could lead to gratuitous input divergence."
     (match guile
       ((? package?)
        (package-derivation store guile system))
-      ((and (? string?) (? derivation-path?))
-       guile)
+      ;; ((and (? string?) (? derivation-path?))
+      ;;  guile)
       (#f                                         ; the default
        (let* ((distro (resolve-interface '(gnu packages base)))
               (guile  (module-ref distro 'guile-final)))
@@ -402,6 +438,8 @@ platform."
        (let ()
          (define %build-host-inputs
            ',(map (match-lambda
+                   ((name (? derivation? drv) sub ...)
+                    `(,name . ,(apply derivation->output-path drv sub)))
                    ((name (? derivation-path? drv-path) sub ...)
                     `(,name . ,(apply derivation-path->output-path
                                       drv-path sub)))
@@ -411,6 +449,8 @@ platform."
 
          (define %build-target-inputs
            ',(map (match-lambda
+                   ((name (? derivation? drv) sub ...)
+                    `(,name . ,(apply derivation->output-path drv sub)))
                    ((name (? derivation-path? drv-path) sub ...)
                     `(,name . ,(apply derivation-path->output-path
                                       drv-path sub)))
@@ -418,8 +458,8 @@ platform."
                     `(,name . ,path)))
                   (append (or implicit-target-inputs '()) inputs)))
 
-         (gnu-build #:source ,(if (and source (derivation-path? source))
-                                  (derivation-path->output-path source)
+         (gnu-build #:source ,(if (derivation? source)
+                                  (derivation->output-path source)
                                   source)
                     #:system ,system
                     #:target ,target
@@ -452,8 +492,8 @@ platform."
     (match guile
       ((? package?)
        (package-derivation store guile system))
-      ((and (? string?) (? derivation-path?))
-       guile)
+      ;; ((and (? string?) (? derivation-path?))
+      ;;  guile)
       (#f                                         ; the default
        (let* ((distro (resolve-interface '(gnu packages base)))
               (guile  (module-ref distro 'guile-final)))

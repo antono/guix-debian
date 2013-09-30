@@ -24,6 +24,7 @@ GNU_SYSTEM_MODULES =				\
   gnu/packages.scm				\
   gnu/packages/acl.scm				\
   gnu/packages/algebra.scm			\
+  gnu/packages/apr.scm				\
   gnu/packages/aspell.scm			\
   gnu/packages/attr.scm				\
   gnu/packages/autotools.scm			\
@@ -53,6 +54,7 @@ GNU_SYSTEM_MODULES =				\
   gnu/packages/fdisk.scm			\
   gnu/packages/file.scm				\
   gnu/packages/flex.scm				\
+  gnu/packages/fonts.scm			\
   gnu/packages/fontutils.scm			\
   gnu/packages/freeipmi.scm			\
   gnu/packages/gawk.scm				\
@@ -61,10 +63,14 @@ GNU_SYSTEM_MODULES =				\
   gnu/packages/gd.scm				\
   gnu/packages/gdb.scm				\
   gnu/packages/gdbm.scm				\
+  gnu/packages/geeqie.scm			\
   gnu/packages/gettext.scm			\
   gnu/packages/ghostscript.scm			\
+  gnu/packages/gkrellm.scm			\
   gnu/packages/glib.scm				\
   gnu/packages/global.scm			\
+  gnu/packages/gnome.scm			\
+  gnu/packages/gnunet.scm			\
   gnu/packages/gnupg.scm			\
   gnu/packages/gnutls.scm			\
   gnu/packages/gperf.scm			\
@@ -74,6 +80,7 @@ GNU_SYSTEM_MODULES =				\
   gnu/packages/grub.scm				\
   gnu/packages/grue-hunter.scm			\
   gnu/packages/gsasl.scm			\
+  gnu/packages/gstreamer.scm			\
   gnu/packages/gtk.scm				\
   gnu/packages/guile.scm			\
   gnu/packages/gv.scm				\
@@ -87,7 +94,6 @@ GNU_SYSTEM_MODULES =				\
   gnu/packages/ld-wrapper.scm			\
   gnu/packages/less.scm				\
   gnu/packages/lesstif.scm			\
-  gnu/packages/libapr.scm			\
   gnu/packages/libdaemon.scm			\
   gnu/packages/libevent.scm			\
   gnu/packages/libffi.scm			\
@@ -100,6 +106,7 @@ GNU_SYSTEM_MODULES =				\
   gnu/packages/libunistring.scm			\
   gnu/packages/libusb.scm			\
   gnu/packages/libunwind.scm			\
+  gnu/packages/lightning.scm			\
   gnu/packages/linux.scm			\
   gnu/packages/linux-initrd.scm			\
   gnu/packages/lout.scm				\
@@ -108,8 +115,9 @@ GNU_SYSTEM_MODULES =				\
   gnu/packages/lua.scm				\
   gnu/packages/lvm.scm				\
   gnu/packages/m4.scm				\
-  gnu/packages/mailutils.scm			\
+  gnu/packages/mail.scm				\
   gnu/packages/make-bootstrap.scm		\
+  gnu/packages/maths.scm			\
   gnu/packages/mit-krb5.scm			\
   gnu/packages/mp3.scm				\
   gnu/packages/multiprecision.scm		\
@@ -120,9 +128,11 @@ GNU_SYSTEM_MODULES =				\
   gnu/packages/nettle.scm			\
   gnu/packages/noweb.scm			\
   gnu/packages/ocaml.scm			\
+  gnu/packages/ocrad.scm			\
   gnu/packages/oggvorbis.scm			\
   gnu/packages/openldap.scm			\
   gnu/packages/openssl.scm			\
+  gnu/packages/package-management.scm		\
   gnu/packages/parted.scm			\
   gnu/packages/patchelf.scm			\
   gnu/packages/pcre.scm				\
@@ -155,6 +165,7 @@ GNU_SYSTEM_MODULES =				\
   gnu/packages/tmux.scm				\
   gnu/packages/tor.scm				\
   gnu/packages/unrtf.scm			\
+  gnu/packages/valgrind.scm			\
   gnu/packages/version-control.scm		\
   gnu/packages/vim.scm				\
   gnu/packages/vpn.scm				\
@@ -165,18 +176,29 @@ GNU_SYSTEM_MODULES =				\
   gnu/packages/wordnet.scm			\
   gnu/packages/xlockmore.scm			\
   gnu/packages/xml.scm				\
+  gnu/packages/xnee.scm				\
   gnu/packages/xorg.scm				\
+  gnu/packages/yasm.scm				\
   gnu/packages/zile.scm				\
   gnu/packages/zip.scm				\
+						\
+  gnu/system/dmd.scm				\
+  gnu/system/grub.scm				\
+  gnu/system/linux.scm				\
+  gnu/system/shadow.scm				\
   gnu/system/vm.scm
 
 patchdir = $(guilemoduledir)/gnu/packages/patches
 dist_patch_DATA =						\
+  gnu/packages/patches/apr-skip-getservbyname-test.patch	\
   gnu/packages/patches/automake-skip-amhello-tests.patch	\
+  gnu/packages/patches/avahi-localstatedir.patch		\
   gnu/packages/patches/bigloo-gc-shebangs.patch			\
   gnu/packages/patches/binutils-ld-new-dtags.patch		\
+  gnu/packages/patches/cdparanoia-fpic.patch			\
   gnu/packages/patches/cmake-fix-tests.patch			\
   gnu/packages/patches/cpio-gets-undeclared.patch		\
+  gnu/packages/patches/dbus-localstatedir.patch			\
   gnu/packages/patches/diffutils-gets-undeclared.patch		\
   gnu/packages/patches/emacs-configure-sh.patch			\
   gnu/packages/patches/findutils-absolute-paths.patch		\
@@ -188,19 +210,18 @@ dist_patch_DATA =						\
   gnu/packages/patches/glib-tests-homedir.patch			\
   gnu/packages/patches/glib-tests-prlimit.patch			\
   gnu/packages/patches/glibc-bootstrap-system.patch		\
+  gnu/packages/patches/glibc-ldd-x86_64.patch			\
   gnu/packages/patches/glibc-no-ld-so-cache.patch		\
-  gnu/packages/patches/gnutls-fix-tests-on-32-bits-system.patch	\
   gnu/packages/patches/grub-gets-undeclared.patch		\
   gnu/packages/patches/guile-1.8-cpp-4.5.patch			\
   gnu/packages/patches/guile-default-utf8.patch			\
   gnu/packages/patches/guile-linux-syscalls.patch		\
   gnu/packages/patches/guile-relocatable.patch			\
-  gnu/packages/patches/libapr-skip-getservbyname-test.patch	\
+  gnu/packages/patches/hop-bigloo-4.0b.patch			\
   gnu/packages/patches/libevent-dns-tests.patch			\
   gnu/packages/patches/libtool-skip-tests.patch			\
   gnu/packages/patches/m4-gets-undeclared.patch			\
   gnu/packages/patches/m4-readlink-EINVAL.patch			\
-  gnu/packages/patches/m4-s_isdir.patch				\
   gnu/packages/patches/make-impure-dirs.patch			\
   gnu/packages/patches/mcron-install.patch			\
   gnu/packages/patches/perl-no-sys-dirs.patch			\
@@ -209,10 +230,12 @@ dist_patch_DATA =						\
   gnu/packages/patches/python-fix-dbm.patch			\
   gnu/packages/patches/qemu-multiple-smb-shares.patch		\
   gnu/packages/patches/readline-link-ncurses.patch		\
+  gnu/packages/patches/ripperx-libm.patch			\
   gnu/packages/patches/scheme48-tests.patch			\
   gnu/packages/patches/tar-gets-undeclared.patch		\
   gnu/packages/patches/tcsh-fix-autotest.patch			\
   gnu/packages/patches/teckit-cstdio.patch			\
+  gnu/packages/patches/valgrind-glibc.patch			\
   gnu/packages/patches/vpnc-script.patch			\
   gnu/packages/patches/w3m-fix-compile.patch			\
   gnu/packages/patches/xpdf-constchar.patch

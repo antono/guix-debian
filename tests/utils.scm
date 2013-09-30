@@ -66,6 +66,12 @@
            ("nixpkgs" "1.0pre22125_a28fe19")
            ("gtk2" "2.38.0"))))
 
+(test-assert "guile-version>? 1.8"
+  (guile-version>? "1.8"))
+
+(test-assert "guile-version>? 10.5"
+  (not (guile-version>? "10.5")))
+
 (test-equal "string-tokenize*"
   '(("foo")
     ("foo" "bar" "baz")
@@ -103,7 +109,7 @@
 
 (test-assert "filtered-port, file"
   (let* ((file  (search-path %load-path "guix.scm"))
-         (input (open-file file "r0")))
+         (input (open-file file "r0b")))
     (let*-values (((compressed pids1)
                    (filtered-port `(,%gzip "-c" "--fast") input))
                   ((decompressed pids2)

@@ -26,7 +26,6 @@
   #:use-module (ice-9 match)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9 gnu)
-  #:use-module (srfi srfi-11)
   #:use-module (srfi srfi-26)
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-35)
@@ -250,7 +249,11 @@ corresponds to the arguments expected by `set-path-environment-variable'."
   (match source
     (($ <origin> uri method sha256 name)
      (method store uri 'sha256 sha256 name
-             #:system system))))
+             #:system system))
+    ((and (? string?) (? store-path?) file)
+     file)
+    ((? string? file)
+     (add-to-store store (basename file) #t "sha256" file))))
 
 (define (transitive-inputs inputs)
   (let loop ((inputs  inputs)
@@ -366,8 +369,8 @@ information in exceptions."
 
 (define* (package-derivation store package
                              #:optional (system (%current-system)))
-  "Return the derivation path and corresponding <derivation> object of
-PACKAGE for SYSTEM."
+  "Return the <derivation> object of PACKAGE for SYSTEM."
+
   ;; Compute the derivation and cache the result.  Caching is important
   ;; because some derivations, such as the implicit inputs of the GNU build
   ;; system, will be queried many, many times in a row.
@@ -459,12 +462,10 @@ system identifying string)."
                         #:outputs outputs #:system system
                         (args))))))))
 
-(define* (package-output store package output
-                         #:optional (system (%current-system)))
+(define* (package-output store package
+                         #:optional (output "out") (system (%current-system)))
   "Return the output path of PACKAGE's OUTPUT for SYSTEM---where OUTPUT is the
 symbolic output name, such as \"out\".  Note that this procedure calls
 `package-derivation', which is costly."
-  (let-values (((_ drv)
-                (package-derivation store package system)))
-    (derivation-output-path
-     (assoc-ref (derivation-outputs drv) output))))
+  (let ((drv (package-derivation store package system)))
+    (derivation->output-path drv output)))

@@ -10,6 +10,113 @@ Copyright © 2013 Ludovic Courtès <ludo@gnu.org>
 
 Please send Guix bug reports to bug-guix@gnu.org.
 
+* Changes in 0.4 (since 0.3)
+
+** Package management
+
+*** New ‘--list-generations’ and ‘--delete-generations’ options
+
+The ‘guix package’ command has these two new options, which make it easier to
+deal with a profile’s generation.  See “Invoking guix package” in the manual.
+
+*** New ‘guix-register’ program
+
+This program allows the meta-data of a new store to be initialized, by
+copying info from an existing store.  It is mostly an internal tool.
+
+** Programming interfaces
+
+*** New API to bootstrap Autotools-based packages
+
+The (guix build-system gnu) has a new ‘dist-package’ procedure that takes a
+package object and source directory, and returns a new package object that
+runs ‘./bootstrap && make dist’ or anything similar.
+
+*** ‘derivation’ and related procedures have a #:references-graphs parameter
+
+This parameter instructs the build daemon to populate the derivation’s build
+tree with files containing the list of references of the given store files.
+This is useful to write code that copies a packages and all its dependencies
+to another storage device, such as a QEMU disk image.
+
+*** Extended API to build a GNU system virtual machine image
+
+The (gnu system vm) module has been augmented in many ways: the ‘qemu-image’
+procedure can now populate and initialize the image’s store; the new
+‘system-qemu-image’ procedure returns a QEMU image that runs dmd as its init
+system, has ‘login’ running on several consoles, has a set of installed
+packages, and where Guix can be used.
+
+New (gnu system …) modules have been added to handle the configuration of the
+various parts of a GNU/Linux system.  For instance, (gnu system dmd) provides
+support for instantiating dmd services; (gnu system linux) helps with Linux
+PAM configuration; and so on.
+
+*** <derivation> objects supersede .drv file names in the API
+
+‘derivation’ and similar procedures no longer return two values (a
+<derivation> and a .drv file name); they now return a single value, which is
+a <derivation> object.  The <derivation> object embeds the corresponding .drv
+file name.  See “Derivations” in the manual for details.
+
+** GNU distribution
+
+*** 60 new packages
+
+apr, apr-util, cdparanoia, dbus-glib, dfc, dmd, dvdisaster, exiv2, fetchmail,
+freefont-ttf, freeglut, geeqie, git, gkrellm, glu, gnome-doc-utils,
+gst-plugins-base, gstreamer, guile-cairo, guile-lib, guile-xcb, guix, htop,
+itstool, lame, libextractor, libmicrohttpd, lightning, lzip, mingetty, mutt,
+net-base, net-tools, ocrad, pspp, python-babel, python-dateutil, python-pytz,
+python-setuptools, python-simplejson, python-wrapper, python2-babel,
+python2-dateutil, python2-mechanize, python2-pyicu, python2-pysqlite,
+python2-pytz, python2-setuptools, python2-simplejson, qemu-system-initrd,
+qemu-with-multiple-smb-shares, ripperx, shadow, ttf-bitstream-vera, units,
+valgrind, xmlto, xnee, yasm
+
+*** 27 package updates
+
+bigloo 4.0b, cairo 1.12.16, ddrescue 1.17, fontconfig 2.10.93, fplll 4.0.4,
+gcc 4.7.3, gcc 4.7.3, glibc 2.18, glibc 2.18, glibc-stripped-tarball 2.18,
+gnupg 2.0.21, gnutls 3.2.4, guile 2.0.9, guile 2.0.9, harfbuzz 0.9.21,
+imagemagick 6.8.6-9, libdrm 2.4.46, libgcrypt 1.5.3, libjpeg 9, libksba 1.3.0,
+linux-libre 3.11, m4 1.4.17, mpfrcx 0.4.2, pari-gp 2.5.4, python 2.7.5, python
+3.3.2, texlive 2013
+
+*** Fontconfig font search path made more convenient
+
+Fontconfig, the library used by many graphical applications, such as those
+based on GTK+, now knows where to find the default set of fonts.  Additional
+fonts installed in the user profile are automatically picked up.
+
+*** More GUI applications
+
+The ‘emacs’ and ‘racket’ packages are now linked against GTK+.  New GTK+
+applications have been added (see above.)
+
+*** Packaging guidelines
+
+The documentation of packaging guidelines has been augmented.  See the manual
+under “GNU Distribution”.
+
+*** Support for Python 3 along with Python 2
+
+Python 3 has been added to the distribution, and Python packages that support
+it are now built for both Python 2 and Python 3.  See the “Python Modules”
+section of the manual for details.
+
+** Internationalization
+
+Updated translations: eo.
+
+** Bugs fixed
+
+*** Workarounds for Guile 2.0.5 now work on Debian derivatives
+*** The dependency graph image has correct size in PDF output
+*** 'ldd' now works correctly on x86_64
+*** Xorg server test suite no longer fails (http://bugs.gnu.org/15392)
+*** module-init-tools now builds (http://bugs.gnu.org/15182, http://bugs.gnu.org/15187)
+*** Hop 2.4 builds with newer Bigloo (http://bugs.gnu.org/15194)
 
 * Changes in 0.3 (since 0.2)
 

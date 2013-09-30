@@ -2,6 +2,7 @@
 ;;; Copyright © 2013 Nikita Karetnikov <nikita@karetnikov.org>
 ;;; Copyright © 2013 Cyril Roelandt <tipecaml@gmail.com>
 ;;; Copyright © 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -19,7 +20,7 @@
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (gnu packages version-control)
-  #:use-module ((guix licenses) #:select (asl2.0 gpl1+ gpl2+ gpl3+))
+  #:use-module ((guix licenses) #:select (asl2.0 gpl1+ gpl2 gpl2+ gpl3+))
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix build-system gnu)
@@ -27,12 +28,15 @@
   #:use-module (guix build utils)
   #:use-module ((gnu packages gettext)
                 #:renamer (symbol-prefix-proc 'guix:))
-  #:use-module (gnu packages libapr)
+  #:use-module (gnu packages apr)
+  #:use-module (gnu packages curl)
   #:use-module (gnu packages nano)
+  #:use-module (gnu packages openssl)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages python)
   #:use-module (gnu packages sqlite)
   #:use-module (gnu packages system)
+  #:use-module (gnu packages xml)
   #:use-module (gnu packages emacs)
   #:use-module (gnu packages compression))
 
@@ -54,7 +58,9 @@
      ;; require Zsh.
      `(("gettext" ,guix:gettext)))
     (arguments
-     `(#:tests? #f)) ; no test target
+     `(#:tests? #f ; no test target
+       #:python ,python-2)) ; Python 3 apparently not yet supported, see
+                            ; https://answers.launchpad.net/bzr/+question/229048
     (home-page "https://gnu.org/software/bazaar")
     (synopsis "Decentralized revision control system")
     (description
@@ -63,6 +69,48 @@ central version control and distributed version control.  Developers can
 organize their workspace in whichever way they want.  It is possible to work
 from a command line or use a GUI application.")
     (license gpl2+)))
+
+(define-public git
+  (package
+   (name "git")
+   (version "1.8.4")
+   (source (origin
+            (method url-fetch)
+            (uri (string-append "http://git-core.googlecode.com/files/git-"
+                                version ".tar.gz"))
+            (sha256
+             (base32
+              "156bwqqgaw65rsvbb4wih5jfg94bxyf6p16mdwf0ky3f4ln55s2i"))))
+   (build-system gnu-build-system)
+   (inputs
+    `(("curl" ,curl)
+      ("expat" ,expat)
+      ("gettext" ,guix:gettext)
+      ("openssl" ,openssl)
+      ("perl" ,perl)
+      ("python" ,python-2) ; CAVEAT: incompatible with python-3 according to INSTALL
+      ("zlib" ,zlib)))
+   (arguments
+    `(#:make-flags `("V=1") ; more verbose compilation
+      #:test-target "test"
+      #:tests? #f ; FIXME: Many tests are failing
+      #:phases
+       (alist-replace
+        'configure
+        (lambda* (#:key #:allow-other-keys #:rest args)
+          (let ((configure (assoc-ref %standard-phases 'configure)))
+            (and (apply configure args)
+                 (substitute* "Makefile"
+                   (("/bin/sh") (which "sh"))
+                   (("/usr/bin/perl") (which "perl"))
+                   (("/usr/bin/python") (which "python"))))))
+         %standard-phases)))
+   (synopsis "Distributed version control system")
+   (description
+    "Git is a free distributed version control system designed to handle
+everything from small to very large projects with speed and efficiency.")
+   (license gpl2)
+   (home-page "http://git-scm.com/")))
 
 (define-public subversion
   (package
@@ -77,10 +125,10 @@ from a command line or use a GUI application.")
                "11inl9n1riahfnbk1fax0dysm2swakzhzhpmm2zvga6fikcx90zw"))))
     (build-system gnu-build-system)
     (inputs
-      `(("libapr" ,libapr)
-        ("libaprutil" ,libaprutil)
+      `(("apr" ,apr)
+        ("apr-util" ,apr-util)
         ("perl" ,perl)
-        ("python" ,python)
+        ("python" ,python-2) ; incompatible with Python 3 (print syntax)
         ("sqlite" ,sqlite)
         ("zlib" ,zlib)))
     (home-page "http://subversion.apache.org/")

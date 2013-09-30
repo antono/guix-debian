@@ -60,14 +60,14 @@ tools have full access to view and control running applications.")
 (define-public cairo
   (package
    (name "cairo")
-   (version "1.12.14")
+   (version "1.12.16")
    (source (origin
             (method url-fetch)
             (uri (string-append "http://cairographics.org/releases/cairo-"
                                 version ".tar.xz"))
             (sha256
              (base32
-              "04xcykglff58ygs0dkrmmnqljmpjwp2qgwcz8sijqkdpz7ix3l4n"))))
+              "0inqwsylqkrzcjivdirkjx5nhdgxbdc62fq284c3xppinfg9a195"))))
    (build-system gnu-build-system)
    (propagated-inputs
     `(("fontconfig" ,fontconfig)
@@ -83,7 +83,7 @@ tools have full access to view and control running applications.")
       ("libspectre" ,libspectre)
       ("pkg-config" ,pkg-config)
       ("poppler" ,poppler)
-      ("python" ,python)
+      ("python" ,python-wrapper)
       ("xextproto" ,xextproto)
       ("zlib" ,zlib)))
     (arguments
@@ -110,20 +110,20 @@ affine transformation (scale, rotation, shear, etc.)")
 (define-public harfbuzz
   (package
    (name "harfbuzz")
-   (version "0.9.18")
+   (version "0.9.21")
    (source (origin
             (method url-fetch)
             (uri (string-append "http://www.freedesktop.org/software/harfbuzz/release/harfbuzz-"
                                 version ".tar.bz2"))
             (sha256
              (base32
-              "026rlwspf1zn5akds9fwibpqpn47kmlnmqm5fi0cp4k4dnygpw7y"))))
+              "1s6sffgf6ndy12fyln2bdnkn3cb1qfkch0rakdgkgwlq7n46zlx0"))))
    (build-system gnu-build-system)
    (inputs
     `(("cairo" ,cairo)
       ("icu4c" ,icu4c)
       ("pkg-config" ,pkg-config)
-      ("python" ,python)))
+      ("python" ,python-wrapper)))
    (synopsis "opentype text shaping engine")
    (description
     "HarfBuzz is an OpenType text shaping engine.")
@@ -211,7 +211,7 @@ in the GNOME project.")
            (("SUBDIRS = theme-bits . tests") "SUBDIRS = theme-bits ."))
           (apply configure args)))
       %standard-phases)))
-   (synopsis "multi-platform toolkit for creating graphical user interfaces")
+   (synopsis "Cross-platform toolkit for creating graphical user interfaces")
    (description
     "GTK+, or the GIMP Toolkit, is a multi-platform toolkit for creating
 graphical user interfaces. Offering a complete set of widgets, GTK+ is

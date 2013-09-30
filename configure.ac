@@ -2,12 +2,12 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.68)
-AC_INIT([GNU Guix], [0.3], [bug-guix@gnu.org], [guix],
+AC_INIT([GNU Guix], [0.4], [bug-guix@gnu.org], [guix],
   [http://www.gnu.org/software/guix/])
 AC_CONFIG_AUX_DIR([build-aux])
 
 AM_INIT_AUTOMAKE([1.12 gnu silent-rules subdir-objects \
- color-tests parallel-tests])
+ color-tests parallel-tests -Woverride])
 
 AC_CONFIG_SRCDIR([guix.scm])
 AC_CONFIG_MACRO_DIR([m4])
@@ -120,6 +120,10 @@ GUIX_ASSERT_LIBGCRYPT_USABLE
 AC_CACHE_SAVE
 
 m4_include([config-daemon.ac])
+
+dnl `dot' (from the Graphviz package) is only needed for maintainers.
+dnl See `HACKING' for more info.
+AM_MISSING_PROG([DOT], [dot])
 
 AC_CONFIG_FILES([Makefile
                  po/Makefile.in

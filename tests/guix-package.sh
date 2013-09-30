@@ -55,7 +55,7 @@ test "`guix package --search-paths -p "$profile" | wc -l`" = 0
 if guile -c '(getaddrinfo "www.gnu.org" "80" AI_NUMERICSERV)' 2> /dev/null
 then
     boot_make="(@@ (gnu packages base) gnu-make-boot0)"
-    boot_make_drv="`guix build -e "$boot_make" | tail -1`"
+    boot_make_drv="`guix build -e "$boot_make" | grep -v -e -debug`"
     guix package --bootstrap -p "$profile" -i "$boot_make_drv"
     test -L "$profile-2-link"
     test -f "$profile/bin/make" && test -f "$profile/bin/guile"
@@ -79,7 +79,15 @@ then
     # Search.
     test "`guix package -s "An example GNU package" | grep ^name:`" = \
         "name: hello"
-    test "`guix package -s "n0t4r341p4ck4g3"`" = ""
+    test -z "`guix package -s "n0t4r341p4ck4g3"`"
+
+    # List generations.
+    test "`guix package -p "$profile" -l | cut -f1 | grep guile | head -n1`" \
+        = "  guile-bootstrap"
+
+    # Exit with 1 when a generation does not exist.
+    if guix package -p "$profile" --list-generations=42;
+    then false; else true; fi
 
     # Remove a package.
     guix package --bootstrap -p "$profile" -r "guile-bootstrap"
@@ -103,10 +111,16 @@ then
         test "`readlink_base "$profile"`" = "$profile-0-link"
     done
 
+    # Test that '--list-generations' does not output the zeroth generation.
+    test -z "`guix package -p "$profile" -l 0`"
+
     # Reinstall after roll-back to the empty profile.
     guix package --bootstrap -p "$profile" -e "$boot_make"
     test "`readlink_base "$profile"`" = "$profile-1-link"
     test -x "$profile/bin/guile" && ! test -x "$profile/bin/make"
+
+    # Check that the first generation is the current one.
+    test "`guix package -p "$profile" -l 1 | cut -f3 | head -n1`" = "(current)"
 
     # Roll-back to generation 0, and install---all at once.
     guix package --bootstrap -p "$profile" --roll-back -i guile-bootstrap
@@ -128,6 +142,17 @@ then
     # Make sure LIBRARY_PATH gets listed by `--search-paths'.
     guix package --bootstrap -p "$profile" -i guile-bootstrap -i gcc-bootstrap
     guix package --search-paths -p "$profile" | grep LIBRARY_PATH
+
+    # Delete the third generation and check that it was actually deleted.
+    guix package -p "$profile" --delete-generations=3
+    test -z "`guix package -p "$profile" -l 3`"
+
+    # Exit with 1 when a generation does not exist.
+    if guix package -p "$profile" --delete-generations=42;
+    then false; else true; fi
+
+    # Exit with 0 when trying to delete the zeroth generation.
+    guix package -p "$profile" --delete-generations=0
 fi
 
 # Make sure the `:' syntax works.
@@ -141,7 +166,14 @@ if guix package --bootstrap -i "guile-bootstrap:does-not-exist" -p "$profile";
 then false; else true; fi
 
 # Check whether `--list-available' returns something sensible.
-guix package -A 'gui.*e' | grep guile
+guix package -p "$profile" -A 'gui.*e' | grep guile
+
+# There's no generation older than 12 months, so the following command should
+# have no effect.
+generation="`readlink_base "$profile"`"
+if guix package -p "$profile" --delete-generations=12m;
+then false; else true; fi
+test "`readlink_base "$profile"`" = "$generation"
 
 #
 # Try with the default profile.

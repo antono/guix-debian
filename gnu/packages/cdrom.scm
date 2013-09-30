@@ -1,5 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -19,15 +20,18 @@
 (define-module (gnu packages cdrom)
   #:use-module (guix download)
   #:use-module (guix packages)
-  #:use-module ((guix licenses) #:select (lgpl2.1+ gpl3+))
+  #:use-module ((guix licenses) #:select (lgpl2.1+ gpl2 gpl2+ gpl3+))
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages)
   #:use-module (gnu packages acl)
   #:use-module (gnu packages compression)
+  #:use-module ((gnu packages gettext) #:renamer (symbol-prefix-proc 'gnu:))
+  #:use-module (gnu packages gtk)
   #:use-module (gnu packages readline)
   #:use-module (gnu packages ncurses)
   #:use-module (gnu packages help2man)
-  #:use-module (gnu packages pkg-config))
+  #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages which))
 
 (define-public libcddb
   (package
@@ -113,3 +117,68 @@ images and it writes the session results to optical media or to filesystem
 objects.  Vice versa xorriso is able to copy file objects out of ISO 9660
 filesystems.")
     (license gpl3+)))
+
+(define-public cdparanoia
+  (package
+    (name "cdparanoia")
+    (version "10.2")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "http://downloads.xiph.org/releases/cdparanoia/cdparanoia-III-"
+                                 version ".src.tgz"))
+             (sha256
+              (base32
+               "1pv4zrajm46za0f6lv162iqffih57a8ly4pc69f7y0gfyigb8p80"))))
+    (build-system gnu-build-system)
+    (inputs
+     `(("patch/fpic" ,(search-patch "cdparanoia-fpic.patch"))))
+    (arguments
+     `(#:tests? #f ; there is no check target
+       #:patches (list (assoc-ref %build-inputs "patch/fpic"))))
+    (home-page "http://www.xiph.org/paranoia/")
+    (synopsis "audio CD reading utility which includes extra data verification features")
+    (description "Cdparanoia retrieves audio tracks from CDDA capable CDROM
+drives.  The data can be saved to a file or directed to standard output
+in WAV, AIFF, AIFF-C or raw format.  Most ATAPI, SCSI and  several
+proprietary CDROM drive makes are supported; cdparanoia can determine if the
+target drive is CDDA capable.  In addition to simple reading, cdparanoia adds
+extra-robust data verification, synchronization, error handling and scratch
+reconstruction capability.")
+    (license gpl2))) ; libraries under lgpl2.1
+
+(define-public dvdisaster
+  (package
+    (name "dvdisaster")
+    (version "0.72.4")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "http://dvdisaster.net/downloads/dvdisaster-"
+                                 version ".tar.bz2"))
+             (sha256
+              (base32
+               "0pm039a78h7m9vvjmmjfkl05ii6qdmfhvbypxjbc7j5w82y66is4"))))
+    (build-system gnu-build-system)
+    (inputs
+     `(("gettext" ,gnu:gettext)
+       ("gtk+" ,gtk+)
+       ("pkg-config" ,pkg-config)
+       ("which" ,which)))
+    (arguments
+     `(#:tests? #f)) ; no check target
+    (home-page "http://dvdisaster.net/en/index.html")
+    (synopsis "error correcting codes for optical media images")
+    (description "Optical media (CD,DVD,BD) keep their data only for a
+finite time (typically for many years).  After that time, data loss develops
+slowly with read errors growing from the outer media region towards the
+inside.
+
+Dvdisaster stores data on CD/DVD/BD (supported media) in a way that it is
+fully recoverable even after some read errors have developed.  This enables
+you to rescue the complete data to a new medium.
+
+Data loss is prevented by using error correcting codes.  Error correction
+data is either added to the medium or kept in separate error correction
+files.  Dvdisaster works at the image level so that the recovery does not
+depend on the file system of the medium.  The maximum error correction
+capacity is user-selectable.")
+    (license gpl2+)))

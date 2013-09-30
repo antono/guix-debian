@@ -29,6 +29,9 @@
   #:use-module (gnu packages bdb)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages algebra)
+  #:use-module ((gnu packages gettext)
+                #:renamer (symbol-prefix-proc 'g:))
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix build-system gnu))
@@ -119,24 +122,16 @@
               (base32
                "0jxnz9ahfic79rp93l5wxcbgh4pkv85mwnjlbv1gz3jawv5cvwp1"))))
     (build-system gnu-build-system)
-    (inputs
-     ;; The upstream tarball lacks man pages, and building them would require
-     ;; DocBook & co.  Thus, use Gentoo's pre-built man pages.
-     `(("man-pages"
-        ,(origin
-          (method url-fetch)
-          (uri (string-append
-                "http://distfiles.gentoo.org/distfiles/module-init-tools-" version
-                "-man.tar.bz2"))
-          (sha256
-           (base32
-            "1j1nzi87kgsh4scl645fhwhjvljxj83cmdasa4n4p5krhasgw358"))))))
     (arguments
+     ;; FIXME: The upstream tarball lacks man pages, and building them would
+     ;; require DocBook & co.  We used to use Gentoo's pre-built man pages,
+     ;; but they vanished.  In the meantime, fake it.
      '(#:phases (alist-cons-before
-                 'unpack 'unpack-man-pages
-                 (lambda* (#:key inputs #:allow-other-keys)
-                   (let ((man-pages (assoc-ref inputs "man-pages")))
-                     (zero? (system* "tar" "xvf" man-pages))))
+                 'configure 'fake-docbook
+                 (lambda _
+                   (substitute* "Makefile.in"
+                     (("^DOCBOOKTOMAN.*$")
+                      "DOCBOOKTOMAN = true\n")))
                  %standard-phases)))
     (home-page "http://www.kernel.org/pub/linux/utils/kernel/module-init-tools/")
     (synopsis "Tools for loading and managing Linux kernel modules")
@@ -146,7 +141,7 @@
     (license gpl2+)))
 
 (define-public linux-libre
-  (let* ((version* "3.3.8")
+  (let* ((version* "3.11")
          (build-phase
           '(lambda* (#:key system #:allow-other-keys #:rest args)
              (let ((arch (car (string-split system #\-))))
@@ -192,9 +187,10 @@
              (uri (linux-libre-urls version))
              (sha256
               (base32
-               "0jkfh0z1s6izvdnc3njm39dhzp1cg8i06jv06izwqz9w9qsprvnl"))))
+               "1vlk04xkvyy1kc9zz556md173rn1qzlnvhz7c9sljv4bpk3mdspl"))))
     (build-system gnu-build-system)
     (native-inputs `(("perl" ,perl)
+                     ("bc" ,bc)
                      ("module-init-tools" ,module-init-tools)))
     (arguments
      `(#:modules ((guix build gnu-build-system)
@@ -211,6 +207,11 @@
     (description "Linux-Libre operating system kernel.")
     (license gpl2)
     (home-page "http://www.gnu.org/software/linux-libre/"))))
+
+
+;;;
+;;; Pluggable authentication modules (PAM).
+;;;
 
 (define-public linux-pam
   (package
@@ -235,9 +236,15 @@
        ;; ("cracklib" ,cracklib)
        ))
     (arguments
-     ;; XXX: Tests won't run in chroot, presumably because /etc/pam.d
-     ;; isn't available.
-     '(#:tests? #f))
+     '(;; Most users, such as `shadow', expect the headers to be under
+       ;; `security'.
+       #:configure-flags (list (string-append "--includedir="
+                                              (assoc-ref %outputs "out")
+                                              "/include/security"))
+
+       ;; XXX: Tests won't run in chroot, presumably because /etc/pam.d
+       ;; isn't available.
+       #:tests? #f))
     (home-page "http://www.linux-pam.org/")
     (synopsis "Pluggable authentication modules for Linux")
     (description
@@ -246,6 +253,11 @@ Pluggable authentication modules are small shared object files that can
 be used through the PAM API to perform tasks, like authenticating a user
 at login.  Local and dynamic reconfiguration are its key features")
     (license bsd-3)))
+
+
+;;;
+;;; Miscellaneous.
+;;;
 
 (define-public psmisc
   (package
@@ -547,4 +559,82 @@ consists of several tools, of which the most important are ip and tc.  ip
 controls IPv4 and IPv6 configuration and tc stands for traffic control.  Both
 tools print detailed usage messages and are accompanied by a set of
 manpages.")
+    (license gpl2+)))
+
+(define-public net-tools
+  ;; XXX: This package is basically unmaintained, but it provides a few
+  ;; commands not yet provided by Inetutils, such as 'route', so we have to
+  ;; live with it.
+  (package
+    (name "net-tools")
+    (version "1.60")
+    (home-page "http://www.tazenda.demon.co.uk/phil/net-tools/")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append home-page "/" name "-"
+                                 version ".tar.bz2"))
+             (sha256
+              (base32
+               "0yvxrzk0mzmspr7sa34hm1anw6sif39gyn85w4c5ywfn8inxvr3s"))))
+    (build-system gnu-build-system)
+    (arguments
+     '(#:phases (alist-replace
+                 'patch
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   (define (apply-patch file)
+                     (zero? (system* "patch" "-p1" "--batch"
+                                     "--input" file)))
+
+                   (let ((patch.gz (assoc-ref inputs "patch")))
+                     (format #t "applying Debian patch set '~a'...~%"
+                             patch.gz)
+                     (system (string-append "gunzip < " patch.gz " > the-patch"))
+                     (pk 'here)
+                     (and (apply-patch "the-patch")
+                          (for-each apply-patch
+                                    (find-files "debian/patches"
+                                                "\\.patch")))))
+                 (alist-replace
+                  'configure
+                  (lambda* (#:key outputs #:allow-other-keys)
+                    (let ((out (assoc-ref outputs "out")))
+                      (mkdir-p (string-append out "/bin"))
+                      (mkdir-p (string-append out "/sbin"))
+
+                      ;; Pretend we have everything...
+                      (system "yes | make config")
+
+                      ;; ... except we don't have libdnet, so remove that
+                      ;; definition.
+                      (substitute* '("config.make" "config.h")
+                        (("^.*HAVE_AFDECnet.*$") ""))))
+                  %standard-phases))
+
+       ;; Binaries that depend on libnet-tools.a don't declare that
+       ;; dependency, making it parallel-unsafe.
+       #:parallel-build? #f
+
+       #:tests? #f                                ; no test suite
+       #:make-flags (list "CC=gcc"
+                          (string-append "BASEDIR="
+                                         (assoc-ref %outputs "out")))))
+
+    ;; Use the big Debian patch set (the thing does not even compile out of
+    ;; the box.)
+    (inputs `(("patch" ,(origin
+                         (method url-fetch)
+                         (uri
+                          "http://ftp.de.debian.org/debian/pool/main/n/net-tools/net-tools_1.60-24.2.diff.gz")
+                         (sha256
+                          (base32
+                           "0p93lsqx23v5fv4hpbrydmfvw1ha2rgqpn2zqbs2jhxkzhjc030p"))))))
+    (native-inputs `(("gettext" ,g:gettext)))
+
+    (synopsis "Tools for controlling the network subsystem in Linux")
+    (description
+     "This package includes the important tools for controlling the network
+subsystem of the Linux kernel.  This includes arp, hostname, ifconfig,
+netstat, rarp and route.  Additionally, this package contains utilities
+relating to particular network hardware types (plipconfig, slattach) and
+advanced aspects of IP configuration (iptunnel, ipmaddr).")
     (license gpl2+)))

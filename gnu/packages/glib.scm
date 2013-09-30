@@ -34,9 +34,19 @@
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
   #:use-module (gnu packages xml)
-  #:use-module (gnu packages bash))
+  #:use-module (gnu packages bash)
+  #:use-module (gnu packages file)
+  #:use-module (gnu packages xorg)
 
-(define-public dbus
+  ;; Export variables up-front to allow circular dependency with the 'xorg'
+  ;; module.
+  #:export (dbus
+            glib
+            dbus-glib
+            intltool
+            itstool))
+
+(define dbus
   (package
     (name "dbus")
     (version "1.6.4")
@@ -49,9 +59,26 @@
               (base32
                "1wacqyfkcpayg7f8rvx9awqg275n5pksxq5q7y21lxjx85x6pfjz"))))
     (build-system gnu-build-system)
+    (arguments
+     '(#:configure-flags (list ;; Install the system bus socket under /var.
+                               "--localstatedir=/var"
+
+                               ;; XXX: Fix the following to allow system-wide
+                               ;; config.
+                               ;; "--sysconfdir=/etc"
+
+                               "--with-session-socket-dir=/tmp")
+       #:patches (list (assoc-ref %build-inputs "patch/localstatedir"))))
     (inputs
      `(("expat" ,expat)
-       ("pkg-config" ,pkg-config)))
+       ("pkg-config" ,pkg-config)
+       ("patch/localstatedir"
+        ,(search-patch "dbus-localstatedir.patch"))
+
+       ;; Add a dependency on libx11 so that 'dbus-launch' has support for
+       ;; '--autolaunch'.
+       ("libx11" ,libx11)))
+
     (home-page "http://dbus.freedesktop.org/")
     (synopsis "Message bus for inter-process communication (IPC)")
     (description
@@ -72,7 +99,7 @@ or through unencrypted TCP/IP suitable for use behind a firewall with
 shared NFS home directories.")
     (license license:gpl2+)))                     ; or Academic Free License 2.1
 
-(define-public glib
+(define glib
   (package
    (name "glib")
    (version "2.37.1")
@@ -91,7 +118,7 @@ shared NFS home directories.")
       ("gettext" ,guix:gettext)
       ("libffi" ,libffi)
       ("pkg-config" ,pkg-config)
-      ("python" ,python)
+      ("python" ,python-wrapper)
       ("zlib" ,zlib)
       ("perl" ,perl)                              ; needed by GIO tests
       ("dbus" ,dbus)                              ; for GDBus tests
@@ -144,7 +171,7 @@ dynamic loading, and an object system.")
    (home-page "http://developer.gnome.org/glib/")
    (license license:lgpl2.0+)))                        ; some files are under lgpl2.1+
 
-(define-public intltool
+(define intltool
   (package
     (name "intltool")
     (version "0.50.2")
@@ -161,6 +188,9 @@ dynamic loading, and an object system.")
      `(;; Propagate gettext because users expect it to be there, and so does
        ;; the `intltool-update' script.
        ("gettext" ,guix:gettext)
+
+       ;; `file' is used by `intltool-update' too.
+       ("file" ,file)
 
        ("perl-xml-parser" ,perl-xml-parser)
        ("perl" ,perl)))
@@ -181,3 +211,62 @@ The intltool collection can be used to do these things:
     Merge back the translations from .po files into .xml, .desktop and
     oaf files. This merge step will happen at build resp. installation time.")
     (license license:gpl2+)))
+
+(define itstool
+  (package
+    (name "itstool")
+    (version "1.2.0")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "http://files.itstool.org/itstool/itstool-"
+                                 version ".tar.bz2"))
+             (sha256
+              (base32
+               "1akq75aflihm3y7js8biy7b5mw2g11vl8yq90gydnwlwp0zxdzj6"))))
+    (build-system gnu-build-system)
+    (home-page "http://www.itstool.org")
+    (synopsis "Tool to translate XML documents with PO files")
+    (description
+     "ITS Tool allows you to translate your XML documents with PO files, using
+rules from the W3C Internationalization Tag Set (ITS) to determine what to
+translate and how to separate it into PO file messages.
+
+PO files are the standard translation format for GNU and other Unix-like
+systems.  They present translatable information as discrete messages, allowing
+each message to be translated independently.  In contrast to whole-page
+translation, translating with a message-based format like PO means you can
+easily track changes to the source document down to the paragraph.  When new
+strings are added or existing strings are modified, you only need to update the
+corresponding messages.
+
+ITS Tool is designed to make XML documents translatable through PO files by
+applying standard ITS rules, as well as extension rules specific to ITS Tool.
+ITS also provides an industry standard way for authors to override translation
+information in their documents, such as whether a particular element should be
+translated.")
+    (license license:gpl3+)))
+
+(define dbus-glib
+  (package
+    (name "dbus-glib")
+    (version "0.100.2")
+    (source (origin
+             (method url-fetch)
+             (uri
+              (string-append "http://dbus.freedesktop.org/releases/dbus-glib/dbus-glib-"
+                             version ".tar.gz"))
+             (sha256
+              (base32
+               "1ibav91yg70f2l3l18cr0hf4mna1h9d4mrg0c60w4l8zjbd45fx5"))))
+    (build-system gnu-build-system)
+    (inputs
+     `(("dbus" ,dbus)
+       ("expat" ,expat)
+       ("glib" ,glib)
+       ("pkg-config" ,pkg-config)))
+    (home-page "http://dbus.freedesktop.org/doc/dbus-glib/")
+    (synopsis "D-Bus GLib bindings")
+    (description
+     "GLib bindings for D-Bus.  The package is obsolete and superseded
+by GDBus included in Glib.")
+    (license license:gpl2)))                     ; or Academic Free License 2.1

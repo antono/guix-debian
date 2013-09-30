@@ -99,19 +99,38 @@
                    ("d" ,d) ("d/x" "something.drv"))
                  (pk 'x (package-transitive-inputs e))))))
 
-(test-skip (if (not %store) 6 0))
+(test-skip (if (not %store) 8 0))
 
-(test-assert "return values"
-  (let-values (((drv-path drv)
-                (package-derivation %store (dummy-package "p"))))
-    (and (derivation-path? drv-path)
-         (derivation? drv))))
+(test-assert "package-source-derivation, file"
+  (let* ((file    (search-path %load-path "guix.scm"))
+         (package (package (inherit (dummy-package "p"))
+                    (source file)))
+         (source  (package-source-derivation %store
+                                             (package-source package))))
+    (and (store-path? source)
+         (valid-path? %store source)
+         (equal? (call-with-input-file source get-bytevector-all)
+                 (call-with-input-file file get-bytevector-all)))))
+
+(test-assert "package-source-derivation, store path"
+  (let* ((file    (add-to-store %store "guix.scm" #t "sha256"
+                                (search-path %load-path "guix.scm")))
+         (package (package (inherit (dummy-package "p"))
+                    (source file)))
+         (source  (package-source-derivation %store
+                                             (package-source package))))
+    (string=? file source)))
+
+(test-assert "return value"
+  (let ((drv (package-derivation %store (dummy-package "p"))))
+    (and (derivation? drv)
+         (file-exists? (derivation-file-name drv)))))
 
 (test-assert "package-output"
   (let* ((package  (dummy-package "p"))
-         (drv-path (package-derivation %store package)))
-    (and (derivation-path? drv-path)
-         (string=? (derivation-path->output-path drv-path)
+         (drv      (package-derivation %store package)))
+    (and (derivation? drv)
+         (string=? (derivation->output-path drv)
                    (package-output %store package "out")))))
 
 (test-assert "trivial"
@@ -128,7 +147,7 @@
                        (display '(hello guix) p))))))))
          (d (package-derivation %store p)))
     (and (build-derivations %store (list d))
-         (let ((p (pk 'drv d (derivation-path->output-path d))))
+         (let ((p (pk 'drv d (derivation->output-path d))))
            (equal? '(hello guix)
                    (call-with-input-file (string-append p "/test") read))))))
 
@@ -144,7 +163,22 @@
               (inputs `(("input" ,i)))))
          (d (package-derivation %store p)))
     (and (build-derivations %store (list d))
-         (let ((p (pk 'drv d (derivation-path->output-path d))))
+         (let ((p (pk 'drv d (derivation->output-path d))))
+           (equal? (call-with-input-file p get-bytevector-all)
+                   (call-with-input-file i get-bytevector-all))))))
+
+(test-assert "trivial with source"
+  (let* ((i (search-path %load-path "ice-9/boot-9.scm"))
+         (p (package (inherit (dummy-package "trivial-with-source"))
+              (build-system trivial-build-system)
+              (source i)
+              (arguments
+               `(#:guile ,%bootstrap-guile
+                 #:builder (copy-file (assoc-ref %build-inputs "source")
+                                      %output)))))
+         (d (package-derivation %store p)))
+    (and (build-derivations %store (list d))
+         (let ((p (derivation->output-path d)))
            (equal? (call-with-input-file p get-bytevector-all)
                    (call-with-input-file i get-bytevector-all))))))
 
@@ -163,7 +197,7 @@
                                                           (%current-system)))))))
          (d (package-derivation %store p)))
     (and (build-derivations %store (list d))
-         (let ((p (pk 'drv d (derivation-path->output-path d))))
+         (let ((p (pk 'drv d (derivation->output-path d))))
            (eq? 'hello (call-with-input-file p read))))))
 
 (test-assert "search paths"
@@ -202,20 +236,17 @@
            (equal? x (collect (package-derivation %store c)))))))
 
 (test-assert "package-cross-derivation"
-  (let-values (((drv-path drv)
-                (package-cross-derivation %store (dummy-package "p")
-                                          "mips64el-linux-gnu")))
-    (and (derivation-path? drv-path)
-         (derivation? drv))))
+  (let ((drv (package-cross-derivation %store (dummy-package "p")
+                                       "mips64el-linux-gnu")))
+    (and (derivation? drv)
+         (file-exists? (derivation-file-name drv)))))
 
 (test-assert "package-cross-derivation, trivial-build-system"
   (let ((p (package (inherit (dummy-package "p"))
              (build-system trivial-build-system)
              (arguments '(#:builder (exit 1))))))
-    (let-values (((drv-path drv)
-                  (package-cross-derivation %store p "mips64el-linux-gnu")))
-      (and (derivation-path? drv-path)
-           (derivation? drv)))))
+    (let ((drv (package-cross-derivation %store p "mips64el-linux-gnu")))
+      (derivation? drv))))
 
 (test-assert "package-cross-derivation, no cross builder"
   (let* ((b (build-system (inherit trivial-build-system)
@@ -237,7 +268,7 @@
          (or (location? (package-location gnu-make))
              (not (package-location gnu-make)))
          (let* ((drv (package-derivation %store gnu-make))
-                (out (derivation-path->output-path drv)))
+                (out (derivation->output-path drv)))
            (and (build-derivations %store (list drv))
                 (file-exists? (string-append out "/bin/make")))))))
 

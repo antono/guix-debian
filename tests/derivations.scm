@@ -50,19 +50,23 @@
   (let ((drv (package-derivation %store %bootstrap-guile)))
     (%guile-for-build drv)))
 
-(define %bash
-  (let ((bash (search-bootstrap-binary "bash" (%current-system))))
+(define (bootstrap-binary name)
+  (let ((bin (search-bootstrap-binary name (%current-system))))
     (and %store
-         (add-to-store %store "bash" #t "sha256" bash))))
+         (add-to-store %store name #t "sha256" bin))))
 
-(define (directory-contents dir)
+(define %bash
+  (bootstrap-binary "bash"))
+(define %mkdir
+  (bootstrap-binary "mkdir"))
+
+(define* (directory-contents dir #:optional (slurp get-bytevector-all))
   "Return an alist representing the contents of DIR."
   (define prefix-len (string-length dir))
   (sort (file-system-fold (const #t)                   ; enter?
                           (lambda (path stat result)   ; leaf
                             (alist-cons (string-drop path prefix-len)
-                                        (call-with-input-file path
-                                          get-bytevector-all)
+                                        (call-with-input-file path slurp)
                                         result))
                           (lambda (path stat result) result)      ; down
                           (lambda (path stat result) result)      ; up
@@ -84,7 +88,7 @@
     (and (equal? b1 b2)
          (equal? d1 d2))))
 
-(test-skip (if %store 0 11))
+(test-skip (if %store 0 12))
 
 (test-assert "add-to-store, flat"
   (let* ((file (search-path %load-path "language/tree-il/spec.scm"))
@@ -106,29 +110,26 @@
   (let* ((builder  (add-text-to-store %store "my-builder.sh"
                                       "echo hello, world\n"
                                       '()))
-         (drv-path (derivation %store "foo" (%current-system)
+         (drv      (derivation %store "foo"
                                %bash `("-e" ,builder)
-                               '(("HOME" . "/homeless")) '())))
-    (and (store-path? drv-path)
-         (valid-path? %store drv-path))))
+                               #:env-vars '(("HOME" . "/homeless")))))
+    (and (store-path? (derivation-file-name drv))
+         (valid-path? %store (derivation-file-name drv)))))
 
 (test-assert "build derivation with 1 source"
-  (let*-values (((builder)
-                 (add-text-to-store %store "my-builder.sh"
-                                    "echo hello, world > \"$out\"\n"
-                                    '()))
-                ((drv-path drv)
-                 (derivation %store "foo" (%current-system)
-                             %bash `(,builder)
-                             '(("HOME" . "/homeless")
-                               ("zzz"  . "Z!")
-                               ("AAA"  . "A!"))
-                             `((,builder))))
-                ((succeeded?)
-                 (build-derivations %store (list drv-path))))
+  (let* ((builder (add-text-to-store %store "my-builder.sh"
+                                     "echo hello, world > \"$out\"\n"
+                                     '()))
+         (drv     (derivation %store "foo"
+                              %bash `(,builder)
+                              #:env-vars '(("HOME" . "/homeless")
+                                           ("zzz"  . "Z!")
+                                           ("AAA"  . "A!"))
+                              #:inputs `((,builder))))
+         (succeeded?
+          (build-derivations %store (list drv))))
     (and succeeded?
-         (let ((path (derivation-output-path
-                      (assoc-ref (derivation-outputs drv) "out"))))
+         (let ((path (derivation->output-path drv)))
            (and (valid-path? %store path)
                 (string=? (call-with-input-file path read-line)
                           "hello, world"))))))
@@ -139,35 +140,33 @@
                       "(while read line ; do echo \"$line\" ; done) < $in > $out"
                       '()))
          (input      (search-path %load-path "ice-9/boot-9.scm"))
-         (drv-path   (derivation %store "derivation-with-input-file"
-                                 (%current-system)
+         (input*     (add-to-store %store (basename input)
+                                   #t "sha256" input))
+         (drv        (derivation %store "derivation-with-input-file"
                                  %bash `(,builder)
-                                 `(("in"
-                                    ;; Cheat to pass the actual file
-                                    ;; name to the builder.
-                                    . ,(add-to-store %store
-                                                     (basename input)
-                                                     #t "sha256"
-                                                     input)))
-                                 `((,builder)
-                                   (,input)))))   ; ← local file name
-    (and (build-derivations %store (list drv-path))
+
+                                 ;; Cheat to pass the actual file name to the
+                                 ;; builder.
+                                 #:env-vars `(("in" . ,input*))
+
+                                 #:inputs `((,builder)
+                                            (,input))))) ; ← local file name
+    (and (build-derivations %store (list drv))
          ;; Note: we can't compare the files because the above trick alters
          ;; the contents.
-         (valid-path? %store (derivation-path->output-path drv-path)))))
+         (valid-path? %store (derivation->output-path drv)))))
 
 (test-assert "fixed-output derivation"
   (let* ((builder    (add-text-to-store %store "my-fixed-builder.sh"
                                         "echo -n hello > $out" '()))
          (hash       (sha256 (string->utf8 "hello")))
-         (drv-path   (derivation %store "fixed" (%current-system)
+         (drv        (derivation %store "fixed"
                                  %bash `(,builder)
-                                 '()
-                                 `((,builder))    ; optional
+                                 #:inputs `((,builder)) ; optional
                                  #:hash hash #:hash-algo 'sha256))
-         (succeeded? (build-derivations %store (list drv-path))))
+         (succeeded? (build-derivations %store (list drv))))
     (and succeeded?
-         (let ((p (derivation-path->output-path drv-path)))
+         (let ((p (derivation->output-path drv)))
            (and (equal? (string->utf8 "hello")
                         (call-with-input-file p get-bytevector-all))
                 (bytevector? (query-path-hash %store p)))))))
@@ -178,19 +177,16 @@
          (builder2   (add-text-to-store %store "fixed-builder2.sh"
                                         "echo hey; echo -n hello > $out" '()))
          (hash       (sha256 (string->utf8 "hello")))
-         (drv-path1  (derivation %store "fixed" (%current-system)
+         (drv1       (derivation %store "fixed"
                                  %bash `(,builder1)
-                                 '() `()
                                  #:hash hash #:hash-algo 'sha256))
-         (drv-path2  (derivation %store "fixed" (%current-system)
+         (drv2       (derivation %store "fixed"
                                  %bash `(,builder2)
-                                 '() `()
                                  #:hash hash #:hash-algo 'sha256))
-         (succeeded? (build-derivations %store
-                                        (list drv-path1 drv-path2))))
+         (succeeded? (build-derivations %store (list drv1 drv2))))
     (and succeeded?
-         (equal? (derivation-path->output-path drv-path1)
-                 (derivation-path->output-path drv-path2)))))
+         (equal? (derivation->output-path drv1)
+                 (derivation->output-path drv2)))))
 
 (test-assert "derivation with a fixed-output input"
   ;; A derivation D using a fixed-output derivation F doesn't has the same
@@ -201,50 +197,48 @@
          (builder2   (add-text-to-store %store "fixed-builder2.sh"
                                         "echo hey; echo -n hello > $out" '()))
          (hash       (sha256 (string->utf8 "hello")))
-         (fixed1     (derivation %store "fixed" (%current-system)
+         (fixed1     (derivation %store "fixed"
                                  %bash `(,builder1)
-                                 '() `()
                                  #:hash hash #:hash-algo 'sha256))
-         (fixed2     (derivation %store "fixed" (%current-system)
+         (fixed2     (derivation %store "fixed"
                                  %bash `(,builder2)
-                                 '() `()
                                  #:hash hash #:hash-algo 'sha256))
-         (fixed-out  (derivation-path->output-path fixed1))
+         (fixed-out  (derivation->output-path fixed1))
          (builder3   (add-text-to-store
                       %store "final-builder.sh"
                       ;; Use Bash hackery to avoid Coreutils.
                       "echo $in ; (read -u 3 c; echo $c) 3< $in > $out" '()))
-         (final1     (derivation %store "final" (%current-system)
+         (final1     (derivation %store "final"
                                  %bash `(,builder3)
-                                 `(("in" . ,fixed-out))
-                                 `((,builder3) (,fixed1))))
-         (final2     (derivation %store "final" (%current-system)
+                                 #:env-vars `(("in" . ,fixed-out))
+                                 #:inputs `((,builder3) (,fixed1))))
+         (final2     (derivation %store "final"
                                  %bash `(,builder3)
-                                 `(("in" . ,fixed-out))
-                                 `((,builder3) (,fixed2))))
+                                 #:env-vars `(("in" . ,fixed-out))
+                                 #:inputs `((,builder3) (,fixed2))))
          (succeeded? (build-derivations %store
                                         (list final1 final2))))
     (and succeeded?
-         (equal? (derivation-path->output-path final1)
-                 (derivation-path->output-path final2)))))
+         (equal? (derivation->output-path final1)
+                 (derivation->output-path final2)))))
 
 (test-assert "multiple-output derivation"
   (let* ((builder    (add-text-to-store %store "my-fixed-builder.sh"
                                         "echo one > $out ; echo two > $second"
                                         '()))
-         (drv-path   (derivation %store "fixed" (%current-system)
+         (drv        (derivation %store "fixed"
                                  %bash `(,builder)
-                                 '(("HOME" . "/homeless")
-                                   ("zzz"  . "Z!")
-                                   ("AAA"  . "A!"))
-                                 `((,builder))
+                                 #:env-vars '(("HOME" . "/homeless")
+                                              ("zzz"  . "Z!")
+                                              ("AAA"  . "A!"))
+                                 #:inputs `((,builder))
                                  #:outputs '("out" "second")))
-         (succeeded? (build-derivations %store (list drv-path))))
+         (succeeded? (build-derivations %store (list drv))))
     (and succeeded?
-         (let ((one (derivation-path->output-path drv-path "out"))
-               (two (derivation-path->output-path drv-path "second")))
+         (let ((one (derivation->output-path drv "out"))
+               (two (derivation->output-path drv "second")))
            (and (lset= equal?
-                       (derivation-path->output-paths drv-path)
+                       (derivation->output-paths drv)
                        `(("out" . ,one) ("second" . ,two)))
                 (eq? 'one (call-with-input-file one read))
                 (eq? 'two (call-with-input-file two read)))))))
@@ -255,15 +249,14 @@
   (let* ((builder    (add-text-to-store %store "my-fixed-builder.sh"
                                         "echo one > $out ; echo two > $AAA"
                                         '()))
-         (drv-path   (derivation %store "fixed" (%current-system)
+         (drv        (derivation %store "fixed"
                                  %bash `(,builder)
-                                 '()
-                                 `((,builder))
+                                 #:inputs `((,builder))
                                  #:outputs '("out" "AAA")))
-         (succeeded? (build-derivations %store (list drv-path))))
+         (succeeded? (build-derivations %store (list drv))))
     (and succeeded?
-         (let ((one (derivation-path->output-path drv-path "out"))
-               (two (derivation-path->output-path drv-path "AAA")))
+         (let ((one (derivation->output-path drv "out"))
+               (two (derivation->output-path drv "AAA")))
            (and (eq? 'one (call-with-input-file one read))
                 (eq? 'two (call-with-input-file two read)))))))
 
@@ -273,10 +266,9 @@
   (let* ((builder1   (add-text-to-store %store "my-mo-builder.sh"
                                         "echo one > $out ; echo two > $two"
                                         '()))
-         (mdrv       (derivation %store "multiple-output" (%current-system)
+         (mdrv       (derivation %store "multiple-output"
                                  %bash `(,builder1)
-                                 '()
-                                 `((,builder1))
+                                 #:inputs `((,builder1))
                                  #:outputs '("out" "two")))
          (builder2   (add-text-to-store %store "my-mo-user-builder.sh"
                                         "read x < $one;
@@ -284,20 +276,71 @@
                                          echo \"($x $y)\" > $out"
                                         '()))
          (udrv       (derivation %store "multiple-output-user"
-                                 (%current-system)
                                  %bash `(,builder2)
-                                 `(("one" . ,(derivation-path->output-path
-                                              mdrv "out"))
-                                   ("two" . ,(derivation-path->output-path
-                                              mdrv "two")))
-                                 `((,builder2)
-                                   ;; two occurrences of MDRV:
-                                   (,mdrv)
-                                   (,mdrv "two")))))
+                                 #:env-vars `(("one"
+                                               . ,(derivation->output-path
+                                                   mdrv "out"))
+                                              ("two"
+                                               . ,(derivation->output-path
+                                                   mdrv "two")))
+                                 #:inputs `((,builder2)
+                                            ;; two occurrences of MDRV:
+                                            (,mdrv)
+                                            (,mdrv "two")))))
     (and (build-derivations %store (list (pk 'udrv udrv)))
-         (let ((p (derivation-path->output-path udrv)))
+         (let ((p (derivation->output-path udrv)))
            (and (valid-path? %store p)
                 (equal? '(one two) (call-with-input-file p read)))))))
+
+(test-assert "derivation with #:references-graphs"
+  (let* ((input1  (add-text-to-store %store "foo" "hello"
+                                     (list %bash)))
+         (input2  (add-text-to-store %store "bar"
+                                     (number->string (random 7777))
+                                     (list input1)))
+         (builder (add-text-to-store %store "build-graph"
+                                     (format #f "
+~a $out
+ (while read l ; do echo $l ; done) < bash > $out/bash
+ (while read l ; do echo $l ; done) < input1 > $out/input1
+ (while read l ; do echo $l ; done) < input2 > $out/input2"
+                                             %mkdir)
+                                     (list %mkdir)))
+         (drv     (derivation %store "closure-graphs"
+                              %bash `(,builder)
+                              #:references-graphs
+                              `(("bash" . ,%bash)
+                                ("input1" . ,input1)
+                                ("input2" . ,input2))
+                              #:inputs `((,%bash) (,builder))))
+         (out     (derivation->output-path drv)))
+    (define (deps path . deps)
+      (let ((count (length deps)))
+        (string-append path "\n\n" (number->string count) "\n"
+                       (string-join (sort deps string<?) "\n")
+                       (if (zero? count) "" "\n"))))
+
+    (and (build-derivations %store (list drv))
+         (equal? (directory-contents out get-string-all)
+                 `(("/bash"   . ,(string-append %bash "\n\n0\n"))
+                   ("/input1" . ,(if (string>? input1 %bash)
+                                     (string-append (deps %bash)
+                                                    (deps input1 %bash))
+                                     (string-append (deps input1 %bash)
+                                                    (deps %bash))))
+                   ("/input2" . ,(string-concatenate
+                                  (map cdr
+                                       (sort
+                                        (map (lambda (p d)
+                                               (cons p (apply deps p d)))
+                                             (list %bash input1 input2)
+                                             (list '() (list %bash) (list input1)))
+                                        (lambda (x y)
+                                          (match x
+                                            ((p1 . _)
+                                             (match y
+                                               ((p2 . _)
+                                                (string<? p1 p2)))))))))))))))
 
 
 (define %coreutils
@@ -313,31 +356,30 @@
           (add-text-to-store %store "build-with-coreutils.sh"
                              "echo $PATH ; mkdir --version ; mkdir $out ; touch $out/good"
                              '()))
-         (drv-path
-          (derivation %store "foo" (%current-system)
+         (drv
+          (derivation %store "foo"
                       %bash `(,builder)
-                      `(("PATH" .
-                         ,(string-append
-                           (derivation-path->output-path %coreutils)
-                           "/bin")))
-                      `((,builder)
-                        (,%coreutils))))
+                      #:env-vars `(("PATH" .
+                                    ,(string-append
+                                      (derivation->output-path %coreutils)
+                                      "/bin")))
+                      #:inputs `((,builder)
+                                 (,%coreutils))))
          (succeeded?
-          (build-derivations %store (list drv-path))))
+          (build-derivations %store (list drv))))
     (and succeeded?
-         (let ((p (derivation-path->output-path drv-path)))
+         (let ((p (derivation->output-path drv)))
            (and (valid-path? %store p)
                 (file-exists? (string-append p "/good")))))))
 
-(test-skip (if (%guile-for-build) 0 7))
+(test-skip (if (%guile-for-build) 0 8))
 
 (test-assert "build-expression->derivation and derivation-prerequisites"
-  (let-values (((drv-path drv)
-                (build-expression->derivation %store "fail" (%current-system)
-                                              #f '())))
+  (let ((drv (build-expression->derivation %store "fail" (%current-system)
+                                           #f '())))
     (any (match-lambda
           (($ <derivation-input> path)
-           (string=? path (%guile-for-build))))
+           (string=? path (derivation-file-name (%guile-for-build)))))
          (derivation-prerequisites drv))))
 
 (test-assert "build-expression->derivation without inputs"
@@ -346,11 +388,11 @@
                         (call-with-output-file (string-append %output "/test")
                           (lambda (p)
                             (display '(hello guix) p)))))
-         (drv-path   (build-expression->derivation %store "goo" (%current-system)
+         (drv       (build-expression->derivation %store "goo" (%current-system)
                                                    builder '()))
-         (succeeded? (build-derivations %store (list drv-path))))
+         (succeeded? (build-derivations %store (list drv))))
     (and succeeded?
-         (let ((p (derivation-path->output-path drv-path)))
+         (let ((p (derivation->output-path drv)))
            (equal? '(hello guix)
                    (call-with-input-file (string-append p "/test") read))))))
 
@@ -359,43 +401,35 @@
                        (set-build-options s #:max-silent-time 1)
                        s))
          (builder    '(sleep 100))
-         (drv-path   (build-expression->derivation %store "silent"
+         (drv        (build-expression->derivation %store "silent"
                                                    (%current-system)
                                                    builder '()))
-         (out-path   (derivation-path->output-path drv-path)))
+         (out-path   (derivation->output-path drv)))
     (guard (c ((nix-protocol-error? c)
                (and (string-contains (nix-protocol-error-message c)
                                      "failed")
                     (not (valid-path? store out-path)))))
-      (build-derivations %store (list drv-path)))))
+      (build-derivations %store (list drv)))))
 
 (test-assert "build-expression->derivation and derivation-prerequisites-to-build"
-  (let-values (((drv-path drv)
-                (build-expression->derivation %store "fail" (%current-system)
-                                              #f '())))
+  (let ((drv (build-expression->derivation %store "fail" (%current-system)
+                                           #f '())))
     ;; The only direct dependency is (%guile-for-build) and it's already
     ;; built.
     (null? (derivation-prerequisites-to-build %store drv))))
 
 (test-assert "derivation-prerequisites-to-build when outputs already present"
-  (let*-values (((builder)
-                 '(begin (mkdir %output) #t))
-                ((input-drv-path input-drv)
-                 (build-expression->derivation %store "input"
-                                               (%current-system)
-                                               builder '()))
-                ((input-path)
-                 (derivation-output-path
-                  (assoc-ref (derivation-outputs input-drv)
-                             "out")))
-                ((drv-path drv)
-                 (build-expression->derivation %store "something"
-                                               (%current-system)
-                                               builder
-                                               `(("i" ,input-drv-path))))
-                ((output)
-                 (derivation-output-path
-                  (assoc-ref (derivation-outputs drv) "out"))))
+  (let* ((builder    '(begin (mkdir %output) #t))
+         (input-drv  (build-expression->derivation %store "input"
+                                                   (%current-system)
+                                                   builder '()))
+         (input-path (derivation-output-path
+                      (assoc-ref (derivation-outputs input-drv)
+                                 "out")))
+         (drv        (build-expression->derivation %store "something"
+                                                   (%current-system) builder
+                                                   `(("i" ,input-drv))))
+         (output     (derivation->output-path drv)))
     ;; Make sure these things are not already built.
     (when (valid-path? %store input-path)
       (delete-paths %store (list input-path)))
@@ -404,10 +438,10 @@
 
     (and (equal? (map derivation-input-path
                       (derivation-prerequisites-to-build %store drv))
-                 (list input-drv-path))
+                 (list (derivation-file-name input-drv)))
 
          ;; Build DRV and delete its input.
-         (build-derivations %store (list drv-path))
+         (build-derivations %store (list drv))
          (delete-paths %store (list input-path))
          (not (valid-path? %store input-path))
 
@@ -417,17 +451,12 @@
 
 (test-skip (if (getenv "GUIX_BINARY_SUBSTITUTE_URL") 0 1))
 (test-assert "derivation-prerequisites-to-build and substitutes"
-  (let*-values (((store)
-                 (open-connection))
-                ((drv-path drv)
-                 (build-expression->derivation store "prereq-subst"
+  (let* ((store  (open-connection))
+         (drv    (build-expression->derivation store "prereq-subst"
                                                (%current-system)
                                                (random 1000) '()))
-                ((output)
-                 (derivation-output-path
-                  (assoc-ref (derivation-outputs drv) "out")))
-                ((dir)
-                 (and=> (getenv "GUIX_BINARY_SUBSTITUTE_URL")
+         (output (derivation->output-path drv))
+         (dir    (and=> (getenv "GUIX_BINARY_SUBSTITUTE_URL")
                         (compose uri-path string->uri))))
     ;; Create fake substituter data, to be read by `substitute-binary'.
     (call-with-output-file (string-append dir "/nix-cache-info")
@@ -447,7 +476,8 @@ Deriver: ~a~%"
                 output                              ; StorePath
                 (string-append dir "/example.nar")  ; URL
                 (%current-system)                   ; System
-                (basename drv-path))))              ; Deriver
+                (basename
+                 (derivation-file-name drv)))))     ; Deriver
 
     (let-values (((build download)
                   (derivation-prerequisites-to-build store drv))
@@ -464,16 +494,16 @@ Deriver: ~a~%"
   (let* ((builder  '(begin
                       (mkdir %output)
                       #f))                        ; fail!
-         (drv-path (build-expression->derivation %store "fail" (%current-system)
+         (drv      (build-expression->derivation %store "fail" (%current-system)
                                                  builder '()))
-         (out-path (derivation-path->output-path drv-path)))
+         (out-path (derivation->output-path drv)))
     (guard (c ((nix-protocol-error? c)
                ;; Note that the output path may exist at this point, but it
                ;; is invalid.
                (and (string-match "build .* failed"
                                   (nix-protocol-error-message c))
                     (not (valid-path? %store out-path)))))
-      (build-derivations %store (list drv-path))
+      (build-derivations %store (list drv))
       #f)))
 
 (test-assert "build-expression->derivation with two outputs"
@@ -484,15 +514,15 @@ Deriver: ~a~%"
                         (call-with-output-file (assoc-ref %outputs "second")
                           (lambda (p)
                             (display '(world) p)))))
-         (drv-path   (build-expression->derivation %store "double"
+         (drv        (build-expression->derivation %store "double"
                                                    (%current-system)
                                                    builder '()
                                                    #:outputs '("out"
                                                                "second")))
-         (succeeded? (build-derivations %store (list drv-path))))
+         (succeeded? (build-derivations %store (list drv))))
     (and succeeded?
-         (let ((one (derivation-path->output-path drv-path))
-               (two (derivation-path->output-path drv-path "second")))
+         (let ((one (derivation->output-path drv))
+               (two (derivation->output-path drv "second")))
            (and (equal? '(hello) (call-with-input-file one read))
                 (equal? '(world) (call-with-input-file two read)))))))
 
@@ -505,12 +535,12 @@ Deriver: ~a~%"
                             (dup2 (port->fdes p) 1)
                             (execl (string-append cu "/bin/uname")
                                    "uname" "-a")))))
-         (drv-path   (build-expression->derivation %store "uname" (%current-system)
+         (drv        (build-expression->derivation %store "uname" (%current-system)
                                                    builder
                                                    `(("cu" ,%coreutils))))
-         (succeeded? (build-derivations %store (list drv-path))))
+         (succeeded? (build-derivations %store (list drv))))
     (and succeeded?
-         (let ((p (derivation-path->output-path drv-path)))
+         (let ((p (derivation->output-path drv)))
            (string-contains (call-with-input-file p read-line) "GNU")))))
 
 (test-assert "imported-files"
@@ -519,9 +549,9 @@ Deriver: ~a~%"
                                               "guix/derivations.scm"))
                      ("p/q"   . ,(search-path %load-path "guix.scm"))
                      ("p/z"   . ,(search-path %load-path "guix/store.scm"))))
-         (drv-path (imported-files %store files)))
-    (and (build-derivations %store (list drv-path))
-         (let ((dir (derivation-path->output-path drv-path)))
+         (drv      (imported-files %store files)))
+    (and (build-derivations %store (list drv))
+         (let ((dir (derivation->output-path drv)))
            (every (match-lambda
                    ((path . source)
                     (equal? (call-with-input-file (string-append dir "/" path)
@@ -536,14 +566,13 @@ Deriver: ~a~%"
                       (let ((out (assoc-ref %outputs "out")))
                         (mkdir-p (string-append out "/guile/guix/nix"))
                         #t)))
-         (drv-path (build-expression->derivation %store
-                                                 "test-with-modules"
+         (drv      (build-expression->derivation %store "test-with-modules"
                                                  (%current-system)
                                                  builder '()
                                                  #:modules
                                                  '((guix build utils)))))
-    (and (build-derivations %store (list drv-path))
-         (let* ((p (derivation-path->output-path drv-path))
+    (and (build-derivations %store (list drv))
+         (let* ((p (derivation->output-path drv))
                 (s (stat (string-append p "/guile/guix/nix"))))
            (eq? (stat:type s) 'directory)))))
 
@@ -567,9 +596,10 @@ Deriver: ~a~%"
                                                    #:hash-algo 'sha256))
          (succeeded? (build-derivations %store (list input1 input2))))
     (and succeeded?
-         (not (string=? input1 input2))
-         (string=? (derivation-path->output-path input1)
-                   (derivation-path->output-path input2)))))
+         (not (string=? (derivation-file-name input1)
+                        (derivation-file-name input2)))
+         (string=? (derivation->output-path input1)
+                   (derivation->output-path input2)))))
 
 (test-assert "build-expression->derivation with a fixed-output input"
   (let* ((builder1   '(call-with-output-file %output
@@ -601,9 +631,44 @@ Deriver: ~a~%"
                                                   (%current-system)
                                                   builder3
                                                   `(("input" ,input2)))))
-    (and (string=? (derivation-path->output-path final1)
-                   (derivation-path->output-path final2))
+    (and (string=? (derivation->output-path final1)
+                   (derivation->output-path final2))
+         (string=? (derivation->output-path final1)
+                   (derivation-path->output-path
+                    (derivation-file-name final1)))
          (build-derivations %store (list final1 final2)))))
+
+(test-assert "build-expression->derivation with #:references-graphs"
+  (let* ((input   (add-text-to-store %store "foo" "hello"
+                                     (list %bash %mkdir)))
+         (builder '(copy-file "input" %output))
+         (drv     (build-expression->derivation %store "references-graphs"
+                                                (%current-system)
+                                                builder '()
+                                                #:references-graphs
+                                                `(("input" . ,input))))
+         (out     (derivation->output-path drv)))
+    (define (deps path . deps)
+      (let ((count (length deps)))
+        (string-append path "\n\n" (number->string count) "\n"
+                       (string-join (sort deps string<?) "\n")
+                       (if (zero? count) "" "\n"))))
+
+    (and (build-derivations %store (list drv))
+         (equal? (call-with-input-file out get-string-all)
+                 (string-concatenate
+                  (map cdr
+                       (sort (map (lambda (p d)
+                                    (cons p (apply deps p d)))
+                                  (list input %bash %mkdir)
+                                  (list (list %bash %mkdir)
+                                        '() '()))
+                             (lambda (x y)
+                               (match x
+                                 ((p1 . _)
+                                  (match y
+                                    ((p2 . _)
+                                     (string<? p1 p2)))))))))))))
 
 (test-end)
 

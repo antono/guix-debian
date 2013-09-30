@@ -57,6 +57,25 @@
 
 # GNU Guix --- Functional package management for GNU
 # Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+# Copyright © 2013 Andreas Enge <andreas@enge.fr>
+#
+# This file is part of GNU Guix.
+#
+# GNU Guix is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or (at
+# your option) any later version.
+#
+# GNU Guix is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
+
+# GNU Guix --- Functional package management for GNU
+# Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
 #
 # This file is part of GNU Guix.
 #
@@ -145,10 +164,11 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-DIST_COMMON = $(srcdir)/gnu-system.am $(srcdir)/daemon.am INSTALL NEWS \
-	README AUTHORS ChangeLog $(srcdir)/Makefile.in \
-	$(srcdir)/Makefile.am $(top_srcdir)/configure \
-	$(am__configure_deps) $(top_srcdir)/nix/config.h.in \
+DIST_COMMON = $(srcdir)/gnu-system.am $(srcdir)/doc.am \
+	$(srcdir)/daemon.am INSTALL NEWS README AUTHORS ChangeLog \
+	$(srcdir)/Makefile.in $(srcdir)/Makefile.am \
+	$(top_srcdir)/configure $(am__configure_deps) \
+	$(top_srcdir)/nix/config.h.in \
 	$(top_srcdir)/nix/scripts/list-runtime-roots.in \
 	$(top_srcdir)/nix/scripts/substitute-binary.in \
 	$(top_srcdir)/guix/config.scm.in $(top_srcdir)/scripts/guix.in \
@@ -173,19 +193,21 @@ DIST_COMMON = $(srcdir)/gnu-system.am $(srcdir)/daemon.am INSTALL NEWS \
 # Do we need to provide our own non-broken (srfi srfi-37) module?
 @INSTALL_SRFI_37_TRUE@am__append_1 = srfi/srfi-37.scm
 @INSTALL_SRFI_37_TRUE@am__append_2 = srfi/srfi-37.go
-@BUILD_DAEMON_TRUE@am__append_3 = $(BUILT_SOURCES)
+@BUILD_DAEMON_TRUE@am__append_3 = tests/guix-register.sh
+@BUILD_DAEMON_TRUE@am__append_4 = $(BUILT_SOURCES)
 @BUILD_DAEMON_TRUE@bin_PROGRAMS = guix-daemon$(EXEEXT)
+@BUILD_DAEMON_TRUE@sbin_PROGRAMS = guix-register$(EXEEXT)
 @BUILD_DAEMON_TRUE@libexec_PROGRAMS = nix-setuid-helper$(EXEEXT)
-@BUILD_DAEMON_TRUE@am__append_4 = \
+@BUILD_DAEMON_TRUE@am__append_5 = \
 @BUILD_DAEMON_TRUE@  nix/sync-with-upstream			\
 @BUILD_DAEMON_TRUE@  nix/libstore/schema.sql			\
 @BUILD_DAEMON_TRUE@  nix/AUTHORS					\
 @BUILD_DAEMON_TRUE@  nix/COPYING
 
-@BUILD_DAEMON_TRUE@am__append_5 = \
+@BUILD_DAEMON_TRUE@am__append_6 = \
 @BUILD_DAEMON_TRUE@  top_builddir="$(abs_top_builddir)"
 
-@BUILD_DAEMON_TRUE@am__append_6 = \
+@BUILD_DAEMON_TRUE@am__append_7 = \
 @BUILD_DAEMON_TRUE@  tests/guix-daemon.sh
 
 subdir = .
@@ -260,14 +282,15 @@ am__libutil_a_SOURCES_DIST = nix/libutil/archive.cc \
 @BUILD_DAEMON_TRUE@	nix/libutil/libutil_a-gcrypt-hash.$(OBJEXT)
 libutil_a_OBJECTS = $(am_libutil_a_OBJECTS)
 am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(libexecdir)" \
-	"$(DESTDIR)$(bindir)" "$(DESTDIR)$(pkglibexecdir)" \
-	"$(DESTDIR)$(infodir)" "$(DESTDIR)$(bootstrap_i686_linuxdir)" \
+	"$(DESTDIR)$(sbindir)" "$(DESTDIR)$(bindir)" \
+	"$(DESTDIR)$(pkglibexecdir)" "$(DESTDIR)$(infodir)" \
+	"$(DESTDIR)$(bootstrap_i686_linuxdir)" \
 	"$(DESTDIR)$(bootstrap_x86_64_linuxdir)" \
 	"$(DESTDIR)$(infoimagedir)" "$(DESTDIR)$(patchdir)" \
 	"$(DESTDIR)$(guilemoduledir)" "$(DESTDIR)$(guilemoduledir)" \
 	"$(DESTDIR)$(bootstrap_i686_linuxdir)" \
 	"$(DESTDIR)$(bootstrap_x86_64_linuxdir)"
-PROGRAMS = $(bin_PROGRAMS) $(libexec_PROGRAMS)
+PROGRAMS = $(bin_PROGRAMS) $(libexec_PROGRAMS) $(sbin_PROGRAMS)
 am__guix_daemon_SOURCES_DIST = nix/nix-daemon/nix-daemon.cc \
 	nix/nix-daemon/guix-daemon.cc
 @BUILD_DAEMON_TRUE@am_guix_daemon_OBJECTS = nix/nix-daemon/guix_daemon-nix-daemon.$(OBJEXT) \
@@ -275,6 +298,12 @@ am__guix_daemon_SOURCES_DIST = nix/nix-daemon/nix-daemon.cc \
 guix_daemon_OBJECTS = $(am_guix_daemon_OBJECTS)
 am__DEPENDENCIES_1 =
 @BUILD_DAEMON_TRUE@guix_daemon_DEPENDENCIES = libstore.a libutil.a \
+@BUILD_DAEMON_TRUE@	libformat.a $(am__DEPENDENCIES_1) \
+@BUILD_DAEMON_TRUE@	$(am__DEPENDENCIES_1)
+am__guix_register_SOURCES_DIST = nix/guix-register/guix-register.cc
+@BUILD_DAEMON_TRUE@am_guix_register_OBJECTS = nix/guix-register/guix_register-guix-register.$(OBJEXT)
+guix_register_OBJECTS = $(am_guix_register_OBJECTS)
+@BUILD_DAEMON_TRUE@guix_register_DEPENDENCIES = libstore.a libutil.a \
 @BUILD_DAEMON_TRUE@	libformat.a $(am__DEPENDENCIES_1) \
 @BUILD_DAEMON_TRUE@	$(am__DEPENDENCIES_1)
 am__nix_setuid_helper_SOURCES_DIST =  \
@@ -347,10 +376,11 @@ am__v_CXXLD_0 = @echo "  CXXLD   " $@;
 am__v_CXXLD_1 = 
 SOURCES = $(libformat_a_SOURCES) $(libstore_a_SOURCES) \
 	$(libutil_a_SOURCES) $(guix_daemon_SOURCES) \
-	$(nix_setuid_helper_SOURCES)
+	$(guix_register_SOURCES) $(nix_setuid_helper_SOURCES)
 DIST_SOURCES = $(am__libformat_a_SOURCES_DIST) \
 	$(am__libstore_a_SOURCES_DIST) $(am__libutil_a_SOURCES_DIST) \
 	$(am__guix_daemon_SOURCES_DIST) \
+	$(am__guix_register_SOURCES_DIST) \
 	$(am__nix_setuid_helper_SOURCES_DIST)
 AM_V_DVIPS = $(am__v_DVIPS_@AM_V@)
 am__v_DVIPS_ = $(am__v_DVIPS_@AM_DEFAULT_V@)
@@ -702,6 +732,7 @@ CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
+DOT = @DOT@
 ECHO_C = @ECHO_C@
 ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
@@ -839,6 +870,7 @@ GNU_SYSTEM_MODULES = \
   gnu/packages.scm				\
   gnu/packages/acl.scm				\
   gnu/packages/algebra.scm			\
+  gnu/packages/apr.scm				\
   gnu/packages/aspell.scm			\
   gnu/packages/attr.scm				\
   gnu/packages/autotools.scm			\
@@ -868,6 +900,7 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/fdisk.scm			\
   gnu/packages/file.scm				\
   gnu/packages/flex.scm				\
+  gnu/packages/fonts.scm			\
   gnu/packages/fontutils.scm			\
   gnu/packages/freeipmi.scm			\
   gnu/packages/gawk.scm				\
@@ -876,10 +909,14 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/gd.scm				\
   gnu/packages/gdb.scm				\
   gnu/packages/gdbm.scm				\
+  gnu/packages/geeqie.scm			\
   gnu/packages/gettext.scm			\
   gnu/packages/ghostscript.scm			\
+  gnu/packages/gkrellm.scm			\
   gnu/packages/glib.scm				\
   gnu/packages/global.scm			\
+  gnu/packages/gnome.scm			\
+  gnu/packages/gnunet.scm			\
   gnu/packages/gnupg.scm			\
   gnu/packages/gnutls.scm			\
   gnu/packages/gperf.scm			\
@@ -889,6 +926,7 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/grub.scm				\
   gnu/packages/grue-hunter.scm			\
   gnu/packages/gsasl.scm			\
+  gnu/packages/gstreamer.scm			\
   gnu/packages/gtk.scm				\
   gnu/packages/guile.scm			\
   gnu/packages/gv.scm				\
@@ -902,7 +940,6 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/ld-wrapper.scm			\
   gnu/packages/less.scm				\
   gnu/packages/lesstif.scm			\
-  gnu/packages/libapr.scm			\
   gnu/packages/libdaemon.scm			\
   gnu/packages/libevent.scm			\
   gnu/packages/libffi.scm			\
@@ -915,6 +952,7 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/libunistring.scm			\
   gnu/packages/libusb.scm			\
   gnu/packages/libunwind.scm			\
+  gnu/packages/lightning.scm			\
   gnu/packages/linux.scm			\
   gnu/packages/linux-initrd.scm			\
   gnu/packages/lout.scm				\
@@ -923,8 +961,9 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/lua.scm				\
   gnu/packages/lvm.scm				\
   gnu/packages/m4.scm				\
-  gnu/packages/mailutils.scm			\
+  gnu/packages/mail.scm				\
   gnu/packages/make-bootstrap.scm		\
+  gnu/packages/maths.scm			\
   gnu/packages/mit-krb5.scm			\
   gnu/packages/mp3.scm				\
   gnu/packages/multiprecision.scm		\
@@ -935,9 +974,11 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/nettle.scm			\
   gnu/packages/noweb.scm			\
   gnu/packages/ocaml.scm			\
+  gnu/packages/ocrad.scm			\
   gnu/packages/oggvorbis.scm			\
   gnu/packages/openldap.scm			\
   gnu/packages/openssl.scm			\
+  gnu/packages/package-management.scm		\
   gnu/packages/parted.scm			\
   gnu/packages/patchelf.scm			\
   gnu/packages/pcre.scm				\
@@ -970,6 +1011,7 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/tmux.scm				\
   gnu/packages/tor.scm				\
   gnu/packages/unrtf.scm			\
+  gnu/packages/valgrind.scm			\
   gnu/packages/version-control.scm		\
   gnu/packages/vim.scm				\
   gnu/packages/vpn.scm				\
@@ -980,18 +1022,29 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/wordnet.scm			\
   gnu/packages/xlockmore.scm			\
   gnu/packages/xml.scm				\
+  gnu/packages/xnee.scm				\
   gnu/packages/xorg.scm				\
+  gnu/packages/yasm.scm				\
   gnu/packages/zile.scm				\
   gnu/packages/zip.scm				\
+						\
+  gnu/system/dmd.scm				\
+  gnu/system/grub.scm				\
+  gnu/system/linux.scm				\
+  gnu/system/shadow.scm				\
   gnu/system/vm.scm
 
 patchdir = $(guilemoduledir)/gnu/packages/patches
 dist_patch_DATA = \
+  gnu/packages/patches/apr-skip-getservbyname-test.patch	\
   gnu/packages/patches/automake-skip-amhello-tests.patch	\
+  gnu/packages/patches/avahi-localstatedir.patch		\
   gnu/packages/patches/bigloo-gc-shebangs.patch			\
   gnu/packages/patches/binutils-ld-new-dtags.patch		\
+  gnu/packages/patches/cdparanoia-fpic.patch			\
   gnu/packages/patches/cmake-fix-tests.patch			\
   gnu/packages/patches/cpio-gets-undeclared.patch		\
+  gnu/packages/patches/dbus-localstatedir.patch			\
   gnu/packages/patches/diffutils-gets-undeclared.patch		\
   gnu/packages/patches/emacs-configure-sh.patch			\
   gnu/packages/patches/findutils-absolute-paths.patch		\
@@ -1003,19 +1056,18 @@ dist_patch_DATA = \
   gnu/packages/patches/glib-tests-homedir.patch			\
   gnu/packages/patches/glib-tests-prlimit.patch			\
   gnu/packages/patches/glibc-bootstrap-system.patch		\
+  gnu/packages/patches/glibc-ldd-x86_64.patch			\
   gnu/packages/patches/glibc-no-ld-so-cache.patch		\
-  gnu/packages/patches/gnutls-fix-tests-on-32-bits-system.patch	\
   gnu/packages/patches/grub-gets-undeclared.patch		\
   gnu/packages/patches/guile-1.8-cpp-4.5.patch			\
   gnu/packages/patches/guile-default-utf8.patch			\
   gnu/packages/patches/guile-linux-syscalls.patch		\
   gnu/packages/patches/guile-relocatable.patch			\
-  gnu/packages/patches/libapr-skip-getservbyname-test.patch	\
+  gnu/packages/patches/hop-bigloo-4.0b.patch			\
   gnu/packages/patches/libevent-dns-tests.patch			\
   gnu/packages/patches/libtool-skip-tests.patch			\
   gnu/packages/patches/m4-gets-undeclared.patch			\
   gnu/packages/patches/m4-readlink-EINVAL.patch			\
-  gnu/packages/patches/m4-s_isdir.patch				\
   gnu/packages/patches/make-impure-dirs.patch			\
   gnu/packages/patches/mcron-install.patch			\
   gnu/packages/patches/perl-no-sys-dirs.patch			\
@@ -1024,10 +1076,12 @@ dist_patch_DATA = \
   gnu/packages/patches/python-fix-dbm.patch			\
   gnu/packages/patches/qemu-multiple-smb-shares.patch		\
   gnu/packages/patches/readline-link-ncurses.patch		\
+  gnu/packages/patches/ripperx-libm.patch			\
   gnu/packages/patches/scheme48-tests.patch			\
   gnu/packages/patches/tar-gets-undeclared.patch		\
   gnu/packages/patches/tcsh-fix-autotest.patch			\
   gnu/packages/patches/teckit-cstdio.patch			\
+  gnu/packages/patches/valgrind-glibc.patch			\
   gnu/packages/patches/vpnc-script.patch			\
   gnu/packages/patches/w3m-fix-compile.patch			\
   gnu/packages/patches/xpdf-constchar.patch
@@ -1101,6 +1155,8 @@ MODULES = \
   guix/build/download.scm			\
   guix/build/cmake-build-system.scm		\
   guix/build/gnu-build-system.scm		\
+  guix/build/gnu-dist.scm			\
+  guix/build/linux-initrd.scm			\
   guix/build/perl-build-system.scm		\
   guix/build/python-build-system.scm		\
   guix/build/utils.scm				\
@@ -1130,31 +1186,26 @@ SCM_TESTS = \
   tests/nar.scm					\
   tests/union.scm
 
-SH_TESTS = \
-  tests/guix-build.sh				\
-  tests/guix-download.sh			\
-  tests/guix-gc.sh				\
-  tests/guix-hash.sh				\
-  tests/guix-package.sh
-
-TESTS = $(SCM_TESTS) $(SH_TESTS) $(am__append_6)
+SH_TESTS = tests/guix-build.sh tests/guix-download.sh tests/guix-gc.sh \
+	tests/guix-hash.sh tests/guix-package.sh $(am__append_3)
+TESTS = $(SCM_TESTS) $(SH_TESTS) $(am__append_7)
 TEST_EXTENSIONS = .scm .sh
 AM_TESTS_ENVIRONMENT = abs_top_srcdir="$(abs_top_srcdir)" \
-	$(am__append_5)
+	$(am__append_6)
 SCM_LOG_COMPILER = $(top_builddir)/test-env $(GUILE)
 AM_SCM_LOG_FLAGS = --no-auto-compile -L "$(top_srcdir)"
 SH_LOG_COMPILER = $(top_builddir)/test-env $(SHELL)
 AM_SH_LOG_FLAGS = -x -e
 EXTRA_DIST = HACKING ROADMAP TODO .dir-locals.el \
-	build-aux/hydra/gnu-system.scm \
+	build-aux/hydra/gnu-system.scm build-aux/hydra/guix.scm \
 	build-aux/check-available-binaries.scm build-aux/download.scm \
 	build-aux/list-packages.scm build-aux/sync-synopses.scm \
 	srfi/srfi-37.scm.in srfi/srfi-64.scm srfi/srfi-64.upstream.scm \
 	tests/test.drv build-aux/config.rpath bootstrap release.nix \
 	$(TESTS) doc/fdl-1.3.texi doc/images/bootstrap-graph.dot \
-	doc/images/bootstrap-graph.eps $(am__append_4)
+	doc/images/bootstrap-graph.eps $(am__append_5)
 CLEANFILES = $(GOBJECTS) $(SCM_TESTS:tests/%.scm=%.log) \
-	$(am__append_3)
+	$(am__append_4)
 AM_V_GUILEC = $(AM_V_GUILEC_$(V))
 AM_V_GUILEC_ = $(AM_V_GUILEC_$(AM_DEFAULT_VERBOSITY))
 AM_V_GUILEC_0 = @echo "  GUILEC" $@;
@@ -1174,11 +1225,12 @@ dist_infoimage_DATA = doc/images/bootstrap-graph.png
 # Try hard to obtain an image size and aspect that's reasonable for inclusion
 # in an Info or PDF document.
 DOT_OPTIONS = \
-  -Tpng -Gratio=.9 -Gnodesep=.005 -Granksep=.00005	\
+  -Gratio=.9 -Gnodesep=.005 -Granksep=.00005	\
   -Nfontsize=9 -Nheight=.1 -Nwidth=.1
 
 @BUILD_DAEMON_TRUE@BUILT_SOURCES = nix/libstore/schema.sql.hh
 @BUILD_DAEMON_TRUE@noinst_LIBRARIES = libformat.a libutil.a libstore.a
+@BUILD_DAEMON_TRUE@AM_CXXFLAGS = -Wall
 @BUILD_DAEMON_TRUE@libformat_a_SOURCES = \
 @BUILD_DAEMON_TRUE@  nix/boost/format/free_funcs.cc		\
 @BUILD_DAEMON_TRUE@  nix/boost/format/parsing.cc			\
@@ -1287,6 +1339,20 @@ DOT_OPTIONS = \
 @BUILD_DAEMON_TRUE@guix_daemon_headers = \
 @BUILD_DAEMON_TRUE@  nix/nix-daemon/shared.hh
 
+@BUILD_DAEMON_TRUE@guix_register_SOURCES = \
+@BUILD_DAEMON_TRUE@  nix/guix-register/guix-register.cc
+
+@BUILD_DAEMON_TRUE@guix_register_CPPFLAGS = \
+@BUILD_DAEMON_TRUE@  $(libutil_a_CPPFLAGS)				\
+@BUILD_DAEMON_TRUE@  $(libstore_a_CPPFLAGS)			\
+@BUILD_DAEMON_TRUE@  -I$(top_srcdir)/nix/libstore
+
+
+# XXX: Should we start using shared libs?
+@BUILD_DAEMON_TRUE@guix_register_LDADD = \
+@BUILD_DAEMON_TRUE@  libstore.a libutil.a libformat.a -lbz2	\
+@BUILD_DAEMON_TRUE@  $(SQLITE3_LIBS) $(LIBGCRYPT_LIBS)
+
 @BUILD_DAEMON_TRUE@nix_setuid_helper_SOURCES = \
 @BUILD_DAEMON_TRUE@  nix/nix-setuid-helper/nix-setuid-helper.cc
 
@@ -1314,10 +1380,10 @@ all: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) all-recursive
 
 .SUFFIXES:
-.SUFFIXES: .go .cc .dot .dvi .eps .log .o .obj .png .ps .scm .scm$(EXEEXT) .sh .sh$(EXEEXT) .trs
+.SUFFIXES: .go .cc .dot .dvi .eps .log .o .obj .pdf .png .ps .scm .scm$(EXEEXT) .sh .sh$(EXEEXT) .trs
 am--refresh: Makefile
 	@:
-$(srcdir)/Makefile.in:  $(srcdir)/Makefile.am $(srcdir)/gnu-system.am $(srcdir)/daemon.am $(am__configure_deps)
+$(srcdir)/Makefile.in:  $(srcdir)/Makefile.am $(srcdir)/gnu-system.am $(srcdir)/doc.am $(srcdir)/daemon.am $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
 	    *$$dep*) \
@@ -1340,7 +1406,7 @@ Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	    echo ' cd $(top_builddir) && $(SHELL) ./config.status $@ $(am__depfiles_maybe)'; \
 	    cd $(top_builddir) && $(SHELL) ./config.status $@ $(am__depfiles_maybe);; \
 	esac;
-$(srcdir)/gnu-system.am $(srcdir)/daemon.am:
+$(srcdir)/gnu-system.am $(srcdir)/doc.am $(srcdir)/daemon.am:
 
 $(top_builddir)/config.status: $(top_srcdir)/configure $(CONFIG_STATUS_DEPENDENCIES)
 	$(SHELL) ./config.status --recheck
@@ -1551,6 +1617,48 @@ uninstall-libexecPROGRAMS:
 
 clean-libexecPROGRAMS:
 	-test -z "$(libexec_PROGRAMS)" || rm -f $(libexec_PROGRAMS)
+install-sbinPROGRAMS: $(sbin_PROGRAMS)
+	@$(NORMAL_INSTALL)
+	@list='$(sbin_PROGRAMS)'; test -n "$(sbindir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(sbindir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(sbindir)" || exit 1; \
+	fi; \
+	for p in $$list; do echo "$$p $$p"; done | \
+	sed 's/$(EXEEXT)$$//' | \
+	while read p p1; do if test -f $$p \
+	  ; then echo "$$p"; echo "$$p"; else :; fi; \
+	done | \
+	sed -e 'p;s,.*/,,;n;h' \
+	    -e 's|.*|.|' \
+	    -e 'p;x;s,.*/,,;s/$(EXEEXT)$$//;$(transform);s/$$/$(EXEEXT)/' | \
+	sed 'N;N;N;s,\n, ,g' | \
+	$(AWK) 'BEGIN { files["."] = ""; dirs["."] = 1 } \
+	  { d=$$3; if (dirs[d] != 1) { print "d", d; dirs[d] = 1 } \
+	    if ($$2 == $$4) files[d] = files[d] " " $$1; \
+	    else { print "f", $$3 "/" $$4, $$1; } } \
+	  END { for (d in files) print "f", d, files[d] }' | \
+	while read type dir files; do \
+	    if test "$$dir" = .; then dir=; else dir=/$$dir; fi; \
+	    test -z "$$files" || { \
+	      echo " $(INSTALL_PROGRAM_ENV) $(INSTALL_PROGRAM) $$files '$(DESTDIR)$(sbindir)$$dir'"; \
+	      $(INSTALL_PROGRAM_ENV) $(INSTALL_PROGRAM) $$files "$(DESTDIR)$(sbindir)$$dir" || exit $$?; \
+	    } \
+	; done
+
+uninstall-sbinPROGRAMS:
+	@$(NORMAL_UNINSTALL)
+	@list='$(sbin_PROGRAMS)'; test -n "$(sbindir)" || list=; \
+	files=`for p in $$list; do echo "$$p"; done | \
+	  sed -e 'h;s,^.*/,,;s/$(EXEEXT)$$//;$(transform)' \
+	      -e 's/$$/$(EXEEXT)/' \
+	`; \
+	test -n "$$list" || exit 0; \
+	echo " ( cd '$(DESTDIR)$(sbindir)' && rm -f" $$files ")"; \
+	cd "$(DESTDIR)$(sbindir)" && rm -f $$files
+
+clean-sbinPROGRAMS:
+	-test -z "$(sbin_PROGRAMS)" || rm -f $(sbin_PROGRAMS)
 nix/nix-daemon/$(am__dirstamp):
 	@$(MKDIR_P) nix/nix-daemon
 	@: > nix/nix-daemon/$(am__dirstamp)
@@ -1567,6 +1675,19 @@ nix/nix-daemon/guix_daemon-guix-daemon.$(OBJEXT):  \
 guix-daemon$(EXEEXT): $(guix_daemon_OBJECTS) $(guix_daemon_DEPENDENCIES) $(EXTRA_guix_daemon_DEPENDENCIES) 
 	@rm -f guix-daemon$(EXEEXT)
 	$(AM_V_CXXLD)$(CXXLINK) $(guix_daemon_OBJECTS) $(guix_daemon_LDADD) $(LIBS)
+nix/guix-register/$(am__dirstamp):
+	@$(MKDIR_P) nix/guix-register
+	@: > nix/guix-register/$(am__dirstamp)
+nix/guix-register/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) nix/guix-register/$(DEPDIR)
+	@: > nix/guix-register/$(DEPDIR)/$(am__dirstamp)
+nix/guix-register/guix_register-guix-register.$(OBJEXT):  \
+	nix/guix-register/$(am__dirstamp) \
+	nix/guix-register/$(DEPDIR)/$(am__dirstamp)
+
+guix-register$(EXEEXT): $(guix_register_OBJECTS) $(guix_register_DEPENDENCIES) $(EXTRA_guix_register_DEPENDENCIES) 
+	@rm -f guix-register$(EXEEXT)
+	$(AM_V_CXXLD)$(CXXLINK) $(guix_register_OBJECTS) $(guix_register_LDADD) $(LIBS)
 nix/nix-setuid-helper/$(am__dirstamp):
 	@$(MKDIR_P) nix/nix-setuid-helper
 	@: > nix/nix-setuid-helper/$(am__dirstamp)
@@ -1654,6 +1775,7 @@ uninstall-nodist_pkglibexecSCRIPTS:
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 	-rm -f nix/boost/format/*.$(OBJEXT)
+	-rm -f nix/guix-register/*.$(OBJEXT)
 	-rm -f nix/libstore/*.$(OBJEXT)
 	-rm -f nix/libutil/*.$(OBJEXT)
 	-rm -f nix/nix-daemon/*.$(OBJEXT)
@@ -1665,6 +1787,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@nix/boost/format/$(DEPDIR)/libformat_a-format_implementation.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nix/boost/format/$(DEPDIR)/libformat_a-free_funcs.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nix/boost/format/$(DEPDIR)/libformat_a-parsing.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@nix/guix-register/$(DEPDIR)/guix_register-guix-register.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nix/libstore/$(DEPDIR)/libstore_a-build.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nix/libstore/$(DEPDIR)/libstore_a-derivations.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@nix/libstore/$(DEPDIR)/libstore_a-gc.Po@am__quote@
@@ -2010,6 +2133,20 @@ nix/nix-daemon/guix_daemon-guix-daemon.obj: nix/nix-daemon/guix-daemon.cc
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(guix_daemon_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o nix/nix-daemon/guix_daemon-guix-daemon.obj `if test -f 'nix/nix-daemon/guix-daemon.cc'; then $(CYGPATH_W) 'nix/nix-daemon/guix-daemon.cc'; else $(CYGPATH_W) '$(srcdir)/nix/nix-daemon/guix-daemon.cc'; fi`
 
+nix/guix-register/guix_register-guix-register.o: nix/guix-register/guix-register.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(guix_register_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT nix/guix-register/guix_register-guix-register.o -MD -MP -MF nix/guix-register/$(DEPDIR)/guix_register-guix-register.Tpo -c -o nix/guix-register/guix_register-guix-register.o `test -f 'nix/guix-register/guix-register.cc' || echo '$(srcdir)/'`nix/guix-register/guix-register.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) nix/guix-register/$(DEPDIR)/guix_register-guix-register.Tpo nix/guix-register/$(DEPDIR)/guix_register-guix-register.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='nix/guix-register/guix-register.cc' object='nix/guix-register/guix_register-guix-register.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(guix_register_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o nix/guix-register/guix_register-guix-register.o `test -f 'nix/guix-register/guix-register.cc' || echo '$(srcdir)/'`nix/guix-register/guix-register.cc
+
+nix/guix-register/guix_register-guix-register.obj: nix/guix-register/guix-register.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(guix_register_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT nix/guix-register/guix_register-guix-register.obj -MD -MP -MF nix/guix-register/$(DEPDIR)/guix_register-guix-register.Tpo -c -o nix/guix-register/guix_register-guix-register.obj `if test -f 'nix/guix-register/guix-register.cc'; then $(CYGPATH_W) 'nix/guix-register/guix-register.cc'; else $(CYGPATH_W) '$(srcdir)/nix/guix-register/guix-register.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) nix/guix-register/$(DEPDIR)/guix_register-guix-register.Tpo nix/guix-register/$(DEPDIR)/guix_register-guix-register.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='nix/guix-register/guix-register.cc' object='nix/guix-register/guix_register-guix-register.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(guix_register_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o nix/guix-register/guix_register-guix-register.obj `if test -f 'nix/guix-register/guix-register.cc'; then $(CYGPATH_W) 'nix/guix-register/guix-register.cc'; else $(CYGPATH_W) '$(srcdir)/nix/guix-register/guix-register.cc'; fi`
+
 nix/nix-setuid-helper/nix_setuid_helper-nix-setuid-helper.o: nix/nix-setuid-helper/nix-setuid-helper.cc
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(nix_setuid_helper_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT nix/nix-setuid-helper/nix_setuid_helper-nix-setuid-helper.o -MD -MP -MF nix/nix-setuid-helper/$(DEPDIR)/nix_setuid_helper-nix-setuid-helper.Tpo -c -o nix/nix-setuid-helper/nix_setuid_helper-nix-setuid-helper.o `test -f 'nix/nix-setuid-helper/nix-setuid-helper.cc' || echo '$(srcdir)/'`nix/nix-setuid-helper/nix-setuid-helper.cc
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) nix/nix-setuid-helper/$(DEPDIR)/nix_setuid_helper-nix-setuid-helper.Tpo nix/nix-setuid-helper/$(DEPDIR)/nix_setuid_helper-nix-setuid-helper.Po
@@ -2053,6 +2190,12 @@ doc/guix.dvi: doc/guix.texi $(srcdir)/doc/version.texi doc/$(am__dirstamp)
 	$(AM_V_TEXI2DVI)TEXINPUTS="$(am__TEXINFO_TEX_DIR)$(PATH_SEPARATOR)$$TEXINPUTS" \
 	MAKEINFO='$(MAKEINFO) $(AM_MAKEINFOFLAGS) $(MAKEINFOFLAGS) -I doc -I $(srcdir)/doc' \
 	$(TEXI2DVI) $(AM_V_texinfo) --build-dir=$(@:.dvi=.t2d) -o $@ $(AM_V_texidevnull) \
+	`test -f 'doc/guix.texi' || echo '$(srcdir)/'`doc/guix.texi
+
+doc/guix.pdf: doc/guix.texi $(srcdir)/doc/version.texi doc/$(am__dirstamp)
+	$(AM_V_TEXI2PDF)TEXINPUTS="$(am__TEXINFO_TEX_DIR)$(PATH_SEPARATOR)$$TEXINPUTS" \
+	MAKEINFO='$(MAKEINFO) $(AM_MAKEINFOFLAGS) $(MAKEINFOFLAGS) -I doc -I $(srcdir)/doc' \
+	$(TEXI2PDF) $(AM_V_texinfo) --build-dir=$(@:.pdf=.t2p) -o $@ $(AM_V_texidevnull) \
 	`test -f 'doc/guix.texi' || echo '$(srcdir)/'`doc/guix.texi
 
 doc/guix.html: doc/guix.texi $(srcdir)/doc/version.texi doc/$(am__dirstamp)
@@ -2827,7 +2970,7 @@ all-am: Makefile $(INFO_DEPS) $(LIBRARIES) $(PROGRAMS) $(SCRIPTS) \
 		$(DATA) $(HEADERS)
 installdirs: installdirs-recursive
 installdirs-am:
-	for dir in "$(DESTDIR)$(bindir)" "$(DESTDIR)$(libexecdir)" "$(DESTDIR)$(bindir)" "$(DESTDIR)$(pkglibexecdir)" "$(DESTDIR)$(infodir)" "$(DESTDIR)$(bootstrap_i686_linuxdir)" "$(DESTDIR)$(bootstrap_x86_64_linuxdir)" "$(DESTDIR)$(infoimagedir)" "$(DESTDIR)$(patchdir)" "$(DESTDIR)$(guilemoduledir)" "$(DESTDIR)$(guilemoduledir)" "$(DESTDIR)$(bootstrap_i686_linuxdir)" "$(DESTDIR)$(bootstrap_x86_64_linuxdir)"; do \
+	for dir in "$(DESTDIR)$(bindir)" "$(DESTDIR)$(libexecdir)" "$(DESTDIR)$(sbindir)" "$(DESTDIR)$(bindir)" "$(DESTDIR)$(pkglibexecdir)" "$(DESTDIR)$(infodir)" "$(DESTDIR)$(bootstrap_i686_linuxdir)" "$(DESTDIR)$(bootstrap_x86_64_linuxdir)" "$(DESTDIR)$(infoimagedir)" "$(DESTDIR)$(patchdir)" "$(DESTDIR)$(guilemoduledir)" "$(DESTDIR)$(guilemoduledir)" "$(DESTDIR)$(bootstrap_i686_linuxdir)" "$(DESTDIR)$(bootstrap_x86_64_linuxdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: $(BUILT_SOURCES)
@@ -2864,6 +3007,8 @@ distclean-generic:
 	-rm -f doc/$(am__dirstamp)
 	-rm -f nix/boost/format/$(DEPDIR)/$(am__dirstamp)
 	-rm -f nix/boost/format/$(am__dirstamp)
+	-rm -f nix/guix-register/$(DEPDIR)/$(am__dirstamp)
+	-rm -f nix/guix-register/$(am__dirstamp)
 	-rm -f nix/libstore/$(DEPDIR)/$(am__dirstamp)
 	-rm -f nix/libstore/$(am__dirstamp)
 	-rm -f nix/libutil/$(DEPDIR)/$(am__dirstamp)
@@ -2883,11 +3028,11 @@ clean: clean-recursive
 
 clean-am: clean-aminfo clean-binPROGRAMS clean-generic \
 	clean-libexecPROGRAMS clean-local clean-noinstLIBRARIES \
-	mostlyclean-am
+	clean-sbinPROGRAMS mostlyclean-am
 
 distclean: distclean-recursive
 	-rm -f $(am__CONFIG_DISTCLEAN_FILES)
-	-rm -rf nix/boost/format/$(DEPDIR) nix/libstore/$(DEPDIR) nix/libutil/$(DEPDIR) nix/nix-daemon/$(DEPDIR) nix/nix-setuid-helper/$(DEPDIR)
+	-rm -rf nix/boost/format/$(DEPDIR) nix/guix-register/$(DEPDIR) nix/libstore/$(DEPDIR) nix/libutil/$(DEPDIR) nix/nix-daemon/$(DEPDIR) nix/nix-setuid-helper/$(DEPDIR)
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-hdr distclean-tags
@@ -2902,7 +3047,7 @@ html-am: $(HTMLS)
 
 info: info-recursive
 
-info-am: $(INFO_DEPS)
+info-am: $(INFO_DEPS) info-local
 
 install-data-am: install-dist_bootstrap_i686_linuxDATA \
 	install-dist_bootstrap_x86_64_linuxDATA \
@@ -2931,7 +3076,8 @@ install-dvi-am: $(DVIS)
 	  $(INSTALL_DATA) $$files "$(DESTDIR)$(dvidir)" || exit $$?; \
 	done
 install-exec-am: install-binPROGRAMS install-binSCRIPTS \
-	install-libexecPROGRAMS install-nodist_pkglibexecSCRIPTS
+	install-libexecPROGRAMS install-nodist_pkglibexecSCRIPTS \
+	install-sbinPROGRAMS
 
 install-html: install-html-recursive
 
@@ -3034,7 +3180,7 @@ installcheck-am:
 maintainer-clean: maintainer-clean-recursive
 	-rm -f $(am__CONFIG_DISTCLEAN_FILES)
 	-rm -rf $(top_srcdir)/autom4te.cache
-	-rm -rf nix/boost/format/$(DEPDIR) nix/libstore/$(DEPDIR) nix/libutil/$(DEPDIR) nix/nix-daemon/$(DEPDIR) nix/nix-setuid-helper/$(DEPDIR)
+	-rm -rf nix/boost/format/$(DEPDIR) nix/guix-register/$(DEPDIR) nix/libstore/$(DEPDIR) nix/libutil/$(DEPDIR) nix/nix-daemon/$(DEPDIR) nix/nix-setuid-helper/$(DEPDIR)
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-aminfo \
 	maintainer-clean-generic maintainer-clean-vti
@@ -3046,11 +3192,11 @@ mostlyclean-am: mostlyclean-aminfo mostlyclean-compile \
 
 pdf: pdf-recursive
 
-pdf-am: $(PDFS)
+pdf-am: $(PDFS) pdf-local
 
 ps: ps-recursive
 
-ps-am: $(PSS)
+ps-am: $(PSS) ps-local
 
 uninstall-am: uninstall-binPROGRAMS uninstall-binSCRIPTS \
 	uninstall-dist_bootstrap_i686_linuxDATA \
@@ -3063,7 +3209,7 @@ uninstall-am: uninstall-binPROGRAMS uninstall-binSCRIPTS \
 	uninstall-nodist_bootstrap_i686_linuxDATA \
 	uninstall-nodist_bootstrap_x86_64_linuxDATA \
 	uninstall-nodist_pkglibexecSCRIPTS uninstall-pdf-am \
-	uninstall-ps-am
+	uninstall-ps-am uninstall-sbinPROGRAMS
 
 .MAKE: $(am__recursive_targets) all check check-am install install-am \
 	install-data-am install-strip
@@ -3071,15 +3217,16 @@ uninstall-am: uninstall-binPROGRAMS uninstall-binSCRIPTS \
 .PHONY: $(am__recursive_targets) CTAGS GTAGS TAGS all all-am \
 	am--refresh check check-TESTS check-am clean clean-aminfo \
 	clean-binPROGRAMS clean-cscope clean-generic \
-	clean-libexecPROGRAMS clean-local clean-noinstLIBRARIES cscope \
-	cscopelist-am ctags ctags-am dist dist-all dist-bzip2 \
-	dist-gzip dist-hook dist-info dist-lzip dist-shar dist-tarZ \
-	dist-xz dist-zip distcheck distclean distclean-compile \
-	distclean-generic distclean-hdr distclean-tags distcleancheck \
-	distdir distuninstallcheck dvi dvi-am html html-am info \
-	info-am install install-am install-binPROGRAMS \
-	install-binSCRIPTS install-data install-data-am \
-	install-data-hook install-dist_bootstrap_i686_linuxDATA \
+	clean-libexecPROGRAMS clean-local clean-noinstLIBRARIES \
+	clean-sbinPROGRAMS cscope cscopelist-am ctags ctags-am dist \
+	dist-all dist-bzip2 dist-gzip dist-hook dist-info dist-lzip \
+	dist-shar dist-tarZ dist-xz dist-zip distcheck distclean \
+	distclean-compile distclean-generic distclean-hdr \
+	distclean-tags distcleancheck distdir distuninstallcheck dvi \
+	dvi-am html html-am info info-am info-local install install-am \
+	install-binPROGRAMS install-binSCRIPTS install-data \
+	install-data-am install-data-hook \
+	install-dist_bootstrap_i686_linuxDATA \
 	install-dist_bootstrap_x86_64_linuxDATA \
 	install-dist_infoimageDATA install-dist_patchDATA install-dvi \
 	install-dvi-am install-exec install-exec-am install-html \
@@ -3090,14 +3237,14 @@ uninstall-am: uninstall-binPROGRAMS uninstall-binSCRIPTS \
 	install-nodist_bootstrap_i686_linuxDATA \
 	install-nodist_bootstrap_x86_64_linuxDATA \
 	install-nodist_pkglibexecSCRIPTS install-pdf install-pdf-am \
-	install-ps install-ps-am install-strip installcheck \
-	installcheck-am installdirs installdirs-am maintainer-clean \
-	maintainer-clean-aminfo maintainer-clean-generic \
-	maintainer-clean-vti mostlyclean mostlyclean-aminfo \
-	mostlyclean-compile mostlyclean-generic mostlyclean-vti pdf \
-	pdf-am ps ps-am recheck tags tags-am uninstall uninstall-am \
-	uninstall-binPROGRAMS uninstall-binSCRIPTS \
-	uninstall-dist_bootstrap_i686_linuxDATA \
+	install-ps install-ps-am install-sbinPROGRAMS install-strip \
+	installcheck installcheck-am installdirs installdirs-am \
+	maintainer-clean maintainer-clean-aminfo \
+	maintainer-clean-generic maintainer-clean-vti mostlyclean \
+	mostlyclean-aminfo mostlyclean-compile mostlyclean-generic \
+	mostlyclean-vti pdf pdf-am pdf-local ps ps-am ps-local recheck \
+	tags tags-am uninstall uninstall-am uninstall-binPROGRAMS \
+	uninstall-binSCRIPTS uninstall-dist_bootstrap_i686_linuxDATA \
 	uninstall-dist_bootstrap_x86_64_linuxDATA \
 	uninstall-dist_infoimageDATA uninstall-dist_patchDATA \
 	uninstall-dvi-am uninstall-html-am uninstall-info-am \
@@ -3107,7 +3254,7 @@ uninstall-am: uninstall-binPROGRAMS uninstall-binSCRIPTS \
 	uninstall-nodist_bootstrap_i686_linuxDATA \
 	uninstall-nodist_bootstrap_x86_64_linuxDATA \
 	uninstall-nodist_pkglibexecSCRIPTS uninstall-pdf-am \
-	uninstall-ps-am
+	uninstall-ps-am uninstall-sbinPROGRAMS
 
 
 # Those files must remain executable, so they remain executable once
@@ -3150,16 +3297,23 @@ tests/guix-gc.log:							\
 $(guix_install_go_files): install-nobase_dist_guilemoduleDATA
 
 .dot.png:
-	dot -Tpng $(DOT_OPTIONS) < "$<" > "$@.tmp"
+	$(DOT) -Tpng $(DOT_OPTIONS) < "$<" > "$@.tmp"
+	mv "$@.tmp" "$@"
+
+.dot.pdf:
+	$(DOT) -Tpdf $(DOT_OPTIONS) < "$<" > "$@.tmp"
 	mv "$@.tmp" "$@"
 
 .dot.eps:
-	dot -Teps $(DOT_OPTIONS) < "$<" > "$@.tmp"
+	$(DOT) -Teps $(DOT_OPTIONS) < "$<" > "$@.tmp"
 	mv "$@.tmp" "$@"
 
-doc/guix.pdf: doc/images/bootstrap-graph.png
-doc/guix.info: doc/images/bootstrap-graph.png
-doc/guix.ps: doc/images/bootstrap-graph.eps
+# We cannot add new dependencies to `doc/guix.pdf' & co. (info "(automake)
+# Extending").  Using the `-local' rules is imperfect, because they may be
+# triggered after the main rule.  Oh, well.
+pdf-local: doc/images/bootstrap-graph.pdf
+info-local: doc/images/bootstrap-graph.png
+ps-local: doc/images/bootstrap-graph.eps
 
 @BUILD_DAEMON_TRUE@nix/libstore/schema.sql.hh: nix/libstore/schema.sql
 @BUILD_DAEMON_TRUE@	$(GUILE) --no-auto-compile -c				\

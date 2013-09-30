@@ -32,7 +32,7 @@
 (define-public mpfrcx
   (package
    (name "mpfrcx")
-   (version "0.4.1")
+   (version "0.4.2")
    (source (origin
             (method url-fetch)
             (uri (string-append
@@ -40,7 +40,7 @@
                   version ".tar.gz"))
             (sha256
              (base32
-              "1rrc75chxyicqjgg5mfhgbz7p9mx1fgh0qlx14a82m25vfhifnd1"))))
+              "0grw66b255r574lvll1bqccm5myj2m8ajzsjaygcyq9zjnnbnhhy"))))
    (build-system gnu-build-system)
    (inputs `(("gmp" ,gmp)
              ("mpfr" ,mpfr)
@@ -60,14 +60,14 @@ multiplication routines such as Toom–Cook and the FFT. ")
 (define-public fplll
   (package
    (name "fplll")
-   (version "4.0.2")
+   (version "4.0.4")
    (source (origin
             (method url-fetch)
             (uri (string-append
                   "http://perso.ens-lyon.fr/damien.stehle/fplll/libfplll-"
                   version ".tar.gz"))
             (sha256 (base32
-                     "0zkifm4s77cl2qib905lxpwvlwf6liy8q7bnmvfdfyz0fbgxl8z8"))))
+                     "1cbiby7ykis4z84swclpysrljmqhfcllpkcbll1m08rzskgb1a6b"))))
    (build-system gnu-build-system)
    (inputs `(("gmp" ,gmp)
              ("mpfr" ,mpfr)))
@@ -78,43 +78,17 @@ solve the shortest vector problem.")
    (license lgpl2.1+)
    (home-page "http://perso.ens-lyon.fr/damien.stehle/fplll/")))
 
-(define-public gsl
-  (package
-    (name "gsl")
-    (version "1.15")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://gnu/gsl/gsl-"
-                          version ".tar.gz"))
-      (sha256
-       (base32
-        "18qf6jzz1r3mzb5qynywv4xx3z9g61hgkbpkdrhbgqh2g7jhgfc5"))))
-    (build-system gnu-build-system)
-    (home-page "http://www.gnu.org/software/gsl/")
-    (synopsis "Numerical library for C and C++")
-    (description
-     "The GNU Scientific Library (GSL) is a numerical library for C
-and C++ programmers.  It is free software under the GNU General
-Public License.
-
-The library provides a wide range of mathematical routines such
-as random number generators, special functions and least-squares
-fitting.  There are over 1000 functions in total with an
-extensive test suite.")
-    (license gpl3+)))
-
 (define-public pari-gp
   (package
    (name "pari-gp")
-   (version "2.5.3")
+   (version "2.5.4")
    (source (origin
             (method url-fetch)
             (uri (string-append
                   "http://pari.math.u-bordeaux.fr/pub/pari/unix/pari-"
                   version ".tar.gz"))
             (sha256 (base32
-                     "0zsjccnnv00kwj2gk3ww2v530kjin1rgj8p8hbl4pwcnwc7m68gl"))))
+                     "0gpsj5n8d1gyl7nq2y915sscs3d334ryrv8qgjdwqf3cr95f2dwz"))))
    (build-system gnu-build-system)
    (inputs `(("gmp" ,gmp)
              ("perl" ,perl)

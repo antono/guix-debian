@@ -143,9 +143,8 @@ again."
 provide."
   (case (uri-scheme uri)
     ((file)
-     (let ((port (open-input-file (uri-path uri))))
-       (unless buffered?
-         (setvbuf port _IONBF))
+     (let ((port (open-file (uri-path uri)
+                            (if buffered? "rb" "r0b"))))
        (values port (stat:size (stat port)))))
     ((http)
      ;; On Guile 2.0.5, `http-fetch' fetches the whole thing at once.  So
@@ -156,7 +155,7 @@ provide."
      ;; and then cancel with:
      ;;   sudo tc qdisc del dev eth0 root
      (let ((port #f))
-       (with-timeout (if (or timeout? (version>? (version) "2.0.5"))
+       (with-timeout (if (or timeout? (guile-version>? "2.0.5"))
                          %fetch-timeout
                          0)
          (begin
@@ -416,9 +415,17 @@ PORT.  REPORT-PROGRESS is a two-argument procedure such as that returned by
       ;; XXX: We're not in control, so we always return anyway.
       n))
 
-  (make-custom-binary-input-port "progress-port-proc"
-                                 read! #f #f
-                                 (cut close-port port)))
+  ;; Since `http-fetch' in Guile 2.0.5 returns all the data once it's done,
+  ;; don't pretend to report any progress in that case.
+  (if (guile-version>? "2.0.5")
+      (make-custom-binary-input-port "progress-port-proc"
+                                     read! #f #f
+                                     (cut close-port port))
+      (begin
+        (format (current-error-port) (_ "Downloading, please wait...~%"))
+        (format (current-error-port)
+                (_ "(Please consider upgrading Guile to get proper progress report.)~%"))
+        port)))
 
 (define %cache-url
   (or (getenv "GUIX_BINARY_SUBSTITUTE_URL")
@@ -436,6 +443,30 @@ PORT.  REPORT-PROGRESS is a two-argument procedure such as that returned by
        (lambda (key error)
          (leave (_ "host name lookup error: ~a~%")
                 (gai-strerror error)))))))
+
+
+;;;
+;;; Help.
+;;;
+
+(define (show-help)
+  (display (_ "Usage: guix substitute-binary [OPTION]...
+Internal tool to substitute a pre-built binary to a local build.\n"))
+  (display (_ "
+      --query            report on the availability of substitutes for the
+                         store file names passed on the standard input"))
+  (display (_ "
+      --substitute STORE-FILE DESTINATION
+                         download STORE-FILE and store it as a Nar in file
+                         DESTINATION"))
+  (newline)
+  (display (_ "
+  -h, --help             display this help and exit"))
+  (display (_ "
+  -V, --version          display version information and exit"))
+  (newline)
+  (show-bug-report-information))
+
 
 
 ;;;
@@ -501,8 +532,13 @@ PORT.  REPORT-PROGRESS is a two-argument procedure such as that returned by
         ;; Tell the daemon what the expected hash of the Nar itself is.
         (format #t "~a~%" (narinfo-hash narinfo))
 
-        (format (current-error-port) "downloading `~a' from `~a'...~%"
-                store-path (uri->string uri))
+        (format (current-error-port) "downloading `~a' from `~a'~:[~*~; (~,1f MiB installed)~]...~%"
+                store-path (uri->string uri)
+
+                ;; Use the Nar size as an estimate of the installed size.
+                (narinfo-size narinfo)
+                (and=> (narinfo-size narinfo)
+                       (cute / <> (expt 2. 20))))
         (let*-values (((raw download-size)
                        ;; Note that Hydra currently generates Nars on the fly
                        ;; and doesn't specify a Content-Length, so
@@ -524,7 +560,11 @@ PORT.  REPORT-PROGRESS is a two-argument procedure such as that returned by
           (restore-file input destination)
           (every (compose zero? cdr waitpid) pids))))
      (("--version")
-      (show-version-and-exit "guix substitute-binary")))))
+      (show-version-and-exit "guix substitute-binary"))
+     (("--help")
+      (show-help))
+     (opts
+      (leave (_ "~a: unrecognized options~%") opts)))))
 
 
 ;;; Local Variables:

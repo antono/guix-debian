@@ -32,6 +32,7 @@
   #:use-module (gnu packages avahi)
   #:use-module (gnu packages libphidget)
   #:use-module (gnu packages glib)
+  #:use-module (gnu packages gtk)
   #:use-module (gnu packages libffi)
   #:use-module (gnu packages libjpeg)
   #:use-module ((gnu packages gtk) #:select (cairo pango))
@@ -118,14 +119,14 @@ development cycle.")
 (define-public bigloo
   (package
     (name "bigloo")
-    (version "4.0a")
+    (version "4.0b")
     (source (origin
              (method url-fetch)
              (uri (string-append "ftp://ftp-sop.inria.fr/indes/fp/Bigloo/bigloo"
                                  version ".tar.gz"))
              (sha256
               (base32
-               "1771z43nmf9awjvlvrpjfhzcfxsbw2qipir8g9r47sygf2vn59yl"))))
+               "1fck2h48f0bvh8fl437cagmp0syfxy9lqacy1zwsis20fc76jvzi"))))
     (build-system gnu-build-system)
     (arguments
      `(#:patches (list (assoc-ref %build-inputs "patch/shebangs"))
@@ -150,8 +151,14 @@ development cycle.")
                                      "/lib/bigloo/" ,version)))
 
                    ;; Those variables are used by libgc's `configure'.
-                   (setenv "SHELL" (which "bash"))
-                   (setenv "CONFIG_SHELL" (which "bash"))
+                   (setenv "SHELL" (which "sh"))
+                   (setenv "CONFIG_SHELL" (which "sh"))
+
+                   ;; ... but they turned out to be overridden later, so work
+                   ;; around that.
+                   (substitute* (find-files "gc" "^configure-gc")
+                     (("sh=/bin/sh")
+                      (string-append "sh=" (which "sh"))))
 
                    ;; The `configure' script doesn't understand options
                    ;; of those of Autoconf.
@@ -162,21 +169,14 @@ development cycle.")
                                (string-append"--mv=" (which "mv"))
                                (string-append "--rm=" (which "rm"))))))
                  (alist-cons-after
-                  'patch 'patch-absolute-file-names
-                  (lambda _
-                    (substitute* (cons "configure"
-                                       (find-files "gc" "^install-gc"))
-                      (("/bin/rm") (which "rm"))
-                      (("/bin/mv") (which "mv"))))
-                  (alist-cons-after
-                   'install 'install-emacs-modes
-                   (lambda* (#:key outputs #:allow-other-keys)
-                     (let* ((out (assoc-ref outputs "out"))
-                            (dir (string-append out "/share/emacs/site-lisp")))
-                       (zero? (system* "make" "-C" "bmacs" "all" "install"
-                                       (string-append "EMACSBRAND=emacs24")
-                                       (string-append "EMACSDIR=" dir)))))
-                   %standard-phases)))))
+                  'install 'install-emacs-modes
+                  (lambda* (#:key outputs #:allow-other-keys)
+                    (let* ((out (assoc-ref outputs "out"))
+                           (dir (string-append out "/share/emacs/site-lisp")))
+                      (zero? (system* "make" "-C" "bmacs" "all" "install"
+                                      (string-append "EMACSBRAND=emacs24")
+                                      (string-append "EMACSDIR=" dir)))))
+                  %standard-phases))))
     (inputs
      `(("emacs" ,emacs)
        ("patch/shebangs" ,(search-patch "bigloo-gc-shebangs.patch"))
@@ -252,6 +252,7 @@ between Scheme and C# programs.")
                                         "\\.so$")))))
          %standard-phases))
        #:tests? #f                                ; no test suite
+       #:patches (list (assoc-ref %build-inputs "patch/bigloo-4.0b"))
        #:modules ((guix build gnu-build-system)
                   (guix build utils)
                   (ice-9 popen)
@@ -260,7 +261,10 @@ between Scheme and C# programs.")
                   (srfi srfi-1))))
     (inputs `(("bigloo" ,bigloo)
               ("which" ,which)
-              ("patchelf" ,patchelf)))
+              ("patchelf" ,patchelf)
+
+              ("patch/bigloo-4.0b"
+               ,(search-patch "hop-bigloo-4.0b.patch"))))
     (home-page "http://hop.inria.fr/")
     (synopsis "A multi-tier programming language for the Web 2.0")
     (description
@@ -355,12 +359,15 @@ implementation techniques and as an expository tool.")
      '(#:phases
        (let* ((gui-libs
                (lambda (inputs)
-                 ;; FIXME: Add GTK+ and GDK for DrRacket.
-                 (let ((glib     (string-append (assoc-ref inputs "glib") "/lib"))
-                       (cairo    (string-append (assoc-ref inputs "cairo") "/lib"))
-                       (pango    (string-append (assoc-ref inputs "pango") "/lib"))
-                       (libjpeg  (string-append (assoc-ref inputs "libjpeg") "/lib")))
-                   (list glib cairo pango libjpeg)))))
+                 (define (lib input)
+                   (string-append (assoc-ref inputs input) "/lib"))
+
+                 (list (lib "glib")
+                       (lib "cairo")
+                       (lib "pango")
+                       (lib "libjpeg")
+                       (lib "gtk")
+                       (lib "gdk-pixbuf")))))
          (alist-cons-before
           'configure 'pre-configure
           (lambda* (#:key inputs #:allow-other-keys)
@@ -394,7 +401,9 @@ implementation techniques and as an expository tool.")
               ("glib" ,glib)                      ; for DrRacket
               ("cairo" ,cairo)
               ("pango" ,pango)
-              ("libjpeg" ,libjpeg-8)))
+              ("libjpeg" ,libjpeg-8)
+              ("gdk-pixbuf" ,gdk-pixbuf)
+              ("gtk" ,gtk+)))
     (home-page "http://racket-lang.org")
     (synopsis "Implementation of Scheme and related languages")
     (description

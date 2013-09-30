@@ -35,13 +35,20 @@
 ;;
 ;; Code:
 
+(define (default-cmake)
+  "Return the default CMake package."
+
+  ;; Do not use `@' to avoid introducing circular dependencies.
+  (let ((module (resolve-interface '(gnu packages cmake))))
+    (module-ref module 'cmake)))
+
 (define* (cmake-build store name source inputs
                      #:key (guile #f)
                      (outputs '("out")) (configure-flags ''())
                      (search-paths '())
                      (make-flags ''())
                      (patches ''()) (patch-flags ''("--batch" "-p1"))
-                     (cmake (@ (gnu packages cmake) cmake))
+                     (cmake (default-cmake))
                      (out-of-source? #f)
                      (tests? #t)
                      (test-target "test")
@@ -65,9 +72,9 @@ provides a 'CMakeLists.txt' file as its build system."
   (define builder
     `(begin
        (use-modules ,@modules)
-       (cmake-build #:source ,(if (and source (derivation-path? source))
-                                 (derivation-path->output-path source)
-                                 source)
+       (cmake-build #:source ,(if (derivation? source)
+                                  (derivation->output-path source)
+                                  source)
                     #:system ,system
                     #:outputs %outputs
                     #:inputs %build-inputs

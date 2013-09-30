@@ -23,6 +23,7 @@
 @title GNU Guix Reference Manual
 @subtitle Using the GNU Guix Functional Package Manager
 @author Ludovic Courtès
+@author Andreas Enge
 @author Nikita Karetnikov
 
 @page
@@ -30,8 +31,9 @@
 Edition @value{EDITION} @*
 @value{UPDATED} @*
 
-Copyright @copyright{} @value{YEARS} Ludovic Court@`es
+Copyright @copyright{} @value{YEARS} Ludovic Court@`es, Andreas Enge, Nikita Karetnikov
 
+@ifinfo
 @quotation
 Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3 or
@@ -40,6 +42,8 @@ Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.  A
 copy of the license is included in the section entitled ``GNU Free
 Documentation License''.
 @end quotation
+@end ifinfo
+
 @end titlepage
 
 @copying
@@ -64,8 +68,9 @@ Documentation License.''
 This document describes GNU Guix version @value{VERSION}, a functional
 package management tool written for the GNU system.
 
+
 @quotation
-Copyright @copyright{} @value{YEARS} Ludovic Courtès
+Copyright @copyright{} @value{YEARS} Ludovic Courtès, Andreas Enge, Nikita Karetnikov
 
 Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3 or
@@ -243,6 +248,17 @@ The @code{guix-daemon} program may then be run as @code{root} with:
 @example
 # guix-daemon --build-users-group=guix-builder
 @end example
+
+@noindent
+This way, the daemon starts build processes in a chroot, under one of
+the @code{guix-builder} users.  On GNU/Linux, by default, the chroot
+environment contains nothing but the @code{/dev} and @code{/proc}
+directories@footnote{On some systems @code{/dev/shm}, which supports
+shared memory, is a symlink to another directory such as
+@code{/run/shm}, that is @emph{not} is the chroot.  When that is the
+case, shared memory support is unavailable in the chroot environment.
+The workaround is to make sure that @file{/dev/shm} is directly a
+@code{tmpfs} mount point.}.
 
 Guix may also be used in a single-user setup, with @command{guix-daemon}
 running as an unprivileged user.  However, to maximize non-interference
@@ -521,9 +537,9 @@ Thus, when installing MPC, the MPFR and GMP libraries also get installed
 in the profile; removing MPC also removes MPFR and GMP---unless they had
 also been explicitly installed independently.
 
-Besides, packages sometime rely on the definition of environment
+Besides, packages sometimes rely on the definition of environment
 variables for their search paths (see explanation of
-@code{--search-paths} below.)  Any missing or possibly incorrect
+@code{--search-paths} below).  Any missing or possibly incorrect
 environment variable definitions are reported here.
 
 @c XXX: keep me up-to-date
@@ -567,9 +583,8 @@ When combined with options such as @code{--install}, roll back occurs
 before any other actions.
 
 When rolling back from the first generation that actually contains
-installed packages, the profile is made to point to the @dfn{empty
-profile}, also known as @dfn{profile zero}---i.e., it contains no files
-apart from its own meta-data.
+installed packages, the profile is made to point to the @dfn{zeroth
+generation}, which contains no files apart from its own meta-data.
 
 Installing, removing, or upgrading packages from a generation that has
 been rolled back to overwrites previous future generations.  Thus, the
@@ -643,9 +658,9 @@ version: 7.2alpha6
 
 @item --list-installed[=@var{regexp}]
 @itemx -I [@var{regexp}]
-List currently installed packages in the specified profile.  When
-@var{regexp} is specified, list only installed packages whose name
-matches @var{regexp}.
+List the currently installed packages in the specified profile, with the
+most recently installed packages shown last.  When @var{regexp} is
+specified, list only installed packages whose name matches @var{regexp}.
 
 For each installed package, print the following items, separated by
 tabs: the package name, its version string, the part of the package that
@@ -662,6 +677,61 @@ installed packages whose name matches @var{regexp}.
 For each package, print the following items separated by tabs: its name,
 its version string, the parts of the package (@pxref{Packages with
 Multiple Outputs}), and the source location of its definition.
+
+@item --list-generations[=@var{pattern}]
+@itemx -l [@var{pattern}]
+Return a list of generations along with their creation dates; for each
+generation, show the installed packages, with the most recently
+installed packages shown last.  Note that the zeroth generation is never
+shown.
+
+For each installed package, print the following items, separated by
+tabs: the name of a package, its version string, the part of the package
+that is installed (@pxref{Packages with Multiple Outputs}), and the
+location of this package in the store.
+
+When @var{pattern} is used, the command returns only matching
+generations.  Valid patterns include:
+
+@itemize
+@item @emph{Integers and comma-separated integers}.  Both patterns denote
+generation numbers.  For instance, @code{--list-generations=1} returns
+the first one.
+
+And @code{--list-generations=1,8,2} outputs three generations in the
+specified order.  Neither spaces nor trailing commas are allowed.
+
+@item @emph{Ranges}.  @code{--list-generations=2..9} prints the
+specified generations and everything in between.  Note that the start of
+a range must be lesser than its end.
+
+It is also possible to omit the endpoint.  For example,
+@code{--list-generations=2..}, returns all generations starting from the
+second one.
+
+@item @emph{Durations}.  You can also get the last @emph{N}@tie{}days, weeks,
+or months by passing an integer along with the first letter of the
+duration.  For example, @code{--list-generations=20d} lists generations
+that are up to 20 days old.
+@end itemize
+
+@item --delete-generations[=@var{pattern}]
+@itemx -d [@var{pattern}]
+When @var{pattern} is omitted, delete all generations except the current
+one.
+
+This command accepts the same patterns as @option{--list-generations}.
+When @var{pattern} is specified, delete the matching generations.  When
+@var{pattern} specifies a duration, generations @emph{older} than the
+specified duration match.  For instance, @code{--delete-generations=1m}
+deletes generations that are more than one month old.
+
+If the current generation matches, it is deleted atomically---i.e., by
+switching to the previous available generation.  Note that the zeroth
+generation is never deleted.
+
+Note that deleting generations prevents roll-back to them.
+Consequently, this command must be used with care.
 
 @end table
 
@@ -729,6 +799,12 @@ cannot be deleted; any other file is considered @dfn{dead} and may be
 deleted.  The set of garbage collector roots includes default user
 profiles, and may be augmented with @command{guix build --root}, for
 example (@pxref{Invoking guix build}).
+
+Prior to running @code{guix gc --collect-garbage} to make space, it is
+often useful to remove old generations from user profiles; that way, old
+package builds referenced by those generations can be reclaimed.  This
+is achieved by running @code{guix package --delete-generations}
+(@pxref{Invoking guix package}).
 
 The @command{guix gc} command has three modes of operation: it can be
 used to garbage-collect any dead files (the default), to delete specific
@@ -971,8 +1047,8 @@ The build actions it prescribes may then be realized by using the
 @code{build-derivations} procedure (@pxref{The Store}).
 
 @deffn {Scheme Procedure} package-derivation @var{store} @var{package} [@var{system}]
-Return the derivation path and corresponding @code{<derivation>} object
-of @var{package} for @var{system} (@pxref{Derivations}).
+Return the @code{<derivation>} object of @var{package} for @var{system}
+(@pxref{Derivations}).
 
 @var{package} must be a valid @code{<package>} object, and @var{system}
 must be a string denoting the target system type---e.g.,
@@ -988,8 +1064,8 @@ package for some other system:
 
 @deffn {Scheme Procedure} package-cross-derivation @var{store} @
             @var{package} @var{target} [@var{system}]
-Return the derivation path and corresponding @code{<derivation>} object
-of @var{package} cross-built from @var{system} to @var{target}.
+Return the @code{<derivation>} object of @var{package} cross-built from
+@var{system} to @var{target}.
 
 @var{target} must be a valid GNU triplet denoting the target hardware
 and operating system, such as @code{"mips64el-linux-gnu"}
@@ -1045,15 +1121,16 @@ argument.
 Return @code{#t} when @var{path} is a valid store path.
 @end deffn
 
-@deffn {Scheme Procedure} add-text-to-store @var{server} @var{name} @var{text} @var{references}
+@deffn {Scheme Procedure} add-text-to-store @var{server} @var{name} @var{text} [@var{references}]
 Add @var{text} under file @var{name} in the store, and return its store
 path.  @var{references} is the list of store paths referred to by the
 resulting store path.
 @end deffn
 
 @deffn {Scheme Procedure} build-derivations @var{server} @var{derivations}
-Build @var{derivations} (a list of derivation paths), and return when
-the worker is done building them.  Return @code{#t} on success.
+Build @var{derivations} (a list of @code{<derivation>} objects or
+derivation paths), and return when the worker is done building them.
+Return @code{#t} on success.
 @end deffn
 
 @c FIXME
@@ -1102,13 +1179,18 @@ derivations as Scheme objects, along with procedures to create and
 otherwise manipulate derivations.  The lowest-level primitive to create
 a derivation is the @code{derivation} procedure:
 
-@deffn {Scheme Procedure} derivation @var{store} @var{name} @var{system} @var{builder} @var{args} @var{env-vars} @var{inputs} [#:outputs '("out")] [#:hash #f] [#:hash-algo #f] [#:hash-mode #f]
-Build a derivation with the given arguments.  Return the resulting store
-path and @code{<derivation>} object.
+@deffn {Scheme Procedure} derivation @var{store} @var{name} @var{builder} @var{args} [#:outputs '("out")] [#:hash #f] [#:hash-algo #f] [#:hash-mode #f] [#:inputs '()] [#:env-vars '()] [#:system (%current-system)] [#:references-graphs #f]
+Build a derivation with the given arguments, and return the resulting
+@code{<derivation>} object.
 
 When @var{hash}, @var{hash-algo}, and @var{hash-mode} are given, a
 @dfn{fixed-output derivation} is created---i.e., one whose result is
 known in advance, such as a file download.
+
+When @var{references-graphs} is true, it must be a list of file
+name/store path pairs.  In that case, the reference graph of each store
+path is exported in the build environment in the corresponding file, in
+a simple text format.
 @end deffn
 
 @noindent
@@ -1121,23 +1203,20 @@ to a Bash executable in the store:
              (guix store)
              (guix derivations))
 
-(call-with-values
-  (lambda ()
-    (let ((builder   ; add the Bash script to the store
-           (add-text-to-store store "my-builder.sh"
-                              "echo hello world > $out\n" '())))
-      (derivation store "foo" (%current-system)
-                  bash `("-e" ,builder)
-                  '(("HOME" . "/homeless")) '())))
-  list)
-@result{} ("/nix/store/@dots{}-foo.drv" #<<derivation> @dots{}>)
+(let ((builder   ; add the Bash script to the store
+        (add-text-to-store store "my-builder.sh"
+                           "echo hello world > $out\n" '())))
+  (derivation store "foo"
+              bash `("-e" ,builder)
+              #:env-vars '(("HOME" . "/homeless"))))
+@result{} #<derivation /nix/store/@dots{}-foo.drv => /nix/store/@dots{}-foo>
 @end lisp
 
 As can be guessed, this primitive is cumbersome to use directly.  An
 improved variant is @code{build-expression->derivation}, which allows
 the caller to directly pass a Guile expression as the build script:
 
-@deffn {Scheme Procedure} build-expression->derivation @var{store} @var{name} @var{system} @var{exp} @var{inputs} [#:outputs '("out")] [#:hash #f] [#:hash-algo #f] [#:env-vars '()] [#:modules '()] [#:guile-for-build #f]
+@deffn {Scheme Procedure} build-expression->derivation @var{store} @var{name} @var{system} @var{exp} @var{inputs} [#:outputs '("out")] [#:hash #f] [#:hash-algo #f] [#:env-vars '()] [#:modules '()] [#:references-graphs #f] [#:guile-for-build #f]
 Return a derivation that executes Scheme expression @var{exp} as a
 builder for derivation @var{name}.  @var{inputs} must be a list of
 @code{(name drv-path sub-drv)} tuples; when @var{sub-drv} is omitted,
@@ -1158,6 +1237,8 @@ terminates by passing the result of @var{exp} to @code{exit}; thus, when
 @var{exp} is built using @var{guile-for-build} (a derivation).  When
 @var{guile-for-build} is omitted or is @code{#f}, the value of the
 @code{%guile-for-build} fluid is used instead.
+
+See the @code{derivation} procedure for the meaning of @var{references-graphs}.
 @end deffn
 
 @noindent
@@ -1173,8 +1254,7 @@ containing one file:
   (build-expression->derivation store "goo" (%current-system)
                                 builder '()))
 
-@result{} "/nix/store/@dots{}-goo.drv"
-@result{} #<<derivation> @dots{}>
+@result{} #<derivation /nix/store/@dots{}-goo.drv => @dots{}>
 @end lisp
 
 @cindex strata of code
@@ -1484,7 +1564,7 @@ tools that help users exert that freedom.
 @menu
 * Installing Debugging Files::  Feeding the debugger.
 * Package Modules::             Packages from the programmer's viewpoint.
-* Adding New Packages::         Growing the distribution.
+* Packaging Guidelines::        Growing the distribution.
 * Bootstrapping::               GNU/Linux built from scratch.
 * Porting::                     Targeting another platform or kernel.
 @end menu
@@ -1569,40 +1649,13 @@ distribution.  The root of this dependency graph is a small set of
 bootstrap)} module.  For more information on bootstrapping,
 @ref{Bootstrapping}.
 
-@node Adding New Packages
-@section Adding New Packages
+@node Packaging Guidelines
+@section Packaging Guidelines
 
 The GNU distribution is nascent and may well lack some of your favorite
 packages.  This section describes how you can help make the distribution
-grow.  @ref{Contributing}, for additional information on how you can
+grow.  @xref{Contributing}, for additional information on how you can
 help.
-
-@menu
-* Packaging Guidelines::        What goes into the distribution.
-* From the Source Tarball to the Package::     The story of a package.
-@end menu
-
-@node Packaging Guidelines
-@subsection Packaging Guidelines
-
-@c Adapted from http://www.gnu.org/philosophy/philosophy.html.
-
-The GNU operating system has been developed so that users can have
-freedom in their computing.  GNU is @dfn{free software}, meaning that
-users have the @url{http://www.gnu.org/philosophy/free-sw.html,four
-essential freedoms}: to run the program, to study and change the program
-in source code form, to redistribute exact copies, and to distribute
-modified versions.  Packages found in the GNU distribution provide only
-software that conveys these four freedoms.
-
-In addition, the GNU distribution follow the
-@url{http://www.gnu.org/distros/free-system-distribution-guidelines.html,free
-software distribution guidelines}.  Among other things, these guidelines
-reject non-free firmware, recommendations of non-free software, and
-discuss ways to deal with trademarks and patents.
-
-@node From the Source Tarball to the Package
-@subsection From the Source Tarball, to the Package Definition, to the Binary Package
 
 Free software packages are usually distributed in the form of
 @dfn{source code tarballs}---typically @file{tar.gz} files that contain
@@ -1649,6 +1702,114 @@ package automatically downloads binaries from there (except when using
 needed is to review and apply the patch.
 
 
+@menu
+* Software Freedom::     What may go into the distribution.
+* Package Naming::       What's in a name?
+* Version Numbers::      When the name is not enough.
+* Python Modules::       Taming the snake.
+@end menu
+
+@node Software Freedom
+@subsection Software Freedom
+
+@c Adapted from http://www.gnu.org/philosophy/philosophy.html.
+
+The GNU operating system has been developed so that users can have
+freedom in their computing.  GNU is @dfn{free software}, meaning that
+users have the @url{http://www.gnu.org/philosophy/free-sw.html,four
+essential freedoms}: to run the program, to study and change the program
+in source code form, to redistribute exact copies, and to distribute
+modified versions.  Packages found in the GNU distribution provide only
+software that conveys these four freedoms.
+
+In addition, the GNU distribution follow the
+@url{http://www.gnu.org/distros/free-system-distribution-guidelines.html,free
+software distribution guidelines}.  Among other things, these guidelines
+reject non-free firmware, recommendations of non-free software, and
+discuss ways to deal with trademarks and patents.
+
+
+@node Package Naming
+@subsection Package Naming
+
+A package has actually two names associated with it:
+First, there is the name of the @emph{Scheme variable}, the one following
+@code{define-public}.  By this name, the package can be made known in the
+Scheme code, for instance as input to another package.  Second, there is
+the string in the @code{name} field of a package definition.  This name
+is used by package management commands such as
+@command{guix package} and @command{guix build}.
+
+Both are usually the same and correspond to the lowercase conversion of the
+project name chosen upstream.  For instance, the GNUnet project is packaged
+as @code{gnunet}.  We do not add @code{lib} prefixes for library packages,
+unless these are already part of the official project name.  But see
+@ref{Python Modules} for special rules concerning modules for
+the Python language.
+
+
+@node Version Numbers
+@subsection Version Numbers
+
+We usually package only the latest version of a given free software
+project.  But sometimes, for instance for incompatible library versions,
+two (or more) versions of the same package are needed.  These require
+different Scheme variable names.  We use the name as defined
+in @ref{Package Naming}
+for the most recent version; previous versions use the same name, suffixed
+by @code{-} and the smallest prefix of the version number that may
+distinguish the two versions.
+
+The name inside the package definition is the same for all versions of a
+package and does not contain any version number.
+
+For instance, the versions 2.24.20 and 3.9.12 of GTK+ may be packaged as follows:
+
+@example
+(define-public gtk+
+  (package
+   (name "gtk+")
+   (version "3.9.12")
+   ...))
+(define-public gtk+-2
+  (package
+   (name "gtk+")
+   (version "2.24.20")
+   ...))
+@end example
+If we also wanted GTK+ 3.8.2, this would be packaged as
+@example
+(define-public gtk+-3.8
+  (package
+   (name "gtk+")
+   (version "3.8.2")
+   ...))
+@end example
+
+
+@node Python Modules
+@subsection Python Modules
+
+We currently package Python 2 and Python 3, under the Scheme variable names
+@code{python-2} and @code{python} as explained in @ref{Version Numbers}.
+To avoid confusion and naming clashes with other programming languages, it
+seems desirable that the name of a package for a Python module contains
+the word @code{python}.
+
+Some modules are compatible with only one version of Python, others with both.
+If the package Foo compiles only with Python 3, we name it
+@code{python-foo}; if it compiles only with Python 2, we name it
+@code{python2-foo}. If it is compatible with both versions, we create two
+packages with the corresponding names.
+
+If a project already contains the word @code{python}, we drop this;
+for instance, the module python-dateutil is packaged under the names
+@code{python-dateutil} and @code{python2-dateutil}.
+
+
+
+
+
 @node Bootstrapping
 @section Bootstrapping
 
@@ -1677,13 +1838,13 @@ Binutils, libc, and the other packages mentioned above---the
 @dfn{bootstrap binaries}.
 
 These bootstrap binaries are ``taken for granted'', though we can also
-re-create them if needed (more on that later.)
+re-create them if needed (more on that later).
 
 @unnumberedsubsec Preparing to Use the Bootstrap Binaries
 
 @c As of Emacs 24.3, Info-mode displays the image, but since it's a
 @c large image, it's hard to scroll.  Oh well.
-@image{images/bootstrap-graph,,,Dependency graph of the early bootstrap derivations}
+@image{images/bootstrap-graph,6in,,Dependency graph of the early bootstrap derivations}
 
 The figure above shows the very beginning of the dependency graph of the
 distribution, corresponding to the package definitions of the @code{(gnu
@@ -1805,7 +1966,7 @@ In practice, there may be some complications.  First, it may be that the
 extended GNU triplet that specifies an ABI (like the @code{eabi} suffix
 above) is not recognized by all the GNU tools.  Typically, glibc
 recognizes some of these, whereas GCC uses an extra @code{--with-abi}
-configure flag (see @code{gcc.scm} for examples of how to handle this.)
+configure flag (see @code{gcc.scm} for examples of how to handle this).
 Second, some of the required packages could fail to build for that
 platform.  Lastly, the generated binaries could be broken for some
 reason.
@@ -1818,8 +1979,8 @@ reason.
 This project is a cooperative effort, and we need your help to make it
 grow!  Please get in touch with us on @email{guix-devel@@gnu.org}.  We
 welcome ideas, bug reports, patches, and anything that may be helpful to
-the project.  We particularly welcome help on packaging (@pxref{Adding
-New Packages}).
+the project.  We particularly welcome help on packaging
+(@pxref{Packaging Guidelines}).
 
 Please see the
 @url{http://git.savannah.gnu.org/cgit/guix.git/tree/HACKING,

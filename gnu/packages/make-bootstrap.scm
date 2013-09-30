@@ -44,7 +44,7 @@
 
 ;;; Commentary:
 ;;;
-;;; This modules provides tools to build tarballs of the "bootstrap binaries"
+;;; This module provides tools to build tarballs of the "bootstrap binaries"
 ;;; used in (gnu packages bootstrap).  These statically-linked binaries are
 ;;; taken for granted and used as the root of the whole bootstrap procedure.
 ;;;
@@ -127,7 +127,10 @@ for `sh' in $PATH, and without nscd, and with static NSS modules."
                       ;; cross-compiling).
                       (inputs (match (assoc "perl" (package-inputs coreutils))
                                 (#f '())
-                                (x  (list x))))))
+                                (x  (list x))))
+
+                      ;; Remove the `debug' output.
+                      (outputs '("out"))))
         (bzip2 (package (inherit bzip2)
                  (arguments
                   (substitute-keyword-arguments (package-arguments bzip2)
@@ -451,6 +454,7 @@ for `sh' in $PATH, and without nscd, and with static NSS modules."
   ;; than in hard-coded configure-time paths.
   (let* ((guile (package (inherit guile-2.0)
                   (name (string-append (package-name guile-2.0) "-static"))
+                  (synopsis "Statically-linked and relocatable Guile")
                   (inputs
                    `(("patch/relocatable"
                       ,(search-patch "guile-relocatable.patch"))
@@ -511,8 +515,10 @@ for `sh' in $PATH, and without nscd, and with static NSS modules."
        (let ()
          (use-modules (guix build utils))
 
-         (let ((in  (assoc-ref %build-inputs "guile"))
-               (out (assoc-ref %outputs "out")))
+         (let* ((in     (assoc-ref %build-inputs "guile"))
+                (out    (assoc-ref %outputs "out"))
+                (guile1 (string-append in "/bin/guile"))
+                (guile2 (string-append out "/bin/guile")))
            (mkdir-p (string-append out "/share/guile/2.0"))
            (copy-recursively (string-append in "/share/guile/2.0")
                              (string-append out "/share/guile/2.0"))
@@ -522,12 +528,26 @@ for `sh' in $PATH, and without nscd, and with static NSS modules."
                              (string-append out "/lib/guile/2.0/ccache"))
 
            (mkdir (string-append out "/bin"))
-           (copy-file (string-append in "/bin/guile")
-                      (string-append out "/bin/guile"))
-           (remove-store-references (string-append out "/bin/guile"))
-           #t))))
+           (copy-file guile1 guile2)
+
+           ;; Does the relocated Guile work?
+           (and ,(if (%current-target-system)
+                     #t
+                     '(zero? (system* guile2 "--version")))
+                (begin
+                  ;; Strip store references.
+                  (remove-store-references guile2)
+
+                  ;; Does the stripped Guile work?  If it aborts, it could be
+                  ;; that it tries to open iconv descriptors and fails because
+                  ;; libc's iconv data isn't available (see
+                  ;; `guile-default-utf8.patch'.)
+                  ,(if (%current-target-system)
+                       #t
+                       '(zero? (system* guile2 "--version")))))))))
     (inputs `(("guile" ,%guile-static)))
-    (outputs '("out"))))
+    (outputs '("out"))
+    (synopsis "Minimal statically-linked and relocatable Guile")))
 
 (define (tarball-package pkg)
   "Return a package containing a tarball of PKG."
