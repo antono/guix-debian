@@ -25,6 +25,7 @@
   #:use-module (gnu packages libpng)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
+  #:use-module (gnu packages linux)
   #:use-module ((guix licenses)
                 #:renamer (symbol-prefix-proc 'license:))
   #:use-module (guix packages)
@@ -118,9 +119,9 @@ data (e.g., voice mail), and audio books.")
         "1m0v2y6bhr4iwsgdkc7b3y0qgpvpv1ifbxsy8n8ahsvjn6wmppi9"))))
     (build-system gnu-build-system)
     ;; FIXME: Add further backends, see the summary printed after configure.
-    (inputs `(("pkg-config" ,pkg-config)))
-    (synopsis
-     "libao, a cross platform audio library")
+    (inputs `(("pkg-config" ,pkg-config)
+              ("alsa-lib" ,alsa-lib)))
+    (synopsis "Cross platform audio library")
     (description
      "Libao is a cross-platform audio library that allows programs to
 output audio using a simple API on a wide variety of platforms.
@@ -190,7 +191,7 @@ meaning that audio is compressed in FLAC without any loss in quality.")
              ("libogg" ,libogg)
              ("libpng" ,libpng)
              ("pkg-config" ,pkg-config)
-             ("python" ,python)
+             ("python" ,python-wrapper)
              ("zlib" ,zlib)))
    (synopsis "kate, a karaoke and text codec for embedding in ogg")
    (description

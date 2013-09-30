@@ -23,21 +23,25 @@
   #:use-module (guix store)
   #:use-module (guix config)
   #:use-module (guix packages)
+  #:use-module (guix build-system)
   #:use-module (guix derivations)
   #:use-module ((guix licenses) #:select (license? license-name))
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-11)
+  #:use-module (srfi srfi-19)
   #:use-module (srfi srfi-26)
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-37)
   #:autoload   (ice-9 ftw)  (scandir)
   #:use-module (ice-9 match)
   #:use-module (ice-9 format)
+  #:use-module (ice-9 regex)
   #:export (_
             N_
             leave
             show-version-and-exit
             show-bug-report-information
+            string->number*
             show-what-to-build
             call-with-error-handling
             with-error-handling
@@ -48,6 +52,8 @@
             fill-paragraph
             string->recutils
             package->recutils
+            string->generations
+            string->duration
             args-fold*
             run-guix-command
             program-name
@@ -75,17 +81,19 @@ messages."
       (define (augmented-format-string fmt)
         (string-append "~:[~*~;guix ~a: ~]~a" (syntax->datum fmt)))
 
-      (syntax-case x (N_ _)                    ; these are literals, yeah...
-        ((name (_ fmt) args (... ...))
-         (string? (syntax->datum #'fmt))
+      (syntax-case x ()
+        ((name (underscore fmt) args (... ...))
+         (and (string? (syntax->datum #'fmt))
+              (free-identifier=? #'underscore #'_))
          (with-syntax ((fmt*   (augmented-format-string #'fmt))
                        (prefix (datum->syntax x prefix)))
            #'(format (guix-warning-port) (gettext fmt*)
                      (program-name) (program-name) prefix
                      args (... ...))))
-        ((name (N_ singular plural n) args (... ...))
+        ((name (N-underscore singular plural n) args (... ...))
          (and (string? (syntax->datum #'singular))
-              (string? (syntax->datum #'plural)))
+              (string? (syntax->datum #'plural))
+              (free-identifier=? #'N-underscore #'N_))
          (with-syntax ((s      (augmented-format-string #'singular))
                        (p      (augmented-format-string #'plural))
                        (prefix (datum->syntax x prefix)))
@@ -116,6 +124,11 @@ messages."
   "Perform the usual initialization for stand-alone Guix commands."
   (install-locale)
   (textdomain "guix")
+
+  ;; Ignore SIGPIPE.  If the daemon closes the connection, we prefer to be
+  ;; notified via an EPIPE later.
+  (sigaction SIGPIPE SIG_IGN)
+
   (setvbuf (current-output-port) _IOLBF)
   (setvbuf (current-error-port) _IOLBF))
 
@@ -134,6 +147,11 @@ Report bugs to: ~a.") %guix-bug-report-address)
 General help using GNU software: <http://www.gnu.org/gethelp/>"))
   (newline))
 
+(define (string->number* str)
+  "Like `string->number', but error out with an error message on failure."
+  (or (string->number str)
+      (leave (_ "~a: invalid number~%") str)))
+
 (define (call-with-error-handling thunk)
   "Call THUNK within a user-friendly error handler."
   (guard (c ((package-input-error? c)
@@ -146,6 +164,14 @@ General help using GNU software: <http://www.gnu.org/gethelp/>"))
                (leave (_ "~a:~a:~a: package `~a' has an invalid input: ~s~%")
                       file line column
                       (package-full-name package) input)))
+            ((package-cross-build-system-error? c)
+             (let* ((package (package-error-package c))
+                    (loc     (package-location package))
+                    (system  (package-build-system package)))
+               (leave (_ "~a: ~a: build system `~a' does not support cross builds~%")
+                      (location->string loc)
+                      (package-full-name package)
+                      (build-system-name system))))
             ((nix-connection-error? c)
              (leave (_ "failed to connect to `~a': ~a~%")
                     (nix-connection-error-file c)
@@ -154,7 +180,12 @@ General help using GNU software: <http://www.gnu.org/gethelp/>"))
              ;; FIXME: Server-provided error messages aren't i18n'd.
              (leave (_ "build failed: ~a~%")
                     (nix-protocol-error-message c))))
-    (thunk)))
+    ;; Catch EPIPE and the likes.
+    (catch 'system-error
+      thunk
+      (lambda args
+        (leave (_ "~a~%")
+               (strerror (system-error-errno args)))))))
 
 (define (read/eval-package-expression str)
   "Read and evaluate STR and return the package it refers to, or exit an
@@ -183,35 +214,39 @@ derivations listed in DRV.  Return #t if there's something to build, #f
 otherwise.  When USE-SUBSTITUTES?, check and report what is prerequisites are
 available for download."
   (let*-values (((build download)
-                 (fold2 (lambda (drv-path build download)
-                          (let ((drv (call-with-input-file drv-path
-                                       read-derivation)))
-                            (let-values (((b d)
-                                          (derivation-prerequisites-to-build
-                                           store drv
-                                           #:use-substitutes?
-                                           use-substitutes?)))
-                              (values (append b build)
-                                      (append d download)))))
+                 (fold2 (lambda (drv build download)
+                          (let-values (((b d)
+                                        (derivation-prerequisites-to-build
+                                         store drv
+                                         #:use-substitutes?
+                                         use-substitutes?)))
+                            (values (append b build)
+                                    (append d download))))
                         '() '()
                         drv))
                 ((build)                          ; add the DRV themselves
                  (delete-duplicates
-                  (append (remove (compose (lambda (out)
-                                             (or (valid-path? store out)
-                                                 (and use-substitutes?
-                                                      (has-substitutes? store
-                                                                        out))))
-                                           derivation-path->output-path)
-                                  drv)
+                  (append (map derivation-file-name
+                               (remove (lambda (drv)
+                                         (let ((out (derivation->output-path
+                                                     drv)))
+                                           (or (valid-path? store out)
+                                               (and use-substitutes?
+                                                    (has-substitutes? store
+                                                                      out)))))
+                                       drv))
                           (map derivation-input-path build))))
                 ((download)                   ; add the references of DOWNLOAD
-                 (delete-duplicates
-                  (append download
-                          (remove (cut valid-path? store <>)
-                                  (append-map
-                                   substitutable-references
-                                   (substitutable-path-info store download)))))))
+                 (if use-substitutes?
+                     (delete-duplicates
+                      (append download
+                              (remove (cut valid-path? store <>)
+                                      (append-map
+                                       substitutable-references
+                                       (substitutable-path-info store
+                                                                download)))))
+                     download)))
+    ;; TODO: Show the installed size of DOWNLOAD.
     (if dry-run?
         (begin
           (format (current-error-port)
@@ -373,6 +408,70 @@ WIDTH columns."
           (and=> (package-description p) description->recutils))
   (newline port))
 
+(define (string->generations str)
+  "Return the list of generations matching a pattern in STR.  This function
+accepts the following patterns: \"1\", \"1,2,3\", \"1..9\", \"1..\", \"..9\"."
+  (define (maybe-integer)
+    (let ((x (string->number str)))
+      (and (integer? x)
+           x)))
+
+  (define (maybe-comma-separated-integers)
+    (let ((lst (delete-duplicates
+                (map string->number
+                     (string-split str #\,)))))
+      (and (every integer? lst)
+           lst)))
+
+  (cond ((maybe-integer)
+         =>
+         list)
+        ((maybe-comma-separated-integers)
+         =>
+         identity)
+        ((string-match "^([0-9]+)\\.\\.([0-9]+)$" str)
+         =>
+         (lambda (match)
+           (let ((s (string->number (match:substring match 1)))
+                 (e (string->number (match:substring match 2))))
+             (and (every integer? (list s e))
+                  (<= s e)
+                  (iota (1+ (- e s)) s)))))
+        ((string-match "^([0-9]+)\\.\\.$" str)
+         =>
+         (lambda (match)
+           (let ((s (string->number (match:substring match 1))))
+             (and (integer? s)
+                  `(>= ,s)))))
+        ((string-match "^\\.\\.([0-9]+)$" str)
+         =>
+         (lambda (match)
+           (let ((e (string->number (match:substring match 1))))
+             (and (integer? e)
+                  `(<= ,e)))))
+        (else #f)))
+
+(define (string->duration str)
+  "Return the duration matching a pattern in STR.  This function accepts the
+following patterns: \"1d\", \"1w\", \"1m\"."
+  (define (hours->duration hours match)
+    (make-time time-duration 0
+               (* 3600 hours (string->number (match:substring match 1)))))
+
+  (cond ((string-match "^([0-9]+)d$" str)
+         =>
+         (lambda (match)
+           (hours->duration 24 match)))
+        ((string-match "^([0-9]+)w$" str)
+         =>
+         (lambda (match)
+           (hours->duration (* 24 7) match)))
+        ((string-match "^([0-9]+)m$" str)
+         =>
+         (lambda (match)
+           (hours->duration (* 24 30) match)))
+        (else #f)))
+
 (define (args-fold* options unrecognized-option-proc operand-proc . seeds)
   "A wrapper on top of `args-fold' that does proper user-facing error
 reporting."
@@ -397,8 +496,14 @@ reporting."
            (compose (cut string-append <> "/guix/scripts")
                     dirname)))
 
+  (define dot-scm?
+    (cut string-suffix? ".scm" <>))
+
+  ;; In Guile 2.0.5 `scandir' would return "." and ".." regardless even though
+  ;; they don't match `dot-scm?'.  Work around it by doing additional
+  ;; filtering.
   (if directory
-      (scandir directory (cut string-suffix? ".scm" <>))
+      (filter dot-scm? (scandir directory dot-scm?))
       '()))
 
 (define (commands)
@@ -414,7 +519,7 @@ Run COMMAND with ARGS.\n"))
   (format #t (_ "COMMAND must be one of the sub-commands listed below:\n"))
   (newline)
   ;; TODO: Display a synopsis of each command.
-  (format #t "~{   ~a~%~}" (commands))
+  (format #t "~{   ~a~%~}" (sort (commands) string<?))
   (show-bug-report-information))
 
 (define program-name
@@ -450,7 +555,7 @@ found."
        (format (current-error-port)
                (_ "guix: missing command name~%"))
        (show-guix-usage))
-      (("--help")
+      ((or ("-h") ("--help"))
        (show-guix-help))
       (("--version")
        (show-version-and-exit "guix"))

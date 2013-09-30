@@ -23,10 +23,12 @@
   #:use-module (guix build-system gnu)
   #:use-module ((gnu packages compression)
                 #:renamer (symbol-prefix-proc 'guix:))
+  #:use-module (gnu packages)
   #:use-module (gnu packages nettle)
   #:use-module (gnu packages guile)
   #:use-module (gnu packages perl)
-  #:use-module (gnu packages which))
+  #:use-module (gnu packages which)
+  #:use-module (gnu packages pkg-config))
 
 (define-public libtasn1
   (package
@@ -52,18 +54,20 @@ portable, and only require an ANSI C89 platform.")
 (define-public gnutls
   (package
     (name "gnutls")
-    (version "3.1.9.1")
+    (version "3.2.4")
     (source (origin
              (method url-fetch)
              (uri
               ;; Note: Releases are no longer on ftp.gnu.org since the
               ;; schism (after version 3.1.5).
-              (string-append "mirror://gnupg/gnutls/v3.1/gnutls-"
+              (string-append "mirror://gnupg/gnutls/v3.2/gnutls-"
                              version ".tar.xz"))
              (sha256
               (base32
-               "0gkwhz7sypfy39jfj2yzrngbxq5j9l9smqc89mqlqsh25spc8009"))))
+               "0zvhzy87v9dfxfvmg1pl951kw55rp647cqdza8942fxq7spp158i"))))
     (build-system gnu-build-system)
+    (native-inputs
+     `(("pkg-config" ,pkg-config)))
     (inputs
      `(("guile" ,guile-2.0)
        ("zlib" ,guix:zlib)

@@ -16,7 +16,7 @@
 ;;; You should have received a copy of the GNU General Public License
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
-(define-module (gnu packages libapr)
+(define-module (gnu packages apr)
   #:use-module (guix licenses)
   #:use-module (guix packages)
   #:use-module (guix download)
@@ -25,17 +25,17 @@
   #:use-module (gnu packages perl)
   #:use-module (gnu packages autotools))
 
-(define-public libapr
+(define-public apr
   (package
-    (name "libapr")
-    (version "1.4.6")
+    (name "apr")
+    (version "1.4.8")
     (source (origin
              (method url-fetch)
              (uri (string-append "mirror://apache/apr/apr-"
                                  version ".tar.bz2"))
              (sha256
               (base32
-               "1g0w9396akmhhrmjzmcwddny5ms43zvj2mrpdkyfcqxizrh5wqwv"))))
+               "0884csfk3f530yscak0jlr6w929s3ys0n7fpwdg3dii1sgwd5f31"))))
     (build-system gnu-build-system)
     (arguments
       `(#:patches (list (assoc-ref %build-inputs
@@ -44,7 +44,7 @@
     (inputs `(("perl" ,perl)
               ("libtool" ,libtool)
               ("patch/skip-test"
-               ,(search-patch "libapr-skip-getservbyname-test.patch"))))
+               ,(search-patch "apr-skip-getservbyname-test.patch"))))
     (home-page "http://apr.apache.org/")
     (synopsis "The Apache Portable Runtime Library")
     (description
@@ -57,32 +57,32 @@ built, relieving them of the need to code special-case conditions to work
 around or take advantage of platform-specific deficiencies or features.")
     (license asl2.0)))
 
-(define-public libaprutil
+(define-public apr-util
   (package
-    (name "libaprutil")
-    (version "1.5.1")
+    (name "apr-util")
+    (version "1.5.2")
     (source (origin
              (method url-fetch)
              (uri (string-append "mirror://apache/apr/apr-util-"
                                  version ".tar.bz2"))
              (sha256
               (base32
-               "0832cb90zd7zqhhdx0v3i8viw1rmn0d945qbk1zid3cnky9r0s19"))))
+               "19qjxpckb9p4j9pbk8kcirg6k5vqnjrqhnk9xx2c5m9964p3vkls"))))
     (build-system gnu-build-system)
     (inputs
-      `(("libapr" ,libapr)))
+      `(("apr" ,apr)))
     (arguments
      '(#:phases
        (alist-replace
         'configure
         (lambda* (#:key inputs outputs #:allow-other-keys)
           (let ((out (assoc-ref outputs "out"))
-                (libapr (assoc-ref inputs "libapr")))
+                (apr (assoc-ref inputs "apr")))
             (setenv "CONFIG_SHELL" (which "bash"))
             (zero?
              (system* "./configure"
                       (string-append "--prefix=" out)
-                      (string-append "--with-apr=" libapr)))))
+                      (string-append "--with-apr=" apr)))))
         %standard-phases)))
     (home-page "http://apr.apache.org/")
     (synopsis "One of the Apache Portable Runtime Library companions")

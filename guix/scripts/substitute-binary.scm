@@ -24,19 +24,22 @@
   #:use-module (guix records)
   #:use-module (guix nar)
   #:use-module ((guix build utils) #:select (mkdir-p))
+  #:use-module ((guix build download)
+                #:select (progress-proc uri-abbreviation))
   #:use-module (ice-9 rdelim)
   #:use-module (ice-9 regex)
   #:use-module (ice-9 match)
   #:use-module (ice-9 threads)
   #:use-module (ice-9 format)
   #:use-module (ice-9 ftw)
+  #:use-module (ice-9 binary-ports)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9)
   #:use-module (srfi srfi-11)
   #:use-module (srfi srfi-19)
   #:use-module (srfi srfi-26)
   #:use-module (web uri)
-  #:use-module (guix web)
+  #:use-module (guix http-client)
   #:export (guix-substitute-binary))
 
 ;;; Comment:
@@ -84,35 +87,86 @@ output port, and PROC's result is returned."
       (lambda (key . args)
         (false-if-exception (delete-file template))))))
 
-(define (fields->alist port)
-  "Read recutils-style record from PORT and return them as a list of key/value
-pairs."
-  (define field-rx
-    (make-regexp "^([[:graph:]]+): (.*)$"))
+;; In Guile 2.0.9, `regexp-exec' is thread-unsafe, so work around it.
+;; See <http://bugs.gnu.org/14404>.
+(set! regexp-exec
+      (let ((real regexp-exec)
+            (lock (make-mutex)))
+        (lambda args
+          (with-mutex lock
+            (apply real args)))))
 
-  (let loop ((line   (read-line port))
-             (result '()))
-    (cond ((eof-object? line)
-           (reverse result))
-          ((regexp-exec field-rx line)
-           =>
-           (lambda (match)
-             (loop (read-line port)
-                   (alist-cons (match:substring match 1)
-                               (match:substring match 2)
-                               result))))
-          (else
-           (error "unmatched line" line)))))
+(define fields->alist
+  ;; The narinfo format is really just like recutils.
+  recutils->alist)
 
-(define (fetch uri)
+(define %fetch-timeout
+  ;; Number of seconds after which networking is considered "slow".
+  5)
+
+(define %random-state
+  (seed->random-state (+ (ash (cdr (gettimeofday)) 32) (getpid))))
+
+(define-syntax-rule (with-timeout duration handler body ...)
+  "Run BODY; when DURATION seconds have expired, call HANDLER, and run BODY
+again."
+  (begin
+    (sigaction SIGALRM
+      (lambda (signum)
+        (sigaction SIGALRM SIG_DFL)
+        handler))
+    (alarm duration)
+    (call-with-values
+        (lambda ()
+          (let try ()
+            (catch 'system-error
+              (lambda ()
+                body ...)
+              (lambda args
+                ;; The SIGALRM triggers EINTR, because of the bug at
+                ;; <http://lists.gnu.org/archive/html/guile-devel/2013-06/msg00050.html>.
+                ;; When that happens, try again.  Note: SA_RESTART cannot be
+                ;; used because of <http://bugs.gnu.org/14640>.
+                (if (= EINTR (system-error-errno args))
+                    (begin
+                      ;; Wait a little to avoid bursts.
+                      (usleep (random 3000000 %random-state))
+                      (try))
+                    (apply throw args))))))
+      (lambda result
+        (alarm 0)
+        (sigaction SIGALRM SIG_DFL)
+        (apply values result)))))
+
+(define* (fetch uri #:key (buffered? #t) (timeout? #t))
   "Return a binary input port to URI and the number of bytes it's expected to
 provide."
   (case (uri-scheme uri)
     ((file)
-     (let ((port (open-input-file (uri-path uri))))
+     (let ((port (open-file (uri-path uri)
+                            (if buffered? "rb" "r0b"))))
        (values port (stat:size (stat port)))))
     ((http)
-     (http-fetch uri #:text? #f))))
+     ;; On Guile 2.0.5, `http-fetch' fetches the whole thing at once.  So
+     ;; honor TIMEOUT? to disable the timeout when fetching a nar.
+     ;;
+     ;; Test this with:
+     ;;   sudo tc qdisc add dev eth0 root netem delay 1500ms
+     ;; and then cancel with:
+     ;;   sudo tc qdisc del dev eth0 root
+     (let ((port #f))
+       (with-timeout (if (or timeout? (guile-version>? "2.0.5"))
+                         %fetch-timeout
+                         0)
+         (begin
+           (warning (_ "while fetching ~a: server is unresponsive~%")
+                    (uri->string uri))
+           (warning (_ "try `--no-substitutes' if the problem persists~%"))
+           (when port
+             (close-port port)))
+         (begin
+           (set! port (open-socket-for-uri uri #:buffered? buffered?))
+           (http-fetch uri #:text? #f #:port port)))))))
 
 (define-record-type <cache>
   (%make-cache url store-directory wants-mass-query?)
@@ -221,8 +275,8 @@ reading PORT."
 (define (fetch-narinfo cache path)
   "Return the <narinfo> record for PATH, or #f if CACHE does not hold PATH."
   (define (download url)
-    ;; Download the `nix-cache-info' from URL, and return its contents as an
-    ;; list of key/value pairs.
+    ;; Download the .narinfo from URL, and return its contents as a list of
+    ;; key/value pairs.
     (false-if-exception (fetch (string->uri url))))
 
   (and (string=? (cache-store-directory cache) (%store-prefix))
@@ -273,11 +327,15 @@ check what it has."
                      (values #f #f)))))
     (if valid?
         cached                                    ; including negative caches
-        (let ((narinfo (and=> (force cache)
-                              (cut fetch-narinfo <> path))))
-          (with-atomic-file-output cache-file
-            (lambda (out)
-              (write (cache-entry narinfo) out)))
+        (let* ((cache   (force cache))
+               (narinfo (and cache (fetch-narinfo cache path))))
+          ;; Cache NARINFO only when CACHE was actually accessible.  This
+          ;; avoids caching negative hits when in fact we just lacked network
+          ;; access.
+          (when cache
+            (with-atomic-file-output cache-file
+              (lambda (out)
+                (write (cache-entry narinfo) out))))
           narinfo))))
 
 (define (remove-expired-cached-narinfos)
@@ -334,7 +392,8 @@ indefinitely."
       (cute write (time-second now) <>))))
 
 (define (decompressed-port compression input)
-  "Return an input port where INPUT is decompressed according to COMPRESSION."
+  "Return an input port where INPUT is decompressed according to COMPRESSION,
+along with a list of PIDs to wait for."
   (match compression
     ("none"  (values input '()))
     ("bzip2" (filtered-port `(,%bzip2 "-dc") input))
@@ -342,9 +401,72 @@ indefinitely."
     ("gzip"  (filtered-port `(,%gzip "-dc") input))
     (else    (error "unsupported compression scheme" compression))))
 
+(define (progress-report-port report-progress port)
+  "Return a port that calls REPORT-PROGRESS every time something is read from
+PORT.  REPORT-PROGRESS is a two-argument procedure such as that returned by
+`progress-proc'."
+  (define total 0)
+  (define (read! bv start count)
+    (let ((n (match (get-bytevector-n! port bv start count)
+               ((? eof-object?) 0)
+               (x x))))
+      (set! total (+ total n))
+      (report-progress total (const n))
+      ;; XXX: We're not in control, so we always return anyway.
+      n))
+
+  ;; Since `http-fetch' in Guile 2.0.5 returns all the data once it's done,
+  ;; don't pretend to report any progress in that case.
+  (if (guile-version>? "2.0.5")
+      (make-custom-binary-input-port "progress-port-proc"
+                                     read! #f #f
+                                     (cut close-port port))
+      (begin
+        (format (current-error-port) (_ "Downloading, please wait...~%"))
+        (format (current-error-port)
+                (_ "(Please consider upgrading Guile to get proper progress report.)~%"))
+        port)))
+
 (define %cache-url
   (or (getenv "GUIX_BINARY_SUBSTITUTE_URL")
       "http://hydra.gnu.org"))
+
+(define-syntax with-networking
+  (syntax-rules ()
+    "Catch DNS lookup errors and gracefully exit."
+    ;; Note: no attempt is made to catch other networking errors, because DNS
+    ;; lookup errors are typically the first one, and because other errors are
+    ;; a subset of `system-error', which is harder to filter.
+    ((_ exp ...)
+     (catch 'getaddrinfo-error
+       (lambda () exp ...)
+       (lambda (key error)
+         (leave (_ "host name lookup error: ~a~%")
+                (gai-strerror error)))))))
+
+
+;;;
+;;; Help.
+;;;
+
+(define (show-help)
+  (display (_ "Usage: guix substitute-binary [OPTION]...
+Internal tool to substitute a pre-built binary to a local build.\n"))
+  (display (_ "
+      --query            report on the availability of substitutes for the
+                         store file names passed on the standard input"))
+  (display (_ "
+      --substitute STORE-FILE DESTINATION
+                         download STORE-FILE and store it as a Nar in file
+                         DESTINATION"))
+  (newline)
+  (display (_ "
+  -h, --help             display this help and exit"))
+  (display (_ "
+  -V, --version          display version information and exit"))
+  (newline)
+  (show-bug-report-information))
+
 
 
 ;;;
@@ -355,77 +477,99 @@ indefinitely."
   "Implement the build daemon's substituter protocol."
   (mkdir-p %narinfo-cache-directory)
   (maybe-remove-expired-cached-narinfo)
-  (match args
-    (("--query")
-     (let ((cache (delay (open-cache %cache-url))))
-       (let loop ((command (read-line)))
-         (or (eof-object? command)
-             (begin
-               (match (string-tokenize command)
-                 (("have" paths ..1)
-                  ;; Return the subset of PATHS available in CACHE.
-                  (let ((substitutable
-                         (if cache
-                             (par-map (cut lookup-narinfo cache <>)
-                                      paths)
-                             '())))
-                    (for-each (lambda (narinfo)
-                                (when narinfo
-                                  (format #t "~a~%" (narinfo-path narinfo))))
-                              (filter narinfo? substitutable))
-                    (newline)))
-                 (("info" paths ..1)
-                  ;; Reply info about PATHS if it's in CACHE.
-                  (let ((substitutable
-                         (if cache
-                             (par-map (cut lookup-narinfo cache <>)
-                                      paths)
-                             '())))
-                    (for-each (lambda (narinfo)
-                                (format #t "~a\n~a\n~a\n"
-                                        (narinfo-path narinfo)
-                                        (or (and=> (narinfo-deriver narinfo)
-                                                   (cute string-append
-                                                         (%store-prefix) "/"
-                                                         <>))
-                                            "")
-                                        (length (narinfo-references narinfo)))
-                                (for-each (cute format #t "~a/~a~%"
-                                                (%store-prefix) <>)
-                                          (narinfo-references narinfo))
-                                (format #t "~a\n~a\n"
-                                        (or (narinfo-file-size narinfo) 0)
-                                        (or (narinfo-size narinfo) 0)))
-                              (filter narinfo? substitutable))
-                    (newline)))
-                 (wtf
-                  (error "unknown `--query' command" wtf)))
-               (loop (read-line)))))))
-    (("--substitute" store-path destination)
-     ;; Download STORE-PATH and add store it as a Nar in file DESTINATION.
-     (let* ((cache   (delay (open-cache %cache-url)))
-            (narinfo (lookup-narinfo cache store-path))
-            (uri     (narinfo-uri narinfo)))
-       ;; Tell the daemon what the expected hash of the Nar itself is.
-       (format #t "~a~%" (narinfo-hash narinfo))
+  (with-networking
+   (match args
+     (("--query")
+      (let ((cache (delay (open-cache %cache-url))))
+        (let loop ((command (read-line)))
+          (or (eof-object? command)
+              (begin
+                (match (string-tokenize command)
+                  (("have" paths ..1)
+                   ;; Return the subset of PATHS available in CACHE.
+                   (let ((substitutable
+                          (if cache
+                              (par-map (cut lookup-narinfo cache <>)
+                                       paths)
+                              '())))
+                     (for-each (lambda (narinfo)
+                                 (when narinfo
+                                   (format #t "~a~%" (narinfo-path narinfo))))
+                               (filter narinfo? substitutable))
+                     (newline)))
+                  (("info" paths ..1)
+                   ;; Reply info about PATHS if it's in CACHE.
+                   (let ((substitutable
+                          (if cache
+                              (par-map (cut lookup-narinfo cache <>)
+                                       paths)
+                              '())))
+                     (for-each (lambda (narinfo)
+                                 (format #t "~a\n~a\n~a\n"
+                                         (narinfo-path narinfo)
+                                         (or (and=> (narinfo-deriver narinfo)
+                                                    (cute string-append
+                                                          (%store-prefix) "/"
+                                                          <>))
+                                             "")
+                                         (length (narinfo-references narinfo)))
+                                 (for-each (cute format #t "~a/~a~%"
+                                                 (%store-prefix) <>)
+                                           (narinfo-references narinfo))
+                                 (format #t "~a\n~a\n"
+                                         (or (narinfo-file-size narinfo) 0)
+                                         (or (narinfo-size narinfo) 0)))
+                               (filter narinfo? substitutable))
+                     (newline)))
+                  (wtf
+                   (error "unknown `--query' command" wtf)))
+                (loop (read-line)))))))
+     (("--substitute" store-path destination)
+      ;; Download STORE-PATH and add store it as a Nar in file DESTINATION.
+      (let* ((cache   (delay (open-cache %cache-url)))
+             (narinfo (lookup-narinfo cache store-path))
+             (uri     (narinfo-uri narinfo)))
+        ;; Tell the daemon what the expected hash of the Nar itself is.
+        (format #t "~a~%" (narinfo-hash narinfo))
 
-       (let*-values (((raw download-size)
-                      (fetch uri))
-                     ((input pids)
-                      (decompressed-port (narinfo-compression narinfo)
-                                         raw)))
-         ;; Note that Hydra currently generates Nars on the fly and doesn't
-         ;; specify a Content-Length, so DOWNLOAD-SIZE is #f in practice.
-         (format (current-error-port)
-                 (_ "downloading `~a' from `~a'~:[~*~; (~,1f KiB)~]...~%")
-                 store-path (uri->string uri)
-                 download-size
-                 (and=> download-size (cut / <> 1024.0)))
+        (format (current-error-port) "downloading `~a' from `~a'~:[~*~; (~,1f MiB installed)~]...~%"
+                store-path (uri->string uri)
 
-         ;; Unpack the Nar at INPUT into DESTINATION.
-         (restore-file input destination)
-         (every (compose zero? cdr waitpid) pids))))
-    (("--version")
-     (show-version-and-exit "guix substitute-binary"))))
+                ;; Use the Nar size as an estimate of the installed size.
+                (narinfo-size narinfo)
+                (and=> (narinfo-size narinfo)
+                       (cute / <> (expt 2. 20))))
+        (let*-values (((raw download-size)
+                       ;; Note that Hydra currently generates Nars on the fly
+                       ;; and doesn't specify a Content-Length, so
+                       ;; DOWNLOAD-SIZE is #f in practice.
+                       (fetch uri #:buffered? #f #:timeout? #f))
+                      ((progress)
+                       (let* ((comp     (narinfo-compression narinfo))
+                              (dl-size  (or download-size
+                                            (and (equal? comp "none")
+                                                 (narinfo-size narinfo))))
+                              (progress (progress-proc (uri-abbreviation uri)
+                                                       dl-size
+                                                       (current-error-port))))
+                         (progress-report-port progress raw)))
+                      ((input pids)
+                       (decompressed-port (narinfo-compression narinfo)
+                                          progress)))
+          ;; Unpack the Nar at INPUT into DESTINATION.
+          (restore-file input destination)
+          (every (compose zero? cdr waitpid) pids))))
+     (("--version")
+      (show-version-and-exit "guix substitute-binary"))
+     (("--help")
+      (show-help))
+     (opts
+      (leave (_ "~a: unrecognized options~%") opts)))))
+
+
+;;; Local Variables:
+;;; eval: (put 'with-atomic-file-output 'scheme-indent-function 1)
+;;; eval: (put 'with-timeout 'scheme-indent-function 1)
+;;; End:
 
 ;;; substitute-binary.scm ends here

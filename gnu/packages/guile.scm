@@ -19,6 +19,7 @@
 (define-module (gnu packages guile)
   #:use-module (guix licenses)
   #:use-module (gnu packages)
+  #:use-module (gnu packages bash)
   #:use-module (gnu packages bdw-gc)
   #:use-module (gnu packages gawk)
   #:use-module (gnu packages gperf)
@@ -115,7 +116,12 @@ extensible.  It supports many SRFIs.")
    (build-system gnu-build-system)
    (native-inputs `(("pkgconfig" ,pkg-config)))
    (inputs `(("libffi" ,libffi)
-             ("readline" ,readline)))
+             ("readline" ,readline)
+
+             ;; TODO: On next core-updates, make Bash input unconditional.
+             ,@(if (%current-target-system)
+                   `(("bash" ,bash))
+                   '())))
 
    (propagated-inputs
     `( ;; These ones aren't normally needed here, but since `libguile-2.0.la'
@@ -132,15 +138,22 @@ extensible.  It supports many SRFIs.")
 
    (self-native-input? #t)
 
+   (outputs '("out" "debug"))
+
    (arguments
-    '(#:phases (alist-cons-before
+    `(#:phases (alist-cons-before
                 'configure 'pre-configure
                 (lambda* (#:key inputs #:allow-other-keys)
+                  ;; Tell (ice-9 popen) the file name of Bash.
                   (let ((bash (assoc-ref inputs "bash")))
                     (substitute* "module/ice-9/popen.scm"
                       (("/bin/sh")
                        (string-append bash "/bin/bash")))))
-                %standard-phases)))
+                %standard-phases)
+
+      ,@(if (%current-target-system)
+            '(#:configure-flags '("CC_FOR_BUILD=gcc"))
+            '())))
 
    (native-search-paths
     (list (search-path-specification
@@ -237,7 +250,7 @@ many readers as needed).")
     (arguments
      '(#:configure-flags (list (string-append "--with-guilesitedir="
                                               (assoc-ref %outputs "out")
-                                              "/share/guile/site"))
+                                              "/share/guile/site/2.0"))
        #:phases (alist-cons-after
                  'install 'post-install
                  (lambda* (#:key outputs #:allow-other-keys)
@@ -283,6 +296,40 @@ for Vixie cron.  It is written in pure Guile, and allows configuration files
 to be written in scheme (as well as Vixie's original format) for infinite
 flexibility in specifying when jobs should be run.  Mcron was written by Dale
 Mellor.")
+    (license gpl3+)))
+
+(define-public guile-lib
+  (package
+    (name "guile-lib")
+    (version "0.2.2")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "mirror://savannah/guile-lib/guile-lib-"
+                                 version ".tar.gz"))
+             (sha256
+              (base32
+               "1f9n2b5b5r75lzjinyk6zp6g20g60msa0jpfrk5hhg4j8cy0ih4b"))))
+    (build-system gnu-build-system)
+    (arguments
+     '(#:phases (alist-cons-before
+                 'configure 'patch-module-dir
+                 (lambda _
+                   (substitute* "src/Makefile.in"
+                     (("^moddir[[:blank:]]*=[[:blank:]]*([[:graph:]]+)" _ rhs)
+                      (string-append "moddir = " rhs "/2.0\n"))))
+                 %standard-phases)))
+    (inputs `(("guile" ,guile-2.0)))
+    (home-page "http://www.nongnu.org/guile-lib/")
+    (synopsis "Collection of useful Guile Scheme modules")
+    (description
+     "guile-lib is intended as an accumulation place for pure-scheme Guile
+modules, allowing for people to cooperate integrating their generic Guile
+modules into a coherent library.  Think \"a down-scaled, limited-scope CPAN
+for Guile\".")
+
+    ;; The whole is under GPLv3+, but some modules are under laxer
+    ;; distribution terms such as LGPL and public domain.  See `COPYING' for
+    ;; details.
     (license gpl3+)))
 
 ;;; guile.scm ends here

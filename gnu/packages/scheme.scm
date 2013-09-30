@@ -31,6 +31,11 @@
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages avahi)
   #:use-module (gnu packages libphidget)
+  #:use-module (gnu packages glib)
+  #:use-module (gnu packages gtk)
+  #:use-module (gnu packages libffi)
+  #:use-module (gnu packages libjpeg)
+  #:use-module ((gnu packages gtk) #:select (cairo pango))
   #:use-module (ice-9 match))
 
 (define-public mit-scheme
@@ -114,17 +119,17 @@ development cycle.")
 (define-public bigloo
   (package
     (name "bigloo")
-    (version "4.0a")
+    (version "4.0b")
     (source (origin
              (method url-fetch)
              (uri (string-append "ftp://ftp-sop.inria.fr/indes/fp/Bigloo/bigloo"
                                  version ".tar.gz"))
              (sha256
               (base32
-               "1771z43nmf9awjvlvrpjfhzcfxsbw2qipir8g9r47sygf2vn59yl"))))
+               "1fck2h48f0bvh8fl437cagmp0syfxy9lqacy1zwsis20fc76jvzi"))))
     (build-system gnu-build-system)
     (arguments
-     '(#:patches (list (assoc-ref %build-inputs "patch/shebangs"))
+     `(#:patches (list (assoc-ref %build-inputs "patch/shebangs"))
        #:test-target "test"
        #:phases (alist-replace
                  'configure
@@ -134,9 +139,26 @@ development cycle.")
                      (("^shell=.*$")
                       (string-append "shell=" (which "bash") "\n")))
 
+                   ;; Since libgc's pthread redirects are used, we end up
+                   ;; using libgc symbols, so we must link against it.
+                   ;; Reported on 2013-06-25.
+                   (substitute* "api/pthread/src/Makefile"
+                     (("^EXTRALIBS[[:blank:]]*=(.*)$" _ value)
+                      (string-append "EXTRALIBS = "
+                                     (string-trim-right value)
+                                     " -l$(GCLIB)_fth-$(RELEASE)"
+                                     " -Wl,-rpath=" (assoc-ref outputs "out")
+                                     "/lib/bigloo/" ,version)))
+
                    ;; Those variables are used by libgc's `configure'.
-                   (setenv "SHELL" (which "bash"))
-                   (setenv "CONFIG_SHELL" (which "bash"))
+                   (setenv "SHELL" (which "sh"))
+                   (setenv "CONFIG_SHELL" (which "sh"))
+
+                   ;; ... but they turned out to be overridden later, so work
+                   ;; around that.
+                   (substitute* (find-files "gc" "^configure-gc")
+                     (("sh=/bin/sh")
+                      (string-append "sh=" (which "sh"))))
 
                    ;; The `configure' script doesn't understand options
                    ;; of those of Autoconf.
@@ -147,21 +169,14 @@ development cycle.")
                                (string-append"--mv=" (which "mv"))
                                (string-append "--rm=" (which "rm"))))))
                  (alist-cons-after
-                  'patch 'patch-absolute-file-names
-                  (lambda _
-                    (substitute* (cons "configure"
-                                       (find-files "gc" "^install-gc"))
-                      (("/bin/rm") (which "rm"))
-                      (("/bin/mv") (which "mv"))))
-                  (alist-cons-after
-                   'install 'install-emacs-modes
-                   (lambda* (#:key outputs #:allow-other-keys)
-                     (let* ((out (assoc-ref outputs "out"))
-                            (dir (string-append out "/share/emacs/site-lisp")))
-                       (zero? (system* "make" "-C" "bmacs" "all" "install"
-                                       (string-append "EMACSBRAND=emacs24")
-                                       (string-append "EMACSDIR=" dir)))))
-                   %standard-phases)))))
+                  'install 'install-emacs-modes
+                  (lambda* (#:key outputs #:allow-other-keys)
+                    (let* ((out (assoc-ref outputs "out"))
+                           (dir (string-append out "/share/emacs/site-lisp")))
+                      (zero? (system* "make" "-C" "bmacs" "all" "install"
+                                      (string-append "EMACSBRAND=emacs24")
+                                      (string-append "EMACSDIR=" dir)))))
+                  %standard-phases))))
     (inputs
      `(("emacs" ,emacs)
        ("patch/shebangs" ,(search-patch "bigloo-gc-shebangs.patch"))
@@ -237,6 +252,7 @@ between Scheme and C# programs.")
                                         "\\.so$")))))
          %standard-phases))
        #:tests? #f                                ; no test suite
+       #:patches (list (assoc-ref %build-inputs "patch/bigloo-4.0b"))
        #:modules ((guix build gnu-build-system)
                   (guix build utils)
                   (ice-9 popen)
@@ -245,7 +261,10 @@ between Scheme and C# programs.")
                   (srfi srfi-1))))
     (inputs `(("bigloo" ,bigloo)
               ("which" ,which)
-              ("patchelf" ,patchelf)))
+              ("patchelf" ,patchelf)
+
+              ("patch/bigloo-4.0b"
+               ,(search-patch "hop-bigloo-4.0b.patch"))))
     (home-page "http://hop.inria.fr/")
     (synopsis "A multi-tier programming language for the Web 2.0")
     (description
@@ -319,3 +338,77 @@ implementation techniques and as an expository tool.")
 
     ;; Most files are BSD-3; see COPYING for the few exceptions.
     (license bsd-3)))
+
+(define-public racket
+  (package
+    (name "racket")
+    (version "5.3.4")
+    (source (origin
+             (method url-fetch)
+             (uri (list (string-append "http://download.racket-lang.org/installers/"
+                                       version "/racket/racket-" version
+                                       "-src-unix.tgz")
+                        (string-append
+                         "http://mirror.informatik.uni-tuebingen.de/mirror/racket/"
+                         version "/racket/racket-" version "-src-unix.tgz")))
+             (sha256
+              ;; XXX: Used to be 1xhnx3yd74zrvn6sfcqmk57kxj51cwvm660dwiaxr1qxnm5lq0v7.
+              (base32 "0yrdmpdvzf092869y6zjjjxl6j2kypgiv7qrfkv7lj8w01pbh7sd"))))
+    (build-system gnu-build-system)
+    (arguments
+     '(#:phases
+       (let* ((gui-libs
+               (lambda (inputs)
+                 (define (lib input)
+                   (string-append (assoc-ref inputs input) "/lib"))
+
+                 (list (lib "glib")
+                       (lib "cairo")
+                       (lib "pango")
+                       (lib "libjpeg")
+                       (lib "gtk")
+                       (lib "gdk-pixbuf")))))
+         (alist-cons-before
+          'configure 'pre-configure
+          (lambda* (#:key inputs #:allow-other-keys)
+            (chdir "src")
+
+            ;; The GUI libs are dynamically opened through the FFI, so they
+            ;; must be in the loader's search path.
+            (setenv "LD_LIBRARY_PATH" (string-join (gui-libs inputs) ":")))
+          (alist-cons-after
+           'unpack 'patch-/bin/sh
+           (lambda _
+             (substitute* "collects/racket/system.rkt"
+               (("/bin/sh") (which "sh"))))
+           (alist-cons-after
+            'install 'wrap-programs
+            (lambda* (#:key inputs outputs #:allow-other-keys)
+              (let ((out (assoc-ref outputs "out")))
+                (define (wrap prog)
+                  (wrap-program prog
+                                `("LD_LIBRARY_PATH" ":" prefix
+                                  ,(gui-libs inputs))))
+
+                (with-directory-excursion (string-append out "/bin")
+                  (for-each wrap
+                            (list "gracket" "drracket" "slideshow" "mred"))
+                  #t)))
+            %standard-phases))))
+       #:tests? #f                                ; XXX: how to run them?
+       ))
+    (inputs `(("libffi" ,libffi)
+              ("glib" ,glib)                      ; for DrRacket
+              ("cairo" ,cairo)
+              ("pango" ,pango)
+              ("libjpeg" ,libjpeg-8)
+              ("gdk-pixbuf" ,gdk-pixbuf)
+              ("gtk" ,gtk+)))
+    (home-page "http://racket-lang.org")
+    (synopsis "Implementation of Scheme and related languages")
+    (description
+     "Racket is an implementation of the Scheme programming language (R5RS and
+R6RS) and related languages, such as Typed Racket.  It features a compiler and
+a virtual machine with just-in-time native compilation, as well as a large set
+of libraries.")
+    (license lgpl2.0+)))

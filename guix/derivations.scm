@@ -19,6 +19,7 @@
 (define-module (guix derivations)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9)
+  #:use-module (srfi srfi-9 gnu)
   #:use-module (srfi srfi-26)
   #:use-module (rnrs io ports)
   #:use-module (rnrs bytevectors)
@@ -26,6 +27,7 @@
   #:use-module (ice-9 rdelim)
   #:use-module (guix store)
   #:use-module (guix utils)
+  #:use-module (guix hash)
   #:use-module (guix base32)
   #:export (<derivation>
             derivation?
@@ -35,6 +37,7 @@
             derivation-system
             derivation-builder-arguments
             derivation-builder-environment-vars
+            derivation-file-name
             derivation-prerequisites
             derivation-prerequisites-to-build
 
@@ -55,20 +58,26 @@
 
             read-derivation
             write-derivation
+            derivation->output-path
+            derivation->output-paths
             derivation-path->output-path
             derivation-path->output-paths
             derivation
 
             %guile-for-build
+            imported-modules
+            compiled-modules
             build-expression->derivation
-            imported-files))
+            imported-files)
+  #:replace (build-derivations))
 
 ;;;
 ;;; Nix derivations, as implemented in Nix's `derivations.cc'.
 ;;;
 
 (define-record-type <derivation>
-  (make-derivation outputs inputs sources system builder args env-vars)
+  (make-derivation outputs inputs sources system builder args env-vars
+                   file-name)
   derivation?
   (outputs  derivation-outputs)      ; list of name/<derivation-output> pairs
   (inputs   derivation-inputs)       ; list of <derivation-input>
@@ -76,7 +85,8 @@
   (system   derivation-system)       ; string
   (builder  derivation-builder)      ; store path
   (args     derivation-builder-arguments)         ; list of strings
-  (env-vars derivation-builder-environment-vars)) ; list of name/value pairs
+  (env-vars derivation-builder-environment-vars)  ; list of name/value pairs
+  (file-name derivation-file-name))               ; the .drv file name
 
 (define-record-type <derivation-output>
   (make-derivation-output path hash-algo hash)
@@ -90,6 +100,17 @@
   derivation-input?
   (path            derivation-input-path)             ; store path
   (sub-derivations derivation-input-sub-derivations)) ; list of strings
+
+(set-record-type-printer! <derivation>
+                          (lambda (drv port)
+                            (format port "#<derivation ~a => ~a ~a>"
+                                    (derivation-file-name drv)
+                                    (string-join
+                                     (map (match-lambda
+                                           ((_ . output)
+                                            (derivation-output-path output)))
+                                          (derivation-outputs drv)))
+                                    (number->string (object-address drv) 16))))
 
 (define (fixed-output-derivation? drv)
   "Return #t if DRV is a fixed-output derivation, such as the result of a
@@ -259,7 +280,8 @@ that second value is the empty list."
                              (make-input-drvs input-drvs)
                              input-srcs
                              system builder args
-                             (fold-right alist-cons '() var value)))
+                             (fold-right alist-cons '() var value)
+                             (port-filename drv-port)))
            (_
             (error "failed to parse derivation" drv-port result)))))
       ((? (cut eq? <> comma))
@@ -401,25 +423,30 @@ that form."
                  port)
      (display ")" port))))
 
+(define* (derivation->output-path drv #:optional (output "out"))
+  "Return the store path of its output OUTPUT."
+  (let ((outputs (derivation-outputs drv)))
+    (and=> (assoc-ref outputs output) derivation-output-path)))
+
+(define (derivation->output-paths drv)
+  "Return the list of name/path pairs of the outputs of DRV."
+  (map (match-lambda
+        ((name . output)
+         (cons name (derivation-output-path output))))
+       (derivation-outputs drv)))
+
 (define derivation-path->output-path
   ;; This procedure is called frequently, so memoize it.
   (memoize
    (lambda* (path #:optional (output "out"))
      "Read the derivation from PATH (`/nix/store/xxx.drv'), and return the store
 path of its output OUTPUT."
-     (let* ((drv     (call-with-input-file path read-derivation))
-            (outputs (derivation-outputs drv)))
-       (and=> (assoc-ref outputs output) derivation-output-path)))))
+     (derivation->output-path (call-with-input-file path read-derivation)))))
 
 (define (derivation-path->output-paths path)
   "Read the derivation from PATH (`/nix/store/xxx.drv'), and return the
 list of name/path pairs of its outputs."
-  (let* ((drv     (call-with-input-file path read-derivation))
-         (outputs (derivation-outputs drv)))
-    (map (match-lambda
-          ((name . output)
-           (cons name (derivation-output-path output))))
-         outputs)))
+  (derivation->output-paths (call-with-input-file path read-derivation)))
 
 
 ;;;
@@ -467,10 +494,16 @@ in SIZE bytes."
                                (make-derivation-input hash sub-drvs))))
                            inputs))
               (drv    (make-derivation outputs inputs sources
-                                       system builder args env-vars)))
+                                       system builder args env-vars
+                                       #f)))
+
+         ;; XXX: At this point this remains faster than `port-sha256', because
+         ;; the SHA256 port's `write' method gets called for every single
+         ;; character.
          (sha256
-          (string->utf8 (call-with-output-string
-                         (cut write-derivation drv <>))))))))))
+          (with-fluids ((%default-port-encoding "UTF-8"))
+            (string->utf8 (call-with-output-string
+                           (cut write-derivation drv <>)))))))))))
 
 (define (store-path type hash name)               ; makeStorePath
   "Return the store path for NAME/HASH/TYPE."
@@ -491,12 +524,20 @@ the derivation called NAME with hash HASH."
                   name
                   (string-append name "-" output))))
 
-(define* (derivation store name system builder args env-vars inputs
-                     #:key (outputs '("out")) hash hash-algo hash-mode)
-  "Build a derivation with the given arguments.  Return the resulting
-store path and <derivation> object.  When HASH, HASH-ALGO, and HASH-MODE
-are given, a fixed-output derivation is created---i.e., one whose result is
-known in advance, such as a file download."
+(define* (derivation store name builder args
+                     #:key
+                     (system (%current-system)) (env-vars '())
+                     (inputs '()) (outputs '("out"))
+                     hash hash-algo hash-mode
+                     references-graphs)
+  "Build a derivation with the given arguments, and return the resulting
+<derivation> object.  When HASH, HASH-ALGO, and HASH-MODE are given, a
+fixed-output derivation is created---i.e., one whose result is known in
+advance, such as a file download.
+
+When REFERENCES-GRAPHS is true, it must be a list of file name/store path
+pairs.  In that case, the reference graph of each store path is exported in
+the build environment in the corresponding file, in a simple text format."
   (define direct-store-path?
     (let ((len (+ 1 (string-length (%store-prefix)))))
       (lambda (p)
@@ -529,9 +570,25 @@ known in advance, such as a file download."
                                        (or (and=> (assoc-ref outputs name)
                                                   derivation-output-path)
                                            value))))
-                               env-vars))))))
+                               env-vars)
+                          #f)))))
 
-  (define (env-vars-with-empty-outputs)
+  (define (user+system-env-vars)
+    ;; Some options are passed to the build daemon via the env. vars of
+    ;; derivations (urgh!).  We hide that from our API, but here is the place
+    ;; where we kludgify those options.
+    (match references-graphs
+      (((file . path) ...)
+       (let ((value (map (cut string-append <> " " <>)
+                         file path)))
+         ;; XXX: This all breaks down if an element of FILE or PATH contains
+         ;; white space.
+         `(("exportReferencesGraph" . ,(string-join value " "))
+           ,@env-vars)))
+      (#f
+       env-vars)))
+
+  (define (env-vars-with-empty-outputs env-vars)
     ;; Return a variant of ENV-VARS where each OUTPUTS is associated with an
     ;; empty string, even outputs that do not appear in ENV-VARS.
     (let ((e (map (match-lambda
@@ -547,12 +604,26 @@ known in advance, such as a file download."
             e
             outputs)))
 
+  (define (set-file-name drv file)
+    ;; Set FILE as the 'file-name' field of DRV.
+    (match drv
+      (($ <derivation> outputs inputs sources system builder
+          args env-vars)
+       (make-derivation outputs inputs sources system builder
+                        args env-vars file))))
+
   (let* ((outputs    (map (lambda (name)
                             ;; Return outputs with an empty path.
                             (cons name
                                   (make-derivation-output "" hash-algo hash)))
                           outputs))
          (inputs     (map (match-lambda
+                           (((? derivation? drv))
+                            (make-derivation-input (derivation-file-name drv)
+                                                   '("out")))
+                           (((? derivation? drv) sub-drvs ...)
+                            (make-derivation-input (derivation-file-name drv)
+                                                   sub-drvs))
                            (((? direct-store-path? input))
                             (make-derivation-input input '("out")))
                            (((? direct-store-path? input) sub-drvs ...)
@@ -563,7 +634,7 @@ known in advance, such as a file download."
                                                       #t "sha256" input)))
                               (make-derivation-input path '()))))
                           (delete-duplicates inputs)))
-         (env-vars   (env-vars-with-empty-outputs))
+         (env-vars   (env-vars-with-empty-outputs (user+system-env-vars)))
          (drv-masked (make-derivation outputs
                                       (filter (compose derivation-path?
                                                        derivation-input-path)
@@ -573,17 +644,29 @@ known in advance, such as a file download."
                                                       (and (not (derivation-path? p))
                                                            p)))
                                                   inputs)
-                                      system builder args env-vars))
+                                      system builder args env-vars #f))
          (drv        (add-output-paths drv-masked)))
 
-    ;; (write-derivation drv-masked (current-error-port))
-    ;; (newline (current-error-port))
-    (values (add-text-to-store store (string-append name ".drv")
-                               (call-with-output-string
-                                (cut write-derivation drv <>))
-                               (map derivation-input-path
-                                    inputs))
-            drv)))
+    (let ((file (add-text-to-store store (string-append name ".drv")
+                                   (call-with-output-string
+                                    (cut write-derivation drv <>))
+                                   (map derivation-input-path
+                                        inputs))))
+      (set-file-name drv file))))
+
+
+;;;
+;;; Store compatibility layer.
+;;;
+
+(define (build-derivations store derivations)
+  "Build DERIVATIONS, a list of <derivation> objects or .drv file names."
+  (let ((build (@ (guix store) build-derivations)))
+    (build store (map (match-lambda
+                       ((? string? file) file)
+                       ((and drv ($ <derivation>))
+                        (derivation-file-name drv)))
+                      derivations))))
 
 
 ;;;
@@ -675,7 +758,7 @@ they can refer to each other."
                                        #:system system
                                        #:guile guile
                                        #:module-path module-path))
-         (module-dir (derivation-path->output-path module-drv))
+         (module-dir (derivation->output-path module-drv))
          (files      (map (lambda (m)
                             (let ((f (string-join (map symbol->string m)
                                                   "/")))
@@ -714,7 +797,8 @@ they can refer to each other."
                                        hash hash-algo
                                        (env-vars '())
                                        (modules '())
-                                       guile-for-build)
+                                       guile-for-build
+                                       references-graphs)
   "Return a derivation that executes Scheme expression EXP as a builder
 for derivation NAME.  INPUTS must be a list of (NAME DRV-PATH SUB-DRV)
 tuples; when SUB-DRV is omitted, \"out\" is assumed.  MODULES is a list
@@ -731,23 +815,27 @@ builder terminates by passing the result of EXP to `exit'; thus, when
 EXP returns #f, the build is considered to have failed.
 
 EXP is built using GUILE-FOR-BUILD (a derivation).  When GUILE-FOR-BUILD is
-omitted or is #f, the value of the `%guile-for-build' fluid is used instead."
+omitted or is #f, the value of the `%guile-for-build' fluid is used instead.
+
+See the `derivation' procedure for the meaning of REFERENCES-GRAPHS."
   (define guile-drv
     (or guile-for-build (%guile-for-build)))
 
   (define guile
-    (string-append (derivation-path->output-path guile-drv)
+    (string-append (derivation->output-path guile-drv)
                    "/bin/guile"))
 
   (define module-form?
     (match-lambda
-      (((or 'define-module 'use-modules) _ ...) #t)
-      (_ #f)))
+     (((or 'define-module 'use-modules) _ ...) #t)
+     (_ #f)))
 
   (define source-path
     ;; When passed an input that is a source, return its path; otherwise
     ;; return #f.
     (match-lambda
+     ((_ (? derivation?) _ ...)
+      #f)
      ((_ path _ ...)
       (and (not (derivation-path? path))
            path))))
@@ -772,10 +860,13 @@ omitted or is #f, the value of the `%guile-for-build' fluid is used instead."
                                               (() "out")
                                               ((x) x))))
                                    (cons name
-                                         (if (derivation-path? drv)
-                                             (derivation-path->output-path drv
-                                                                           sub)
-                                             drv)))))
+                                         (cond
+                                          ((derivation? drv)
+                                           (derivation->output-path drv sub))
+                                          ((derivation-path? drv)
+                                           (derivation-path->output-path drv
+                                                                         sub))
+                                          (else drv))))))
                                inputs))
 
                       ,@(if (null? modules)
@@ -820,29 +911,33 @@ omitted or is #f, the value of the `%guile-for-build' fluid is used instead."
                                           #:guile guile-drv
                                           #:system system)))
          (mod-dir  (and mod-drv
-                        (derivation-path->output-path mod-drv)))
+                        (derivation->output-path mod-drv)))
          (go-drv   (and (pair? modules)
                         (compiled-modules store modules
                                           #:guile guile-drv
                                           #:system system)))
          (go-dir   (and go-drv
-                        (derivation-path->output-path go-drv))))
-    (derivation store name system guile
+                        (derivation->output-path go-drv))))
+    (derivation store name guile
                 `("--no-auto-compile"
                   ,@(if mod-dir `("-L" ,mod-dir) '())
                   ,builder)
 
+                #:system system
+
+                #:inputs `((,(or guile-for-build (%guile-for-build)))
+                           (,builder)
+                           ,@(map cdr inputs)
+                           ,@(if mod-drv `((,mod-drv) (,go-drv)) '()))
+
                 ;; When MODULES is non-empty, shamelessly clobber
                 ;; $GUILE_LOAD_COMPILED_PATH.
-                (if go-dir
-                    `(("GUILE_LOAD_COMPILED_PATH" . ,go-dir)
-                      ,@(alist-delete "GUILE_LOAD_COMPILED_PATH"
-                                      env-vars))
-                    env-vars)
+                #:env-vars (if go-dir
+                               `(("GUILE_LOAD_COMPILED_PATH" . ,go-dir)
+                                 ,@(alist-delete "GUILE_LOAD_COMPILED_PATH"
+                                                 env-vars))
+                               env-vars)
 
-                `((,(or guile-for-build (%guile-for-build)))
-                  (,builder)
-                  ,@(map cdr inputs)
-                  ,@(if mod-drv `((,mod-drv) (,go-drv)) '()))
                 #:hash hash #:hash-algo hash-algo
-                #:outputs outputs)))
+                #:outputs outputs
+                #:references-graphs references-graphs)))

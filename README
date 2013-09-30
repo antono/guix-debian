@@ -20,7 +20,7 @@ Guix is based on the [[http://nixos.org/nix/][Nix]] package manager.
 
 GNU Guix currently depends on the following packages:
 
-  - [[http://gnu.org/software/guile/][GNU Guile 2.0.x]]
+  - [[http://gnu.org/software/guile/][GNU Guile 2.0.x]], version 2.0.5 or later
   - [[http://gnupg.org/][GNU libgcrypt]]
 
 Unless `--disable-daemon' was passed, the following packages are needed:
@@ -33,32 +33,47 @@ When `--disable-daemon' was passed, you instead need the following:
 
   - [[http://nixos.org/nix/][Nix]]
 
-Optionally, packages from Nixpkgs may be transparently reused from Guix.
-For this to work, you need to have a checkout of the Nixpkgs repository;
-the `--with-nixpkgs' option allows you to let `configure' know where the
-Nixpkgs checkout is.
+* Installation
 
-  - [[http://nixos.org/nixpkgs/][Nixpkgs]]
+See the manual for the installation instructions, either by running
 
-When building Guix from a checkout, the following packages are also
-required:
+  info -f doc/guix.info "(guix) Installation"
 
-  - [[http://www.gnu.org/software/autoconf/][GNU Autoconf]]
-  - [[http://www.gnu.org/software/automake/][GNU Automake]]
-  - [[http://www.gnu.org/software/gettext/][GNU Gettext]]
+or by checking the [[http://www.gnu.org/software/guix/manual/guix.html#Installation][web copy of the manual]].
 
-The "autoreconf -vi" command can be used to generate the build system
-infrastructure; it reports an error if an inappropriate version of the
-above packages is being used.
+For information on installation from a Git checkout, please see the ‘HACKING’
+file.
 
 * Installing Guix from Guix
 
 You can re-build and re-install Guix using a system that already runs Guix.
 To do so:
 
-  - install the dependencies (see 'Requirements' above) using Guix
+  - Install the dependencies (see 'Requirements' above) and build tools using
+    Guix.  You should have the following packages installed in your user
+    profile:
+
+    - autoconf
+    - automake
+    - bzip2
+    - gcc
+    - gettext
+    - glibc
+    - guile
+    - ld-wrapper
+    - libgcrypt
+    - pkg-config
+    - sqlite
+
+  - set the environment variables that Guix recommends you to set during the
+    package installation process:
+      ACLOCAL, CPATH, LIBRARY_PATH, PATH, PKG_CONFIG_PATH
+    In addition, set 
+      GUIX_LD_WRAPPER_ALLOW_IMPURITIES=yes
+
   - re-run the configure script passing it the option
     `--with-libgcrypt-prefix=$HOME/.guix-profile/'
+
   - run "make" and "make install"
 
 * How It Works

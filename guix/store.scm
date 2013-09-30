@@ -25,12 +25,14 @@
   #:use-module (rnrs io ports)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9)
+  #:use-module (srfi srfi-9 gnu)
   #:use-module (srfi srfi-26)
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-35)
   #:use-module (srfi srfi-39)
   #:use-module (ice-9 match)
   #:use-module (ice-9 regex)
+  #:use-module (ice-9 vlist)
   #:export (%daemon-socket-file
 
             nix-server?
@@ -70,6 +72,7 @@
             substitutable-path-info
 
             references
+            requisites
             referrers
             valid-derivers
             query-derivation-outputs
@@ -240,6 +243,14 @@
   (ats-cache  nix-server-add-to-store-cache)
   (atts-cache nix-server-add-text-to-store-cache))
 
+(set-record-type-printer! <nix-server>
+                          (lambda (obj port)
+                            (format port "#<build-daemon ~a.~a ~a>"
+                                    (nix-server-major-version obj)
+                                    (nix-server-minor-version obj)
+                                    (number->string (object-address obj)
+                                                    16))))
+
 (define-condition-type &nix-error &error
   nix-error?)
 
@@ -264,8 +275,15 @@ operate, should the disk become full.  Return a server object."
              (socket PF_UNIX SOCK_STREAM 0)))
         (a (make-socket-address PF_UNIX file)))
 
-    ;; Enlarge the receive buffer.
-    (setsockopt s SOL_SOCKET SO_RCVBUF (* 12 1024))
+    (catch 'system-error
+      (lambda ()
+        ;; Enlarge the receive buffer.
+        (setsockopt s SOL_SOCKET SO_RCVBUF (* 12 1024)))
+      (lambda args
+        ;; On the Hurd, the pflocal server's implementation of `socket_setopt'
+        ;; always returns ENOPROTOOPT.  Ignore it.
+        (unless (= (system-error-errno args) ENOPROTOOPT)
+          (apply throw args))))
 
     (catch 'system-error
       (cut connect s a)
@@ -354,7 +372,7 @@ encoding conversion errors."
                               (status   k))))))))
 
 (define* (set-build-options server
-                            #:key keep-failed? keep-going? try-fallback?
+                            #:key keep-failed? keep-going? fallback?
                             (verbosity 0)
                             (max-build-jobs (current-processor-count))
                             (max-silent-time 3600)
@@ -377,7 +395,7 @@ encoding conversion errors."
                           ...)))))
     (write-int (operation-id set-options) socket)
     (send (boolean keep-failed?) (boolean keep-going?)
-          (boolean try-fallback?) (integer verbosity)
+          (boolean fallback?) (integer verbosity)
           (integer max-build-jobs) (integer max-silent-time))
     (if (>= (nix-server-minor-version server) 2)
         (send (boolean use-build-hook?)))
@@ -434,7 +452,7 @@ encoding conversion errors."
                                        (string-list references))
                     #f
                     store-path)))
-    (lambda (server name text references)
+    (lambda* (server name text #:optional (references '()))
       "Add TEXT under file NAME in the store, and return its store path.
 REFERENCES is the list of store paths referred to by the resulting store
 path."
@@ -492,6 +510,30 @@ file name.  Return #t on success."
   (operation (query-references (store-path path))
              "Return the list of references of PATH."
              store-path-list))
+
+(define* (fold-path store proc seed path
+                    #:optional (relatives (cut references store <>)))
+  "Call PROC for each of the RELATIVES of PATH, exactly once, and return the
+result formed from the successive calls to PROC, the first of which is passed
+SEED."
+  (let loop ((paths  (list path))
+             (result seed)
+             (seen   vlist-null))
+    (match paths
+      ((path rest ...)
+       (if (vhash-assoc path seen)
+           (loop rest result seen)
+           (let ((seen   (vhash-cons path #t seen))
+                 (rest   (append rest (relatives path)))
+                 (result (proc path result)))
+             (loop rest result seen))))
+      (()
+       result))))
+
+(define (requisites store path)
+  "Return the requisites of PATH, including PATH---i.e., its closure (all its
+references, recursively)."
+  (fold-path store cons '() path))
 
 (define referrers
   (operation (query-referrers (store-path path))

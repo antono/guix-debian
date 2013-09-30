@@ -28,7 +28,9 @@
   #:use-module (srfi srfi-26)
   #:use-module (ice-9 match)
   #:use-module (ice-9 format)
-  #:export (url-fetch))
+  #:export (url-fetch
+            progress-proc
+            uri-abbreviation))
 
 ;;; Commentary:
 ;;;
@@ -63,8 +65,11 @@ abbreviation of URI showing the scheme, host, and basename of the file."
 
   (define (elide-path)
     (let ((path (uri-path uri)))
-      (string-append (symbol->string (uri-scheme uri))
-                     "://" (uri-host uri)
+      (string-append (symbol->string (uri-scheme uri)) "://"
+
+                     ;; `file' URIs have no host part.
+                     (or (uri-host uri) "")
+
                      (string-append "/.../" (basename path)))))
 
   (if (> (string-length uri-as-string) max-length)

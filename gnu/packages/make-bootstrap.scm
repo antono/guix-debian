@@ -24,6 +24,7 @@
   #:use-module (guix build-system gnu)
   #:use-module ((gnu packages) #:select (search-patch))
   #:use-module (gnu packages base)
+  #:use-module (gnu packages cross-base)
   #:use-module (gnu packages bash)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages gawk)
@@ -43,18 +44,18 @@
 
 ;;; Commentary:
 ;;;
-;;; This modules provides tools to build tarballs of the "bootstrap binaries"
+;;; This module provides tools to build tarballs of the "bootstrap binaries"
 ;;; used in (gnu packages bootstrap).  These statically-linked binaries are
 ;;; taken for granted and used as the root of the whole bootstrap procedure.
 ;;;
 ;;; Code:
 
-(define %glibc-for-bootstrap
-  ;; A libc whose `system' and `popen' functions looks for `sh' in $PATH,
-  ;; without nscd, and with static NSS modules.
-  (package (inherit glibc-final)
+(define* (glibc-for-bootstrap #:optional (base glibc))
+  "Return a libc deriving from BASE whose `system' and `popen' functions looks
+for `sh' in $PATH, and without nscd, and with static NSS modules."
+  (package (inherit base)
     (arguments
-     (substitute-keyword-arguments (package-arguments glibc-final)
+     (substitute-keyword-arguments (package-arguments base)
        ((#:patches patches)
         `(cons (assoc-ref %build-inputs "patch/system") ,patches))
        ((#:configure-flags flags)
@@ -65,17 +66,45 @@
                 ,flags))))
     (inputs
      `(("patch/system" ,(search-patch "glibc-bootstrap-system.patch"))
-       ,@(package-inputs glibc-final)))))
+       ,@(package-inputs base)))))
 
-(define %standard-inputs-with-relocatable-glibc
+(define (package-with-relocatable-glibc p)
+  "Return a variant of P that uses the libc as defined by
+`glibc-for-bootstrap'."
+
+  (define (cross-bootstrap-libc)
+    (let ((target (%current-target-system)))
+      (glibc-for-bootstrap
+       ;; `cross-libc' already returns a cross libc, so clear
+       ;; %CURRENT-TARGET-SYSTEM.
+       (parameterize ((%current-target-system #f))
+         (cross-libc target)))))
+
   ;; Standard inputs with the above libc and corresponding GCC.
-  `(("libc", %glibc-for-bootstrap)
-    ("gcc" ,(package-with-explicit-inputs
-             gcc-4.7
-             `(("libc",%glibc-for-bootstrap)
-               ,@(alist-delete "libc" %final-inputs))
-             (current-source-location)))
-    ,@(fold alist-delete %final-inputs '("libc" "gcc"))))
+
+  (define (inputs)
+    (if (%current-target-system)                ; is this package cross built?
+        `(("cross-libc" ,(cross-bootstrap-libc)))
+        '()))
+
+  (define (native-inputs)
+    (if (%current-target-system)
+        (let ((target (%current-target-system)))
+          `(("cross-gcc"      ,(cross-gcc target
+                                          (cross-binutils target)
+                                          (cross-bootstrap-libc)))
+            ("cross-binutils" ,(cross-binutils target))
+            ,@%final-inputs))
+        `(("libc" ,(glibc-for-bootstrap))
+          ("gcc" ,(package (inherit gcc-4.7)
+                    (inputs
+                     `(("libc",(glibc-for-bootstrap))
+                       ,@(package-inputs gcc-4.7)))))
+          ,@(fold alist-delete %final-inputs '("libc" "gcc")))))
+
+  (package-with-explicit-inputs p inputs
+                                (current-source-location)
+                                #:native-inputs native-inputs))
 
 (define %bash-static
   (static-package bash-light))
@@ -83,18 +112,25 @@
 (define %static-inputs
   ;; Packages that are to be used as %BOOTSTRAP-INPUTS.
   (let ((coreutils (package (inherit coreutils)
-                     (arguments
-                      `(#:configure-flags
-                        '("--disable-nls"
-                          "--disable-silent-rules"
-                          "--enable-no-install-program=stdbuf,libstdbuf.so"
-                          "CFLAGS=-Os -g0"        ; smaller, please
-                          "LDFLAGS=-static -pthread")
-                        #:tests? #f   ; signal-related Gnulib tests fail
-                        ,@(package-arguments coreutils)))
+                      (arguments
+                       `(#:configure-flags
+                         '("--disable-nls"
+                           "--disable-silent-rules"
+                           "--enable-no-install-program=stdbuf,libstdbuf.so"
+                           "CFLAGS=-Os -g0"        ; smaller, please
+                           "LDFLAGS=-static -pthread")
+                         #:tests? #f   ; signal-related Gnulib tests fail
+                         ,@(package-arguments coreutils)))
 
-                     ;; Remove optional dependencies such as GMP.
-                     (inputs `(,(assoc "perl" (package-inputs coreutils))))))
+                      ;; Remove optional dependencies such as GMP.  Keep Perl
+                      ;; except if it's missing (which is the case when
+                      ;; cross-compiling).
+                      (inputs (match (assoc "perl" (package-inputs coreutils))
+                                (#f '())
+                                (x  (list x))))
+
+                      ;; Remove the `debug' output.
+                      (outputs '("out"))))
         (bzip2 (package (inherit bzip2)
                  (arguments
                   (substitute-keyword-arguments (package-arguments bzip2)
@@ -120,6 +156,13 @@
         (gawk (package (inherit gawk)
                 (arguments
                  `(#:patches (list (assoc-ref %build-inputs "patch/sh"))
+
+                   ;; Starting from gawk 4.1.0, some of the tests for the
+                   ;; plug-in mechanism just fail on static builds:
+                   ;;
+                   ;; ./fts.awk:1: error: can't open shared library `filefuncs' for reading (No such file or directory)
+                   #:tests? #f
+
                    ,@(substitute-keyword-arguments (package-arguments gawk)
                        ((#:phases phases)
                         `(alist-cons-before
@@ -130,12 +173,12 @@
                             (substitute* "configure"
                               (("-export-dynamic") "")))
                           ,phases)))))
-                (inputs `(("patch/sh" ,(search-patch "gawk-shell.patch"))))))
-        (finalize (lambda (p)
-                    (static-package (package-with-explicit-inputs
-                                     p
-                                     %standard-inputs-with-relocatable-glibc)
-                                    (current-source-location)))))
+                (inputs `(("patch/sh" ,(search-patch "gawk-shell.patch"))
+                          ,@(if (%current-target-system)
+                                `(("bash" ,%bash-static))
+                                '())))))
+        (finalize (compose static-package
+                           package-with-relocatable-glibc)))
     `(,@(map (match-lambda
               ((name package)
                (list name (finalize package))))
@@ -148,12 +191,7 @@
                ("sed" ,sed)
                ("grep" ,grep)
                ("gawk" ,gawk)))
-      ("bash" ,%bash-static)
-      ;; ("ld-wrapper" ,ld-wrapper)
-      ;; ("binutils" ,binutils-final)
-      ;; ("gcc" ,gcc-final)
-      ;; ("libc" ,glibc-final)
-      )))
+      ("bash" ,%bash-static))))
 
 (define %static-binaries
   (package
@@ -232,7 +270,11 @@
   (package (inherit binutils)
     (name "binutils-static")
     (arguments
-     `(#:configure-flags '("--disable-gold" "--with-lib-path=/no-ld-lib-path")
+     `(#:configure-flags (cons "--disable-gold"
+                               ,(match (memq #:configure-flags
+                                             (package-arguments binutils))
+                                  ((#:configure-flags flags _ ...)
+                                   flags)))
        #:strip-flags '("--strip-all")
        #:phases (alist-cons-before
                  'configure 'all-static
@@ -280,7 +322,7 @@
   ;; GNU libc's essential shared libraries, dynamic linker, and headers,
   ;; with all references to store directories stripped.  As a result,
   ;; libc.so is unusable and need to be patched for proper relocation.
-  (let ((glibc %glibc-for-bootstrap))
+  (let ((glibc (glibc-for-bootstrap)))
     (package (inherit glibc)
       (name "glibc-stripped")
       (build-system trivial-build-system)
@@ -323,7 +365,12 @@
              (copy-recursively (string-append linux "/include/asm-generic")
                                (string-append incdir "/asm-generic"))
              #t))))
-      (inputs `(("libc" ,glibc)
+      (inputs `(("libc" ,(let ((target (%current-target-system)))
+                           (if target
+                               (glibc-for-bootstrap
+                                (parameterize ((%current-target-system #f))
+                                  (cross-libc target)))
+                               glibc)))
                 ("linux-headers" ,linux-libre-headers)))
 
       ;; Only one output.
@@ -331,8 +378,8 @@
 
 (define %gcc-static
   ;; A statically-linked GCC, with stripped-down functionality.
-  (package-with-explicit-inputs
-   (package (inherit gcc-final)
+  (package-with-relocatable-glibc
+   (package (inherit gcc-4.7)
      (name "gcc-static")
      (arguments
       `(#:modules ((guix build utils)
@@ -340,7 +387,7 @@
                    (srfi srfi-1)
                    (srfi srfi-26)
                    (ice-9 regex))
-        ,@(substitute-keyword-arguments (package-arguments gcc-final)
+        ,@(substitute-keyword-arguments (package-arguments gcc-4.7)
             ((#:guile _) #f)
             ((#:implicit-inputs? _) #t)
             ((#:configure-flags flags)
@@ -356,13 +403,14 @@
                       (remove (cut string-match "--(.*plugin|enable-languages)" <>)
                               ,flags)))
             ((#:make-flags flags)
-             `(cons "BOOT_LDFLAGS=-static" ,flags)))))
+             (if (%current-target-system)
+                 `(cons "LDFLAGS=-static" ,flags)
+                 `(cons "BOOT_LDFLAGS=-static" ,flags))))))
      (inputs `(("gmp-source" ,(package-source gmp))
                ("mpfr-source" ,(package-source mpfr))
                ("mpc-source" ,(package-source mpc))
-               ("binutils" ,binutils-final)
-               ,@(package-inputs gcc-4.7))))
-   %standard-inputs-with-relocatable-glibc))
+               ("binutils" ,binutils)
+               ,@(package-inputs gcc-4.7))))))
 
 (define %gcc-stripped
   ;; The subset of GCC files needed for bootstrap.
@@ -404,14 +452,9 @@
   ;; A statically-linked Guile that is relocatable--i.e., it can search
   ;; .scm and .go files relative to its installation directory, rather
   ;; than in hard-coded configure-time paths.
-  (let* ((libgc (package (inherit libgc)
-                  (arguments
-                   ;; Make it so that we don't rely on /proc.  This is
-                   ;; especially useful in an initrd run before /proc is
-                   ;; mounted.
-                   '(#:configure-flags '("CPPFLAGS=-DUSE_LIBC_PRIVATES")))))
-         (guile (package (inherit guile-2.0)
+  (let* ((guile (package (inherit guile-2.0)
                   (name (string-append (package-name guile-2.0) "-static"))
+                  (synopsis "Statically-linked and relocatable Guile")
                   (inputs
                    `(("patch/relocatable"
                       ,(search-patch "guile-relocatable.patch"))
@@ -428,7 +471,10 @@
                    `(;; When `configure' checks for ltdl availability, it
                      ;; doesn't try to link using libtool, and thus fails
                      ;; because of a missing -ldl.  Work around that.
-                     #:configure-flags '("LDFLAGS=-ldl")
+                     #:configure-flags '("LDFLAGS=-ldl"
+                                         ,@(if (%current-target-system)
+                                               '("CC_FOR_BUILD=gcc")
+                                               '()))
 
                      #:phases (alist-cons-before
                                'configure 'static-guile
@@ -456,9 +502,7 @@
                      ;; There are uses of `dynamic-link' in
                      ;; {foreign,coverage}.test that don't fly here.
                      #:tests? #f)))))
-    (package-with-explicit-inputs (static-package guile)
-                                  %standard-inputs-with-relocatable-glibc
-                                  (current-source-location))))
+    (package-with-relocatable-glibc (static-package guile))))
 
 (define %guile-static-stripped
   ;; A stripped static Guile binary, for use during bootstrap.
@@ -471,8 +515,10 @@
        (let ()
          (use-modules (guix build utils))
 
-         (let ((in  (assoc-ref %build-inputs "guile"))
-               (out (assoc-ref %outputs "out")))
+         (let* ((in     (assoc-ref %build-inputs "guile"))
+                (out    (assoc-ref %outputs "out"))
+                (guile1 (string-append in "/bin/guile"))
+                (guile2 (string-append out "/bin/guile")))
            (mkdir-p (string-append out "/share/guile/2.0"))
            (copy-recursively (string-append in "/share/guile/2.0")
                              (string-append out "/share/guile/2.0"))
@@ -482,11 +528,26 @@
                              (string-append out "/lib/guile/2.0/ccache"))
 
            (mkdir (string-append out "/bin"))
-           (copy-file (string-append in "/bin/guile")
-                      (string-append out "/bin/guile"))
-           (remove-store-references (string-append out "/bin/guile"))
-           #t))))
-    (inputs `(("guile" ,%guile-static)))))
+           (copy-file guile1 guile2)
+
+           ;; Does the relocated Guile work?
+           (and ,(if (%current-target-system)
+                     #t
+                     '(zero? (system* guile2 "--version")))
+                (begin
+                  ;; Strip store references.
+                  (remove-store-references guile2)
+
+                  ;; Does the stripped Guile work?  If it aborts, it could be
+                  ;; that it tries to open iconv descriptors and fails because
+                  ;; libc's iconv data isn't available (see
+                  ;; `guile-default-utf8.patch'.)
+                  ,(if (%current-target-system)
+                       #t
+                       '(zero? (system* guile2 "--version")))))))))
+    (inputs `(("guile" ,%guile-static)))
+    (outputs '("out"))
+    (synopsis "Minimal statically-linked and relocatable Guile")))
 
 (define (tarball-package pkg)
   "Return a package containing a tarball of PKG."
@@ -494,9 +555,9 @@
     (location (source-properties->location (current-source-location)))
     (name (string-append (package-name pkg) "-tarball"))
     (build-system trivial-build-system)
-    (inputs `(("tar" ,tar)
-              ("xz" ,xz)
-              ("input" ,pkg)))
+    (native-inputs `(("tar" ,tar)
+                     ("xz" ,xz)))
+    (inputs `(("input" ,pkg)))
     (arguments
      (let ((name    (package-name pkg))
            (version (package-version pkg)))
@@ -514,7 +575,9 @@
                (zero? (system* "tar" "cJvf"
                                (string-append out "/"
                                               ,name "-" ,version
-                                              "-" ,(%current-system)
+                                              "-"
+                                              ,(or (%current-target-system)
+                                                   (%current-system))
                                               ".tar.xz")
                                "."))))))))))
 

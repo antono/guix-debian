@@ -24,6 +24,7 @@
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages)
   #:use-module (gnu packages autotools)
+  #:use-module (gnu packages texinfo)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages python)
@@ -34,19 +35,21 @@
   #:use-module (gnu packages attr)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages samba)
+  #:use-module (gnu packages xorg)
   #:use-module (gnu packages perl))
 
-(define-public qemu-kvm
+(define-public qemu
+  ;; Since QEMU 1.3, it incorporates KVM support formerly found in QEMU-KVM.
   (package
-    (name "qemu-kvm")
-    (version "1.2.0")
+    (name "qemu")
+    (version "1.5.1")
     (source (origin
              (method url-fetch)
-             (uri (string-append "mirror://sourceforge/kvm/qemu-kvm/"
-                                 version "/qemu-kvm-" version ".tar.gz"))
+             (uri (string-append "http://wiki.qemu-project.org/download/qemu-"
+                                 version ".tar.bz2"))
              (sha256
               (base32
-               "018vb5nmk2fsm143bs2bl2wirhasd4b10d7jchl32zik4inbk2p9"))))
+               "1s7316pgizpayr472la8p8a4vhv7ymmzd5qlbkmq6y9q5zpa25ac"))))
     (build-system gnu-build-system)
     (arguments
      '(#:phases (alist-replace
@@ -58,104 +61,82 @@
                          (samba (assoc-ref inputs "samba")))
                      (setenv "SHELL" (which "bash"))
 
+                     ;; While we're at it, patch for tests.
+                     (substitute* "tests/libqtest.c"
+                       (("/bin/sh") (which "sh")))
+
                      ;; The binaries need to be linked against -lrt.
                      (setenv "LDFLAGS" "-lrt")
                      (zero?
                       (system* "./configure"
+                               (string-append "--cc=" (which "gcc"))
                                (string-append "--prefix=" out)
                                (string-append "--smbd=" samba
                                               "/sbin/smbd")))))
-                 %standard-phases)))
+                 (alist-cons-after
+                  'install 'install-info
+                  (lambda* (#:key inputs outputs #:allow-other-keys)
+                    ;; Install the Info manual, unless Texinfo is missing.
+                    (or (not (assoc-ref inputs "texinfo"))
+                        (let ((out (assoc-ref outputs "out")))
+                          (and (zero? (system* "make" "info"))
+                               (let ((infodir (string-append out "/share/info")))
+                                 (mkdir-p infodir)
+                                 (for-each (lambda (info)
+                                             (copy-file
+                                              info
+                                              (string-append infodir "/" info)))
+                                           (find-files "." "\\.info$"))
+                                 #t)))))
+                  %standard-phases))))
+
     (inputs                                       ; TODO: Add optional inputs.
      `(;; ("mesa" ,mesa)
        ;; ("libaio" ,libaio)
        ("glib" ,glib)
-       ("python" ,python)
+       ("python" ,python-2) ; incompatible with Python 3 according to error message
        ("ncurses" ,ncurses)
        ("libpng" ,libpng)
        ("libjpeg" ,libjpeg-8)
+       ("pixman" ,pixman)
        ;; ("vde2" ,vde2)
        ("util-linux" ,util-linux)
        ;; ("pciutils" ,pciutils)
        ("pkg-config" ,pkg-config)
-       ;; ("alsa-lib" ,alsa-lib)
+       ("alsa-lib" ,alsa-lib)
        ;; ("SDL" ,SDL)
        ("zlib" ,zlib)
        ("attr" ,attr)
        ("samba" ,samba)))                         ; an optional dependency
-    (home-page "http://www.linux-kvm.org/")
-    (synopsis
-     "Virtualization for Linux on x86 hardware containing virtualization extensions")
-    (description
-     "KVM (for Kernel-based Virtual Machine) is a full virtualization solution
-for Linux on x86 hardware containing virtualization extensions (Intel VT or
-AMD-V).  It consists of a loadable kernel module, kvm.ko, that provides the
-core virtualization infrastructure and a processor specific module,
-kvm-intel.ko or kvm-amd.ko. KVM also requires a modified QEMU although work is
-underway to get the required changes upstream.")
-
-    ;; Many files are GPLv2+, but some are GPLv2-only---e.g., `memory.c'.
-    (license gpl2)))
-
-(define-public qemu-kvm/smb-shares
-  ;; A patched QEMU-KVM where `-net smb' yields two shares instead of one: one
-  ;; for the store, and another one for exchanges with the host.
-  (package (inherit qemu-kvm)
-    (name "qemu-kvm-with-multiple-smb-shares")
-    (inputs `(,@(package-inputs qemu-kvm)
-              ("patch/smb-shares"
-               ,(search-patch "qemu-multiple-smb-shares.patch"))))
-    (arguments
-     `(#:patches (list (assoc-ref %build-inputs "patch/smb-shares"))
-       ,@(package-arguments qemu-kvm)))))
-
-(define-public qemu
-  ;; The real one, with a complete target list.
-  (package (inherit qemu-kvm)
-    (name "qemu")
-    (version "1.3.1")
-    (location (source-properties->location (current-source-location)))
-    (source (origin
-             (method url-fetch)
-             (uri (string-append "http://wiki.qemu-project.org/download/qemu-"
-                                 version ".tar.bz2"))
-             (sha256
-              (base32
-               "1bqfrb5dlsxm8gxhkksz8qzi5fhj3xqhxyfwbqcphhcv1kpyfwip"))))
-    (arguments
-     (substitute-keyword-arguments (package-arguments qemu-kvm)
-       ((#:phases phases)
-        `(alist-cons-before
-          'build 'pre-build
-          (lambda* (#:key inputs #:allow-other-keys)
-            (let ((libtool    (assoc-ref inputs "libtool"))
-                  (pkg-config (assoc-ref inputs "pkg-config")))
-              ;; XXX: For lack of generic search path handling.
-              (setenv "ACLOCAL_PATH"
-                      (format #f "~a/share/aclocal:~a/share/aclocal"
-                              libtool pkg-config)))
-
-            ;; For pixman's `configure' script.
-            (setenv "CONFIG_SHELL" (which "bash"))
-
-            (substitute* "pixman/configure.ac"
-              (("AM_CONFIG_HEADER") "AC_CONFIG_HEADERS")))
-          ,phases))))
-    (native-inputs `(("autoconf" ,autoconf-wrapper) ; for "pixman"
-                     ("automake" ,automake)
-                     ("libtool" ,libtool)
-                     ("libtool-bin" ,libtool "bin")
+    (native-inputs `(("texinfo" ,texinfo)
                      ("perl" ,perl)))
+
+    (home-page "http://www.qemu-project.org")
+    (synopsis "Machine emulator and virtualizer")
     (description
-     "QEMU is a generic and open source machine emulator and virtualizer.
+     "QEMU is a generic machine emulator and virtualizer.
 
 When used as a machine emulator, QEMU can run OSes and programs made for one
-machine (e.g. an ARM board) on a different machine
-(e.g. your own PC).  By using dynamic translation, it achieves very good
-performance.
+machine (e.g. an ARM board) on a different machine---e.g., your own PC.  By
+using dynamic translation, it achieves very good performance.
 
 When used as a virtualizer, QEMU achieves near native performances by
 executing the guest code directly on the host CPU.  QEMU supports
 virtualization when executing under the Xen hypervisor or using
 the KVM kernel module in Linux.  When using KVM, QEMU can virtualize x86,
-server and embedded PowerPC, and S390 guests.")))
+server and embedded PowerPC, and S390 guests.")
+
+    ;; Many files are GPLv2+, but some are GPLv2-only---e.g., `memory.c'.
+    (license gpl2)))
+
+(define-public qemu/smb-shares
+  ;; A patched QEMU where `-net smb' yields two shares instead of one: one for
+  ;; the store, and another one for exchanges with the host.
+  (package (inherit qemu)
+    (name "qemu-with-multiple-smb-shares")
+    (inputs `(,@(package-inputs qemu)
+              ("patch/smb-shares"
+               ,(search-patch "qemu-multiple-smb-shares.patch"))))
+    (arguments
+     `(#:patches (list (assoc-ref %build-inputs "patch/smb-shares"))
+       ,@(package-arguments qemu)))))

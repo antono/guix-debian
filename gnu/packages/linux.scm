@@ -23,10 +23,15 @@
   #:use-module ((gnu packages compression)
                 #:renamer (symbol-prefix-proc 'guix:))
   #:use-module (gnu packages flex)
+  #:use-module (gnu packages bison)
   #:use-module (gnu packages libusb)
   #:use-module (gnu packages ncurses)
+  #:use-module (gnu packages bdb)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages algebra)
+  #:use-module ((gnu packages gettext)
+                #:renamer (symbol-prefix-proc 'g:))
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix build-system gnu))
@@ -39,6 +44,22 @@
           ((string-prefix? "mips" arch) "mips")
           ((string-prefix? "arm" arch) "arm")
           (else arch))))
+
+(define (linux-libre-urls version)
+  "Return a list of URLs for Linux-Libre VERSION."
+  (list (string-append
+         "http://linux-libre.fsfla.org/pub/linux-libre/releases/"
+         version "-gnu/linux-libre-" version "-gnu.tar.xz")
+
+        ;; XXX: Work around <http://bugs.gnu.org/14851>.
+        (string-append
+         "ftp://alpha.gnu.org/gnu/guix/mirror/linux-libre-"
+         version "-gnu.tar.xz")
+
+        ;; Maybe this URL will become valid eventually.
+        (string-append
+         "mirror://gnu/linux-libre/" version "-gnu/linux-libre-"
+         version "-gnu.tar.xz")))
 
 (define-public linux-libre-headers
   (let* ((version* "3.3.8")
@@ -67,9 +88,7 @@
     (version version*)
     (source (origin
              (method url-fetch)
-             (uri (string-append
-                   "http://linux-libre.fsfla.org/pub/linux-libre/releases/3.3.8-gnu/linux-libre-"
-                   version "-gnu.tar.xz"))
+             (uri (linux-libre-urls version))
              (sha256
               (base32
                "0jkfh0z1s6izvdnc3njm39dhzp1cg8i06jv06izwqz9w9qsprvnl"))))
@@ -103,24 +122,16 @@
               (base32
                "0jxnz9ahfic79rp93l5wxcbgh4pkv85mwnjlbv1gz3jawv5cvwp1"))))
     (build-system gnu-build-system)
-    (inputs
-     ;; The upstream tarball lacks man pages, and building them would require
-     ;; DocBook & co.  Thus, use Gentoo's pre-built man pages.
-     `(("man-pages"
-        ,(origin
-          (method url-fetch)
-          (uri (string-append
-                "http://distfiles.gentoo.org/distfiles/module-init-tools-" version
-                "-man.tar.bz2"))
-          (sha256
-           (base32
-            "1j1nzi87kgsh4scl645fhwhjvljxj83cmdasa4n4p5krhasgw358"))))))
     (arguments
+     ;; FIXME: The upstream tarball lacks man pages, and building them would
+     ;; require DocBook & co.  We used to use Gentoo's pre-built man pages,
+     ;; but they vanished.  In the meantime, fake it.
      '(#:phases (alist-cons-before
-                 'unpack 'unpack-man-pages
-                 (lambda* (#:key inputs #:allow-other-keys)
-                   (let ((man-pages (assoc-ref inputs "man-pages")))
-                     (zero? (system* "tar" "xvf" man-pages))))
+                 'configure 'fake-docbook
+                 (lambda _
+                   (substitute* "Makefile.in"
+                     (("^DOCBOOKTOMAN.*$")
+                      "DOCBOOKTOMAN = true\n")))
                  %standard-phases)))
     (home-page "http://www.kernel.org/pub/linux/utils/kernel/module-init-tools/")
     (synopsis "Tools for loading and managing Linux kernel modules")
@@ -130,7 +141,7 @@
     (license gpl2+)))
 
 (define-public linux-libre
-  (let* ((version* "3.3.8")
+  (let* ((version* "3.11")
          (build-phase
           '(lambda* (#:key system #:allow-other-keys #:rest args)
              (let ((arch (car (string-split system #\-))))
@@ -173,14 +184,13 @@
     (version version*)
     (source (origin
              (method url-fetch)
-             (uri (string-append
-                   "http://linux-libre.fsfla.org/pub/linux-libre/releases/3.3.8-gnu/linux-libre-"
-                   version "-gnu.tar.xz"))
+             (uri (linux-libre-urls version))
              (sha256
               (base32
-               "0jkfh0z1s6izvdnc3njm39dhzp1cg8i06jv06izwqz9w9qsprvnl"))))
+               "1vlk04xkvyy1kc9zz556md173rn1qzlnvhz7c9sljv4bpk3mdspl"))))
     (build-system gnu-build-system)
     (native-inputs `(("perl" ,perl)
+                     ("bc" ,bc)
                      ("module-init-tools" ,module-init-tools)))
     (arguments
      `(#:modules ((guix build gnu-build-system)
@@ -197,6 +207,11 @@
     (description "Linux-Libre operating system kernel.")
     (license gpl2)
     (home-page "http://www.gnu.org/software/linux-libre/"))))
+
+
+;;;
+;;; Pluggable authentication modules (PAM).
+;;;
 
 (define-public linux-pam
   (package
@@ -221,9 +236,15 @@
        ;; ("cracklib" ,cracklib)
        ))
     (arguments
-     ;; XXX: Tests won't run in chroot, presumably because /etc/pam.d
-     ;; isn't available.
-     '(#:tests? #f))
+     '(;; Most users, such as `shadow', expect the headers to be under
+       ;; `security'.
+       #:configure-flags (list (string-append "--includedir="
+                                              (assoc-ref %outputs "out")
+                                              "/include/security"))
+
+       ;; XXX: Tests won't run in chroot, presumably because /etc/pam.d
+       ;; isn't available.
+       #:tests? #f))
     (home-page "http://www.linux-pam.org/")
     (synopsis "Pluggable authentication modules for Linux")
     (description
@@ -232,6 +253,11 @@ Pluggable authentication modules are small shared object files that can
 be used through the PAM API to perform tasks, like authenticating a user
 at login.  Local and dynamic reconfiguration are its key features")
     (license bsd-3)))
+
+
+;;;
+;;; Miscellaneous.
+;;;
 
 (define-public psmisc
   (package
@@ -284,8 +310,7 @@ providing the system administrator with some help in common tasks.")
               ("ncurses" ,ncurses)
               ("perl" ,perl)))
     (home-page "https://www.kernel.org/pub/linux/utils/util-linux/")
-    (synopsis
-     "util-linux is a random collection of utilities for the Linux kernel")
+    (synopsis "Collection of utilities for the Linux kernel")
     (description
      "util-linux is a random collection of utilities for the Linux kernel.")
 
@@ -342,8 +367,7 @@ providing the system administrator with some help in common tasks.")
        ;; What did you expect?  Tests?
        #:tests? #f))
     (home-page "http://procps.sourceforge.net/")
-    (synopsis
-     "Utilities that give information about processes using the /proc filesystem")
+    (synopsis "Utilities that give information about processes")
     (description
      "procps is the package that has a bunch of small useful utilities
 that give information about processes using the Linux /proc file system.
@@ -405,9 +429,212 @@ slabtop, and skill.")
        ;; filesystem is mounted due to missing mtab file".
        #:tests? #f))
     (home-page "http://e2fsprogs.sourceforge.net/")
-    (synopsis "Tools for creating and checking ext2/ext3/ext4 filesystems")
+    (synopsis "Creating and checking ext2/ext3/ext4 file systems")
     (description
      "This package provides tools for manipulating ext2/ext3/ext4 file systems.")
     (license (list gpl2                           ; programs
                    lgpl2.0                        ; libext2fs
                    x11))))                        ; libuuid
+
+(define-public strace
+  (package
+    (name "strace")
+    (version "4.7")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "mirror://sourceforge/strace/strace-"
+                                 version ".tar.xz"))
+             (sha256
+              (base32
+               "158iwk0pl2mfw93m1843xb7a2zb8p6lh0qim07rca6f1ff4dk764"))))
+    (build-system gnu-build-system)
+    (inputs `(("perl" ,perl)))
+    (home-page "http://strace.sourceforge.net/")
+    (synopsis "System call tracer for Linux")
+    (description
+     "strace is a system call tracer, i.e. a debugging tool which prints out a
+trace of all the system calls made by a another process/program.")
+    (license bsd-3)))
+
+(define-public alsa-lib
+  (package
+    (name "alsa-lib")
+    (version "1.0.27.1")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append
+                   "ftp://ftp.alsa-project.org/pub/lib/alsa-lib-"
+                   version ".tar.bz2"))
+             (sha256
+              (base32
+               "0fx057746dj7rjdi0jnvx2m9b0y1lgdkh1hks87d8w32xyihf3k9"))))
+    (build-system gnu-build-system)
+    (home-page "http://www.alsa-project.org/")
+    (synopsis "The Advanced Linux Sound Architecture libraries")
+    (description
+     "The Advanced Linux Sound Architecture (ALSA) provides audio and
+MIDI functionality to the Linux-based operating system.")
+    (license lgpl2.1+)))
+
+(define-public iptables
+  (package
+    (name "iptables")
+    (version "1.4.16.2")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append
+                   "http://www.netfilter.org/projects/iptables/files/iptables-"
+                   version ".tar.bz2"))
+             (sha256
+              (base32
+               "0vkg5lzkn4l3i1sm6v3x96zzvnv9g7mi0qgj6279ld383mzcws24"))))
+    (build-system gnu-build-system)
+    (arguments '(#:tests? #f))                    ; no test suite
+    (home-page "http://www.netfilter.org/projects/iptables/index.html")
+    (synopsis "Program to configure the Linux IP packet filtering rules")
+    (description
+     "iptables is the userspace command line program used to configure the
+Linux 2.4.x and later IPv4 packet filtering ruleset.  It is targeted towards
+system administrators.  Since Network Address Translation is also configured
+from the packet filter ruleset, iptables is used for this, too.  The iptables
+package also includes ip6tables.  ip6tables is used for configuring the IPv6
+packet filter.")
+    (license gpl2+)))
+
+(define-public iproute
+  (package
+    (name "iproute2")
+    (version "3.8.0")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append
+                   "mirror://kernel.org/linux/utils/net/iproute2/iproute2-"
+                   version ".tar.xz"))
+             (sha256
+              (base32
+               "0kqy30wz2krbg4y7750hjq5218hgy2vj9pm5qzkn1bqskxs4b4ap"))))
+    (build-system gnu-build-system)
+    (arguments
+     `(#:tests? #f                                ; no test suite
+       #:make-flags (let ((out (assoc-ref %outputs "out")))
+                      (list "DESTDIR="
+                            (string-append "LIBDIR=" out "/lib")
+                            (string-append "SBINDIR=" out "/sbin")
+                            (string-append "CONFDIR=" out "/etc")
+                            (string-append "DOCDIR=" out "/share/doc/"
+                                           ,name "-" ,version)
+                            (string-append "MANDIR=" out "/share/man")))
+       #:phases (alist-cons-before
+                 'install 'pre-install
+                 (lambda _
+                   ;; Don't attempt to create /var/lib/arpd.
+                   (substitute* "Makefile"
+                     (("^.*ARPDDIR.*$") "")))
+                 %standard-phases)))
+    (inputs
+     `(("iptables" ,iptables)
+       ("db4" ,bdb)
+       ("pkg-config" ,pkg-config)
+       ("flex" ,flex)
+       ("bison" ,bison)))
+    (home-page
+     "http://www.linuxfoundation.org/collaborate/workgroups/networking/iproute2")
+    (synopsis
+     "A collection of utilities for controlling TCP/IP networking and traffic control in Linux")
+    (description
+     "Iproute2 is a collection of utilities for controlling TCP/IP
+networking and traffic with the Linux kernel.
+
+Most network configuration manuals still refer to ifconfig and route as the
+primary network configuration tools, but ifconfig is known to behave
+inadequately in modern network environments.  They should be deprecated, but
+most distros still include them.  Most network configuration systems make use
+of ifconfig and thus provide a limited feature set.  The /etc/net project aims
+to support most modern network technologies, as it doesn't use ifconfig and
+allows a system administrator to make use of all iproute2 features, including
+traffic control.
+
+iproute2 is usually shipped in a package called iproute or iproute2 and
+consists of several tools, of which the most important are ip and tc.  ip
+controls IPv4 and IPv6 configuration and tc stands for traffic control.  Both
+tools print detailed usage messages and are accompanied by a set of
+manpages.")
+    (license gpl2+)))
+
+(define-public net-tools
+  ;; XXX: This package is basically unmaintained, but it provides a few
+  ;; commands not yet provided by Inetutils, such as 'route', so we have to
+  ;; live with it.
+  (package
+    (name "net-tools")
+    (version "1.60")
+    (home-page "http://www.tazenda.demon.co.uk/phil/net-tools/")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append home-page "/" name "-"
+                                 version ".tar.bz2"))
+             (sha256
+              (base32
+               "0yvxrzk0mzmspr7sa34hm1anw6sif39gyn85w4c5ywfn8inxvr3s"))))
+    (build-system gnu-build-system)
+    (arguments
+     '(#:phases (alist-replace
+                 'patch
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   (define (apply-patch file)
+                     (zero? (system* "patch" "-p1" "--batch"
+                                     "--input" file)))
+
+                   (let ((patch.gz (assoc-ref inputs "patch")))
+                     (format #t "applying Debian patch set '~a'...~%"
+                             patch.gz)
+                     (system (string-append "gunzip < " patch.gz " > the-patch"))
+                     (pk 'here)
+                     (and (apply-patch "the-patch")
+                          (for-each apply-patch
+                                    (find-files "debian/patches"
+                                                "\\.patch")))))
+                 (alist-replace
+                  'configure
+                  (lambda* (#:key outputs #:allow-other-keys)
+                    (let ((out (assoc-ref outputs "out")))
+                      (mkdir-p (string-append out "/bin"))
+                      (mkdir-p (string-append out "/sbin"))
+
+                      ;; Pretend we have everything...
+                      (system "yes | make config")
+
+                      ;; ... except we don't have libdnet, so remove that
+                      ;; definition.
+                      (substitute* '("config.make" "config.h")
+                        (("^.*HAVE_AFDECnet.*$") ""))))
+                  %standard-phases))
+
+       ;; Binaries that depend on libnet-tools.a don't declare that
+       ;; dependency, making it parallel-unsafe.
+       #:parallel-build? #f
+
+       #:tests? #f                                ; no test suite
+       #:make-flags (list "CC=gcc"
+                          (string-append "BASEDIR="
+                                         (assoc-ref %outputs "out")))))
+
+    ;; Use the big Debian patch set (the thing does not even compile out of
+    ;; the box.)
+    (inputs `(("patch" ,(origin
+                         (method url-fetch)
+                         (uri
+                          "http://ftp.de.debian.org/debian/pool/main/n/net-tools/net-tools_1.60-24.2.diff.gz")
+                         (sha256
+                          (base32
+                           "0p93lsqx23v5fv4hpbrydmfvw1ha2rgqpn2zqbs2jhxkzhjc030p"))))))
+    (native-inputs `(("gettext" ,g:gettext)))
+
+    (synopsis "Tools for controlling the network subsystem in Linux")
+    (description
+     "This package includes the important tools for controlling the network
+subsystem of the Linux kernel.  This includes arp, hostname, ifconfig,
+netstat, rarp and route.  Additionally, this package contains utilities
+relating to particular network hardware types (plipconfig, slattach) and
+advanced aspects of IP configuration (iptunnel, ipmaddr).")
+    (license gpl2+)))

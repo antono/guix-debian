@@ -1,6 +1,6 @@
 This is guix.info, produced by makeinfo version 5.1 from guix.texi.
 
-This manual documents GNU Guix version 0.2.
+This manual documents GNU Guix version 0.4.
 
    Copyright © 2012, 2013 Ludovic Courtès
 
@@ -25,10 +25,11 @@ File: guix.info,  Node: Top,  Next: Introduction,  Up: (dir)
 GNU Guix
 ********
 
-This document describes GNU Guix version 0.2, a functional package
+This document describes GNU Guix version 0.4, a functional package
 management tool written for the GNU system.
 
-     Copyright © 2012, 2013 Ludovic Courtès
+     Copyright © 2012, 2013 Ludovic Courtès, Andreas Enge, Nikita
+     Karetnikov
 
      Permission is granted to copy, distribute and/or modify this
      document under the terms of the GNU Free Documentation License,
@@ -45,6 +46,7 @@ management tool written for the GNU system.
 * Programming Interface::       Using Guix in Scheme.
 * Utilities::                   Package management commands.
 * GNU Distribution::            Software for your friendly GNU system.
+* Contributing::                Your help needed!
 
 * Acknowledgments::             Thanks!
 * GNU Free Documentation License::  The license of this manual.
@@ -58,25 +60,24 @@ File: guix.info,  Node: Introduction,  Next: Installation,  Prev: Top,  Up: Top
 **************
 
 GNU Guix(1) is a functional package management tool for the GNU system.
-Package management consists in all the activities that relate to
-building packages from source, honoring the build-time and run-time
-dependencies on packages, installing packages in user environments,
-upgrading installed packages to new versions or rolling back to a
-previous set, removing unused software packages, etc.
+Package management consists of all activities that relate to building
+packages from sources, honoring their build-time and run-time
+dependencies, installing packages in user environments, upgrading
+installed packages to new versions or rolling back to a previous set,
+removing unused software packages, etc.
 
    The term "functional" refers to a specific package management
 discipline.  In Guix, the package build and installation process is seen
-as a function, in the mathematical sense: that function takes inputs,
-such as build scripts, a compiler, and libraries depended on, and
-returns the installed package.  As a pure function, its result depends
-solely on its inputs—for instance, it cannot refer to software or
-scripts that were not explicitly passed as inputs.  A build function
-always produces the same result when passed a given set of inputs.  Last
-but not least, a build function cannot alter the system’s environment in
-any way; for instance, it cannot create, modify, or delete files outside
-of its build and installation directories.  This is achieved by running
-build processes in dedicated “chroots”, where only their explicit inputs
-are visible.
+as a function, in the mathematical sense.  That function takes inputs,
+such as build scripts, a compiler, and libraries, and returns an
+installed package.  As a pure function, its result depends solely on its
+inputs—for instance, it cannot refer to software or scripts that were
+not explicitly passed as inputs.  A build function always produces the
+same result when passed a given set of inputs.  It cannot alter the
+system’s environment in any way; for instance, it cannot create, modify,
+or delete files outside of its build and installation directories.  This
+is achieved by running build processes in isolated environments (or
+"chroots"), where only their explicit inputs are visible.
 
    The result of package build functions is "cached" in the file system,
 in a special directory called "the store" (*note The Store::).  Each
@@ -86,12 +87,12 @@ inputs used to build that package; thus, changing an input yields a
 different directory name.
 
    This approach is the foundation of Guix’s salient features: support
-for transactional package upgrades and rollback, per-user installation,
+for transactional package upgrade and rollback, per-user installation,
 and garbage collection of packages (*note Features::).
 
-   Guix has a command-line interface allowing users to build, install,
-upgrade, and remove packages, as well as a Scheme programming interface.
-The remainder of this manual describes them.
+   Guix has a command-line interface, which allows users to build,
+install, upgrade, and remove packages, as well as a Scheme programming
+interface.
 
    Last but not least, Guix is used to build a distribution of the GNU
 system, with many GNU and non-GNU free software packages.  *Note GNU
@@ -131,7 +132,7 @@ File: guix.info,  Node: Requirements,  Next: Setting Up the Daemon,  Up: Install
 
 GNU Guix depends on the following packages:
 
-   • GNU Guile 2.0.x (http://gnu.org/software/guile/);
+   • GNU Guile (http://gnu.org/software/guile/), version 2.0.5 or later;
    • GNU libgcrypt (http://gnupg.org/)
 
    Unless ‘--disable-daemon’ was passed to ‘configure’, the following
@@ -141,18 +142,19 @@ packages are also needed:
    • libbz2 (http://www.bzip.org)
    • GCC’s g++ (http://gcc.gnu.org)
 
-   When a working installation of the Nix package manager is available,
-you can instead configure Guix with ‘--disable-daemon’.  In that case,
-Nix (http://nixos.org/nix/) replaces the three dependencies above.
+   When a working installation of the Nix package manager
+(http://nixos.org/nix/) is available, you can instead configure Guix
+with ‘--disable-daemon’.  In that case, Nix replaces the three
+dependencies above.
 
    Guix is compatible with Nix, so it is possible to share the same
 store between both.  To do so, you must pass ‘configure’ not only the
-same ‘--with-store-dir’ value, but also the same ‘--localstatedir’ value
-(the latter is essential because it specifies where the database that
-store meta-data about the store is located, among other things.)  The
-default values are ‘--with-store-dir=/nix/store’ and
-‘--localstatedir=/nix/var’.  Note that ‘--disable-daemon’ is orthogonal
-and is not required if your goal is to share the same store as Nix.
+same ‘--with-store-dir’ value, but also the same ‘--localstatedir’
+value.  The latter is essential because it specifies where the database
+that stores metadata about the store is located, among other things.
+The default values are ‘--with-store-dir=/nix/store’ and
+‘--localstatedir=/nix/var’.  Note that ‘--disable-daemon’ is not
+required if your goal is to share the store with Nix.
 
 
 File: guix.info,  Node: Setting Up the Daemon,  Next: Invoking guix-daemon,  Prev: Requirements,  Up: Installation
@@ -201,6 +203,10 @@ The ‘guix-daemon’ program may then be run as ‘root’ with:
 
      # guix-daemon --build-users-group=guix-builder
 
+This way, the daemon starts build processes in a chroot, under one of
+the ‘guix-builder’ users.  On GNU/Linux, by default, the chroot
+environment contains nothing but the ‘/dev’ and ‘/proc’ directories(1).
+
    Guix may also be used in a single-user setup, with ‘guix-daemon’
 running as an unprivileged user.  However, to maximize non-interference
 of build processes, the daemon still needs to perform certain operations
@@ -220,6 +226,14 @@ isolated from one another, and not from the rest of the system.  Thus,
 build processes may interfere with each other, and may access programs,
 libraries, and other files available on the system—making it much harder
 to view them as _pure_ functions.
+
+   ---------- Footnotes ----------
+
+   (1) On some systems ‘/dev/shm’, which supports shared memory, is a
+symlink to another directory such as ‘/run/shm’, that is _not_ is the
+chroot.  When that is the case, shared memory support is unavailable in
+the chroot environment.  The workaround is to make sure that ‘/dev/shm’
+is directly a ‘tmpfs’ mount point.
 
 
 File: guix.info,  Node: Invoking guix-daemon,  Prev: Setting Up the Daemon,  Up: Installation
@@ -354,6 +368,7 @@ package management tools it provides.
 
 * Features::                    How Guix will make your life brighter.
 * Invoking guix package::       Package installation, removal, etc.
+* Packages with Multiple Outputs:: Single source package, multiple outputs.
 * Invoking guix gc::            Running the garbage collector.
 * Invoking guix pull::          Fetching the latest Guix and distribution.
 
@@ -415,7 +430,7 @@ available from an external source, Guix just downloads it; otherwise, it
 builds the package from source, locally.
 
 
-File: guix.info,  Node: Invoking guix package,  Next: Invoking guix gc,  Prev: Features,  Up: Package Management
+File: guix.info,  Node: Invoking guix package,  Next: Packages with Multiple Outputs,  Prev: Features,  Up: Package Management
 
 3.2 Invoking ‘guix package’
 ===========================
@@ -444,7 +459,7 @@ points to (*note Invoking guix gc::).  That directory is normally
 ‘LOCALSTATEDIR/profiles/per-user/USER’, where LOCALSTATEDIR is the value
 passed to ‘configure’ as ‘--localstatedir’, and USER is the user name.
 It must be created by ‘root’, with USER as the owner.  When it does not
-exist, ‘guix package’ emits an error about it.
+exist, or is not owned by USER, ‘guix package’ emits an error about it.
 
    The OPTIONS can be among the following:
 
@@ -457,7 +472,8 @@ exist, ‘guix package’ emits an error about it.
      ‘guile-1.8.8’.  If no version number is specified, the newest
      available version will be selected.  In addition, PACKAGE may
      contain a colon, followed by the name of one of the outputs of the
-     package, as in ‘gcc:doc’ or ‘binutils-2.22:lib’.
+     package, as in ‘gcc:doc’ or ‘binutils-2.22:lib’ (*note Packages
+     with Multiple Outputs::).
 
      Sometimes packages have "propagated inputs": these are dependencies
      that automatically get installed along with the required package.
@@ -469,9 +485,9 @@ exist, ‘guix package’ emits an error about it.
      and GMP—unless they had also been explicitly installed
      independently.
 
-     Besides, packages sometime rely on the definition of environment
+     Besides, packages sometimes rely on the definition of environment
      variables for their search paths (see explanation of
-     ‘--search-paths’ below.)  Any missing or possibly incorrect
+     ‘--search-paths’ below).  Any missing or possibly incorrect
      environment variable definitions are reported here.
 
      Finally, when installing a GNU package, the tool reports the
@@ -514,9 +530,8 @@ exist, ‘guix package’ emits an error about it.
      before any other actions.
 
      When rolling back from the first generation that actually contains
-     installed packages, the profile is made to point to the "empty
-     profile", also known as "profile zero"—i.e., it contains no files
-     apart from its own meta-data.
+     installed packages, the profile is made to point to the "zeroth
+     generation", which contains no files apart from its own meta-data.
 
      Installing, removing, or upgrading packages from a generation that
      has been rolled back to overwrites previous future generations.
@@ -543,8 +558,13 @@ exist, ‘guix package’ emits an error about it.
 ‘-n’
      Show what would be done without actually doing it.
 
+‘--fallback’
+     When substituting a pre-built binary fails, fall back to building
+     packages locally.
+
 ‘--no-substitutes’
-     Build instead of resorting to pre-built substitutes.
+‘--max-silent-time=SECONDS’
+     Same as for ‘guix build’ (*note Invoking guix build::).
 
 ‘--verbose’
      Produce verbose output.  In particular, emit the environment’s
@@ -576,9 +596,10 @@ packages:
 
 ‘--list-installed[=REGEXP]’
 ‘-I [REGEXP]’
-     List currently installed packages in the specified profile.  When
-     REGEXP is specified, list only installed packages whose name
-     matches REGEXP.
+     List the currently installed packages in the specified profile,
+     with the most recently installed packages shown last.  When REGEXP
+     is specified, list only installed packages whose name matches
+     REGEXP.
 
      For each installed package, print the following items, separated by
      tabs: the package name, its version string, the part of the package
@@ -593,14 +614,111 @@ packages:
      installed packages whose name matches REGEXP.
 
      For each package, print the following items separated by tabs: its
-     name, its version string, the parts of the package (‘out’ for the
-     main files, ‘lib’ for libraries and possibly headers, etc.), and
-     the source location of its definition.
+     name, its version string, the parts of the package (*note Packages
+     with Multiple Outputs::), and the source location of its
+     definition.
+
+‘--list-generations[=PATTERN]’
+‘-l [PATTERN]’
+     Return a list of generations along with their creation dates; for
+     each generation, show the installed packages, with the most
+     recently installed packages shown last.  Note that the zeroth
+     generation is never shown.
+
+     For each installed package, print the following items, separated by
+     tabs: the name of a package, its version string, the part of the
+     package that is installed (*note Packages with Multiple Outputs::),
+     and the location of this package in the store.
+
+     When PATTERN is used, the command returns only matching
+     generations.  Valid patterns include:
+
+        • _Integers and comma-separated integers_.  Both patterns denote
+          generation numbers.  For instance, ‘--list-generations=1’
+          returns the first one.
+
+          And ‘--list-generations=1,8,2’ outputs three generations in
+          the specified order.  Neither spaces nor trailing commas are
+          allowed.
+
+        • _Ranges_.  ‘--list-generations=2..9’ prints the specified
+          generations and everything in between.  Note that the start of
+          a range must be lesser than its end.
+
+          It is also possible to omit the endpoint.  For example,
+          ‘--list-generations=2..’, returns all generations starting
+          from the second one.
+
+        • _Durations_.  You can also get the last _N_ days, weeks, or
+          months by passing an integer along with the first letter of
+          the duration.  For example, ‘--list-generations=20d’ lists
+          generations that are up to 20 days old.
+
+‘--delete-generations[=PATTERN]’
+‘-d [PATTERN]’
+     When PATTERN is omitted, delete all generations except the current
+     one.
+
+     This command accepts the same patterns as ‘--list-generations’.
+     When PATTERN is specified, delete the matching generations.  When
+     PATTERN specifies a duration, generations _older_ than the
+     specified duration match.  For instance, ‘--delete-generations=1m’
+     deletes generations that are more than one month old.
+
+     If the current generation matches, it is deleted atomically—i.e.,
+     by switching to the previous available generation.  Note that the
+     zeroth generation is never deleted.
+
+     Note that deleting generations prevents roll-back to them.
+     Consequently, this command must be used with care.
 
 
-File: guix.info,  Node: Invoking guix gc,  Next: Invoking guix pull,  Prev: Invoking guix package,  Up: Package Management
+File: guix.info,  Node: Packages with Multiple Outputs,  Next: Invoking guix gc,  Prev: Invoking guix package,  Up: Package Management
 
-3.3 Invoking ‘guix gc’
+3.3 Packages with Multiple Outputs
+==================================
+
+Often, packages defined in Guix have a single "output"—i.e., the source
+package leads exactly one directory in the store.  When running ‘guix
+package -i glibc’, one installs the default output of the GNU libc
+package; the default output is called ‘out’, but its name can be omitted
+as shown in this command.  In this particular case, the default output
+of ‘glibc’ contains all the C header files, shared libraries, static
+libraries, Info documentation, and other supporting files.
+
+   Sometimes it is more appropriate to separate the various types of
+files produced from a single source package into separate outputs.  For
+instance, the GLib C library (used by GTK+ and related packages)
+installs more than 20 MiB of reference documentation as HTML pages.  To
+save space for users who do not need it, the documentation goes to a
+separate output, called ‘doc’.  To install the main GLib output, which
+contains everything but the documentation, one would run:
+
+     guix package -i glib
+
+   The command to install its documentation is:
+
+     guix package -i glib:doc
+
+   Some packages install programs with different “dependency
+footprints”.  For instance, the WordNet package install both
+command-line tools and graphical user interfaces (GUIs).  The former
+depend solely on the C library, whereas the latter depend on Tcl/Tk and
+the underlying X libraries.  In this case, we leave the command-line
+tools in the default output, whereas the GUIs are in a separate output.
+This allows users who do not need the GUIs to save space.
+
+   There are several such multiple-output packages in the GNU
+distribution.  Other conventional output names include ‘lib’ for
+libraries and possibly header files, ‘bin’ for stand-alone programs, and
+‘debug’ for debugging information (*note Installing Debugging Files::).
+The outputs of a packages are listed in the third column of the output
+of ‘guix package --list-available’ (*note Invoking guix package::).
+
+
+File: guix.info,  Node: Invoking guix gc,  Next: Invoking guix pull,  Prev: Packages with Multiple Outputs,  Up: Package Management
+
+3.4 Invoking ‘guix gc’
 ======================
 
 Packages that are installed but not used may be "garbage-collected".
@@ -613,6 +731,12 @@ deleted; any other file is considered "dead" and may be deleted.  The
 set of garbage collector roots includes default user profiles, and may
 be augmented with ‘guix build --root’, for example (*note Invoking guix
 build::).
+
+   Prior to running ‘guix gc --collect-garbage’ to make space, it is
+often useful to remove old generations from user profiles; that way, old
+package builds referenced by those generations can be reclaimed.  This
+is achieved by running ‘guix package --delete-generations’ (*note
+Invoking guix package::).
 
    The ‘guix gc’ command has three modes of operation: it can be used to
 garbage-collect any dead files (the default), to delete specific files
@@ -653,10 +777,17 @@ queried:
      List the references (respectively, the referrers) of store files
      given as arguments.
 
+‘--requisites’
+‘-R’
+     List the requisites of the store files passed as arguments.
+     Requisites include the store files themselves, their references,
+     and the references of these, recursively.  In other words, the
+     returned list is the "transitive closure" of the store files.
+
 
 File: guix.info,  Node: Invoking guix pull,  Prev: Invoking guix gc,  Up: Package Management
 
-3.4 Invoking ‘guix pull’
+3.5 Invoking ‘guix pull’
 ========================
 
 Packages are installed or upgraded to the latest version available in
@@ -830,13 +961,25 @@ actions it prescribes may then be realized by using the
 ‘build-derivations’ procedure (*note The Store::).
 
  -- Scheme Procedure: package-derivation STORE PACKAGE [SYSTEM]
-     Return the derivation path and corresponding ‘<derivation>’ object
-     of PACKAGE for SYSTEM (*note Derivations::).
+     Return the ‘<derivation>’ object of PACKAGE for SYSTEM (*note
+     Derivations::).
 
      PACKAGE must be a valid ‘<package>’ object, and SYSTEM must be a
      string denoting the target system type—e.g., ‘"x86_64-linux"’ for
      an x86_64 Linux-based GNU system.  STORE must be a connection to
      the daemon, which operates on the store (*note The Store::).
+
+Similarly, it is possible to compute a derivation that cross-builds a
+package for some other system:
+
+ -- Scheme Procedure: package-cross-derivation STORE PACKAGE TARGET
+          [SYSTEM]
+     Return the ‘<derivation>’ object of PACKAGE cross-built from SYSTEM
+     to TARGET.
+
+     TARGET must be a valid GNU triplet denoting the target hardware and
+     operating system, such as ‘"mips64el-linux-gnu"’ (*note GNU
+     configuration triplets: (configure)Configuration Names.).
 
    ---------- Footnotes ----------
 
@@ -889,14 +1032,15 @@ argument.
  -- Scheme Procedure: valid-path? SERVER PATH
      Return ‘#t’ when PATH is a valid store path.
 
- -- Scheme Procedure: add-text-to-store SERVER NAME TEXT REFERENCES
+ -- Scheme Procedure: add-text-to-store SERVER NAME TEXT [REFERENCES]
      Add TEXT under file NAME in the store, and return its store path.
      REFERENCES is the list of store paths referred to by the resulting
      store path.
 
  -- Scheme Procedure: build-derivations SERVER DERIVATIONS
-     Build DERIVATIONS (a list of derivation paths), and return when the
-     worker is done building them.  Return ‘#t’ on success.
+     Build DERIVATIONS (a list of ‘<derivation>’ objects or derivation
+     paths), and return when the worker is done building them.  Return
+     ‘#t’ on success.
 
    This section is currently incomplete.
 
@@ -935,15 +1079,21 @@ derivations as Scheme objects, along with procedures to create and
 otherwise manipulate derivations.  The lowest-level primitive to create
 a derivation is the ‘derivation’ procedure:
 
- -- Scheme Procedure: derivation STORE NAME SYSTEM BUILDER ARGS ENV-VARS
-          INPUTS [#:outputs '("out")] [#:hash #f] [#:hash-algo #f]
-          [#:hash-mode #f]
-     Build a derivation with the given arguments.  Return the resulting
-     store path and ‘<derivation>’ object.
+ -- Scheme Procedure: derivation STORE NAME BUILDER ARGS [#:outputs
+          '("out")] [#:hash #f] [#:hash-algo #f] [#:hash-mode #f]
+          [#:inputs '()] [#:env-vars '()] [#:system (%current-system)]
+          [#:references-graphs #f]
+     Build a derivation with the given arguments, and return the
+     resulting ‘<derivation>’ object.
 
      When HASH, HASH-ALGO, and HASH-MODE are given, a "fixed-output
      derivation" is created—i.e., one whose result is known in advance,
      such as a file download.
+
+     When REFERENCES-GRAPHS is true, it must be a list of file
+     name/store path pairs.  In that case, the reference graph of each
+     store path is exported in the build environment in the
+     corresponding file, in a simple text format.
 
 Here’s an example with a shell script as its builder, assuming STORE is
 an open connection to the daemon, and BASH points to a Bash executable
@@ -953,16 +1103,13 @@ in the store:
                   (guix store)
                   (guix derivations))
 
-     (call-with-values
-       (lambda ()
-         (let ((builder   ; add the Bash script to the store
-                (add-text-to-store store "my-builder.sh"
-                                   "echo hello world > $out\n" '())))
-           (derivation store "foo" (%current-system)
-                       bash `("-e" ,builder)
-                       '(("HOME" . "/homeless")) '())))
-       list)
-     ⇒ ("/nix/store/…-foo.drv" #<<derivation> …>)
+     (let ((builder   ; add the Bash script to the store
+             (add-text-to-store store "my-builder.sh"
+                                "echo hello world > $out\n" '())))
+       (derivation store "foo"
+                   bash `("-e" ,builder)
+                   #:env-vars '(("HOME" . "/homeless"))))
+     ⇒ #<derivation /nix/store/…-foo.drv => /nix/store/…-foo>
 
    As can be guessed, this primitive is cumbersome to use directly.  An
 improved variant is ‘build-expression->derivation’, which allows the
@@ -970,7 +1117,8 @@ caller to directly pass a Guile expression as the build script:
 
  -- Scheme Procedure: build-expression->derivation STORE NAME SYSTEM EXP
           INPUTS [#:outputs '("out")] [#:hash #f] [#:hash-algo #f]
-          [#:env-vars '()] [#:modules '()] [#:guile-for-build #f]
+          [#:env-vars '()] [#:modules '()] [#:references-graphs #f]
+          [#:guile-for-build #f]
      Return a derivation that executes Scheme expression EXP as a
      builder for derivation NAME.  INPUTS must be a list of ‘(name
      drv-path sub-drv)’ tuples; when SUB-DRV is omitted, ‘"out"’ is
@@ -991,6 +1139,9 @@ caller to directly pass a Guile expression as the build script:
      GUILE-FOR-BUILD is omitted or is ‘#f’, the value of the
      ‘%guile-for-build’ fluid is used instead.
 
+     See the ‘derivation’ procedure for the meaning of
+     REFERENCES-GRAPHS.
+
 Here’s an example of a single-output derivation that creates a directory
 containing one file:
 
@@ -1002,8 +1153,7 @@ containing one file:
        (build-expression->derivation store "goo" (%current-system)
                                      builder '()))
 
-     ⇒ "/nix/store/…-goo.drv"
-     ⇒ #<<derivation> …>
+     ⇒ #<derivation /nix/store/…-goo.drv => …>
 
    Remember that the build expression passed to
 ‘build-expression->derivation’ is run by a separate Guile process than
@@ -1089,6 +1239,11 @@ several same-named packages or package variants is needed.
      ‘--system=i686-linux’ on an ‘x86_64-linux’ system allows users to
      build packages in a complete 32-bit environment.
 
+‘--target=TRIPLET’
+     Cross-build for TRIPLET, which must be a valid GNU triplet, such as
+     ‘"mips64el-linux-gnu"’ (*note GNU configuration triplets:
+     (configure)Configuration Names.).
+
 ‘--derivations’
 ‘-d’
      Return the derivation paths, not the output paths, of the given
@@ -1105,8 +1260,16 @@ several same-named packages or package variants is needed.
 ‘-n’
      Do not build the derivations.
 
+‘--fallback’
+     When substituting a pre-built binary fails, fall back to building
+     packages locally.
+
 ‘--no-substitutes’
      Build instead of resorting to pre-built substitutes.
+
+‘--max-silent-time=SECONDS’
+     When the build or substitution process remains silent for more than
+     SECONDS, terminate it and report a build failure.
 
 ‘--cores=N’
 ‘-c N’
@@ -1264,7 +1427,7 @@ packages.  The ‘--select’ option would have no effect in this case.
    (1) Currently, this only works for GNU packages.
 
 
-File: guix.info,  Node: GNU Distribution,  Next: Acknowledgments,  Prev: Utilities,  Up: Top
+File: guix.info,  Node: GNU Distribution,  Next: Contributing,  Prev: Utilities,  Up: Top
 
 6 GNU Distribution
 ******************
@@ -1277,28 +1440,22 @@ package’ (*note Invoking guix package::):
 
      guix package --list-available
 
-   The package definitions of the distribution may are provided by Guile
-modules in the ‘(gnu packages ...)’ name space—for instance, the ‘(gnu
-packages emacs)’ module exports a variable named ‘emacs’, which is bound
-to a ‘<package>’ object (*note Defining Packages::).  The ‘(gnu
-packages)’ module provides facilities for searching for packages.
-
-   The distribution is fully "bootstrapped" and "self-contained": each
-package is built based solely on other packages in the distribution.
-The root of this dependency graph is a small set of "bootstrap
-binaries", provided by the ‘(gnu packages bootstrap)’ module.  These are
-statically-linked binaries of the core tools without which building
-anything at all would be impossible.
-
    Our goal is to build a practical 100% free software distribution of
 Linux-based and other variants of GNU, with a focus on the promotion and
 tight integration of GNU components, and an emphasis on programs and
 tools that help users exert that freedom.
 
+* Menu:
+
+* Installing Debugging Files::  Feeding the debugger.
+* Package Modules::             Packages from the programmer’s viewpoint.
+* Packaging Guidelines::        Growing the distribution.
+* Bootstrapping::               GNU/Linux built from scratch.
+* Porting::                     Targeting another platform or kernel.
+
    Building this distribution is a cooperative effort, and you are
-invited to join!  Please get in touch with us on <bug-guix@gnu.org>.  We
-welcome ideas, bug reports, patches, and anything that may be helpful to
-the project.
+invited to join!  *note Contributing::, for information about how you
+can help.
 
    ---------- Footnotes ----------
 
@@ -1306,9 +1463,403 @@ the project.
 that software (http://www.gnu.org/philosophy/free-sw.html).
 
 
-File: guix.info,  Node: Acknowledgments,  Next: GNU Free Documentation License,  Prev: GNU Distribution,  Up: Top
+File: guix.info,  Node: Installing Debugging Files,  Next: Package Modules,  Up: GNU Distribution
 
-7 Acknowledgments
+6.1 Installing Debugging Files
+==============================
+
+Program binaries, as produced by the GCC compilers for instance, are
+typically written in the ELF format, with a section containing
+"debugging information".  Debugging information is what allows the
+debugger, GDB, to map binary code to source code; it is required to
+debug a compiled program in good conditions.
+
+   The problem with debugging information is that is takes up a fair
+amount of disk space.  For example, debugging information for the GNU C
+Library weighs in at more than 60 MiB. Thus, as a user, keeping all the
+debugging info of all the installed programs is usually not an option.
+Yet, space savings should not come at the cost of an impediment to
+debugging—especially in the GNU system, which should make it easier for
+users to exert their computing freedom (*note GNU Distribution::).
+
+   Thankfully, the GNU Binary Utilities (Binutils) and GDB provide a
+mechanism that allows users to get the best of both worlds: debugging
+information can be stripped from the binaries and stored in separate
+files.  GDB is then able to load debugging information from those files,
+when they are available (*note (gdb)Separate Debug Files::).
+
+   The GNU distribution takes advantage of this by storing debugging
+information in the ‘lib/debug’ sub-directory of a separate package
+output unimaginatively called ‘debug’ (*note Packages with Multiple
+Outputs::).  Users can choose to install the ‘debug’ output of a package
+when they need it.  For instance, the following command installs the
+debugging information for the GNU C Library and for GNU Guile:
+
+     guix package -i glibc:debug -i guile:debug
+
+   GDB must then be told to look for debug files in the user’s profile,
+by setting the ‘debug-file-directory’ variable (consider setting it from
+the ‘~/.gdbinit’ file, *note (gdb)Startup::):
+
+     (gdb) set debug-file-directory ~/.guix-profile/lib/debug
+
+   From there on, GDB will pick up debugging information from the
+‘.debug’ files under ‘~/.guix-profile/lib/debug’.
+
+   The ‘debug’ output mechanism in Guix is implemented by the
+‘gnu-build-system’ (*note Defining Packages::).  Currently, it is
+opt-in—debugging information is available only for those packages whose
+definition explicitly declares a ‘debug’ output.  This may be changed to
+opt-out in the future, if our build farm servers can handle the load.
+To check whether a package has a ‘debug’ output, use ‘guix package
+--list-available’ (*note Invoking guix package::).
+
+
+File: guix.info,  Node: Package Modules,  Next: Packaging Guidelines,  Prev: Installing Debugging Files,  Up: GNU Distribution
+
+6.2 Package Modules
+===================
+
+From a programming viewpoint, the package definitions of the
+distribution are provided by Guile modules in the ‘(gnu packages ...)’
+name space (*note Guile modules: (guile)Modules.).  For instance, the
+‘(gnu packages emacs)’ module exports a variable named ‘emacs’, which is
+bound to a ‘<package>’ object (*note Defining Packages::).  The ‘(gnu
+packages)’ module provides facilities for searching for packages.
+
+   The distribution is fully "bootstrapped" and "self-contained": each
+package is built based solely on other packages in the distribution.
+The root of this dependency graph is a small set of "bootstrap
+binaries", provided by the ‘(gnu packages bootstrap)’ module.  For more
+information on bootstrapping, *note Bootstrapping::.
+
+
+File: guix.info,  Node: Packaging Guidelines,  Next: Bootstrapping,  Prev: Package Modules,  Up: GNU Distribution
+
+6.3 Packaging Guidelines
+========================
+
+The GNU distribution is nascent and may well lack some of your favorite
+packages.  This section describes how you can help make the distribution
+grow.  *Note Contributing::, for additional information on how you can
+help.
+
+   Free software packages are usually distributed in the form of "source
+code tarballs"—typically ‘tar.gz’ files that contain all the source
+files.  Adding a package to the distribution means essentially two
+things: adding a "recipe" that describes how to build the package,
+including a list of other packages required to build it, and adding
+"package meta-data" along with that recipe, such as a description and
+licensing information.
+
+   In Guix all this information is embodied in "package definitions".
+Package definitions provide a high-level view of the package.  They are
+written using the syntax of the Scheme programming language; in fact,
+for each package we define a variable bound to the package definition,
+and export that variable from a module (*note Package Modules::).
+However, in-depth Scheme knowledge is _not_ a prerequisite for creating
+packages.  For more information on package definitions, *note Defining
+Packages::.
+
+   Once a package definition is in place, stored in a file in the Guix
+source tree, it can be tested using the ‘guix build’ command (*note
+Invoking guix build::).  For example, assuming the new package is called
+‘gnew’, you may run this command from the Guix build tree:
+
+     ./pre-inst-env guix build gnew --keep-failed
+
+   Using ‘--keep-failed’ makes it easier to debug build failures since
+it provides access to the failed build tree.
+
+   Once your package builds correctly, please send us a patch (*note
+Contributing::).  Well, if you need help, we will be happy to help you
+too.  Once the patch is committed in the Guix repository, the new
+package automatically gets built on the supported platforms by our
+continuous integration system (http://hydra.gnu.org/gnu/master).
+
+   Users can obtain the new package definition simply by running ‘guix
+pull’ (*note Invoking guix pull::).  When ‘hydra.gnu.org’ is done
+building the package, installing the package automatically downloads
+binaries from there (except when using ‘--no-substitutes’).  The only
+place where human intervention is needed is to review and apply the
+patch.
+
+* Menu:
+
+* Software Freedom::     What may go into the distribution.
+* Package Naming::       What’s in a name?
+* Version Numbers::      When the name is not enough.
+* Python Modules::       Taming the snake.
+
+
+File: guix.info,  Node: Software Freedom,  Next: Package Naming,  Up: Packaging Guidelines
+
+6.3.1 Software Freedom
+----------------------
+
+The GNU operating system has been developed so that users can have
+freedom in their computing.  GNU is "free software", meaning that users
+have the four essential freedoms
+(http://www.gnu.org/philosophy/free-sw.html): to run the program, to
+study and change the program in source code form, to redistribute exact
+copies, and to distribute modified versions.  Packages found in the GNU
+distribution provide only software that conveys these four freedoms.
+
+   In addition, the GNU distribution follow the free software
+distribution guidelines
+(http://www.gnu.org/distros/free-system-distribution-guidelines.html).
+Among other things, these guidelines reject non-free firmware,
+recommendations of non-free software, and discuss ways to deal with
+trademarks and patents.
+
+
+File: guix.info,  Node: Package Naming,  Next: Version Numbers,  Prev: Software Freedom,  Up: Packaging Guidelines
+
+6.3.2 Package Naming
+--------------------
+
+A package has actually two names associated with it: First, there is the
+name of the _Scheme variable_, the one following ‘define-public’.  By
+this name, the package can be made known in the Scheme code, for
+instance as input to another package.  Second, there is the string in
+the ‘name’ field of a package definition.  This name is used by package
+management commands such as ‘guix package’ and ‘guix build’.
+
+   Both are usually the same and correspond to the lowercase conversion
+of the project name chosen upstream.  For instance, the GNUnet project
+is packaged as ‘gnunet’.  We do not add ‘lib’ prefixes for library
+packages, unless these are already part of the official project name.
+But see *note Python Modules:: for special rules concerning modules for
+the Python language.
+
+
+File: guix.info,  Node: Version Numbers,  Next: Python Modules,  Prev: Package Naming,  Up: Packaging Guidelines
+
+6.3.3 Version Numbers
+---------------------
+
+We usually package only the latest version of a given free software
+project.  But sometimes, for instance for incompatible library versions,
+two (or more) versions of the same package are needed.  These require
+different Scheme variable names.  We use the name as defined in *note
+Package Naming:: for the most recent version; previous versions use the
+same name, suffixed by ‘-’ and the smallest prefix of the version number
+that may distinguish the two versions.
+
+   The name inside the package definition is the same for all versions
+of a package and does not contain any version number.
+
+   For instance, the versions 2.24.20 and 3.9.12 of GTK+ may be packaged
+as follows:
+
+     (define-public gtk+
+       (package
+        (name "gtk+")
+        (version "3.9.12")
+        ...))
+     (define-public gtk+-2
+       (package
+        (name "gtk+")
+        (version "2.24.20")
+        ...))
+   If we also wanted GTK+ 3.8.2, this would be packaged as
+     (define-public gtk+-3.8
+       (package
+        (name "gtk+")
+        (version "3.8.2")
+        ...))
+
+
+File: guix.info,  Node: Python Modules,  Prev: Version Numbers,  Up: Packaging Guidelines
+
+6.3.4 Python Modules
+--------------------
+
+We currently package Python 2 and Python 3, under the Scheme variable
+names ‘python-2’ and ‘python’ as explained in *note Version Numbers::.
+To avoid confusion and naming clashes with other programming languages,
+it seems desirable that the name of a package for a Python module
+contains the word ‘python’.
+
+   Some modules are compatible with only one version of Python, others
+with both.  If the package Foo compiles only with Python 3, we name it
+‘python-foo’; if it compiles only with Python 2, we name it
+‘python2-foo’.  If it is compatible with both versions, we create two
+packages with the corresponding names.
+
+   If a project already contains the word ‘python’, we drop this; for
+instance, the module python-dateutil is packaged under the names
+‘python-dateutil’ and ‘python2-dateutil’.
+
+
+File: guix.info,  Node: Bootstrapping,  Next: Porting,  Prev: Packaging Guidelines,  Up: GNU Distribution
+
+6.4 Bootstrapping
+=================
+
+Bootstrapping in our context refers to how the distribution gets built
+“from nothing”.  Remember that the build environment of a derivation
+contains nothing but its declared inputs (*note Introduction::).  So
+there’s an obvious chicken-and-egg problem: how does the first package
+get built?  How does the first compiler get compiled?  Note that this is
+a question of interest only to the curious hacker, not to the regular
+user, so you can shamelessly skip this section if you consider yourself
+a “regular user”.
+
+   The GNU system is primarily made of C code, with libc at its core.
+The GNU build system itself assumes the availability of a Bourne shell
+and command-line tools provided by GNU Coreutils, Awk, Findutils, ‘sed’,
+and ‘grep’.  Furthermore, build programs—programs that run
+‘./configure’, ‘make’, etc.—are written in Guile Scheme (*note
+Derivations::).  Consequently, to be able to build anything at all, from
+scratch, Guix relies on pre-built binaries of Guile, GCC, Binutils,
+libc, and the other packages mentioned above—the "bootstrap binaries".
+
+   These bootstrap binaries are “taken for granted”, though we can also
+re-create them if needed (more on that later).
+
+Preparing to Use the Bootstrap Binaries
+---------------------------------------
+
+ [image src="images/bootstrap-graph.png" alt="Dependency graph of the early bootstrap derivations" ]
+
+The figure above shows the very beginning of the dependency graph of the
+distribution, corresponding to the package definitions of the ‘(gnu
+packages bootstrap)’ module.  At this level of detail, things are
+slightly complex.  First, Guile itself consists of an ELF executable,
+along with many source and compiled Scheme files that are dynamically
+loaded when it runs.  This gets stored in the ‘guile-2.0.7.tar.xz’
+tarball shown in this graph.  This tarball is part of Guix’s “source”
+distribution, and gets inserted into the store with ‘add-to-store’
+(*note The Store::).
+
+   But how do we write a derivation that unpacks this tarball and adds
+it to the store?  To solve this problem, the ‘guile-bootstrap-2.0.drv’
+derivation—the first one that gets built—uses ‘bash’ as its builder,
+which runs ‘build-bootstrap-guile.sh’, which in turn calls ‘tar’ to
+unpack the tarball.  Thus, ‘bash’, ‘tar’, ‘xz’, and ‘mkdir’ are
+statically-linked binaries, also part of the Guix source distribution,
+whose sole purpose is to allow the Guile tarball to be unpacked.
+
+   Once ‘guile-bootstrap-2.0.drv’ is built, we have a functioning Guile
+that can be used to run subsequent build programs.  Its first task is to
+download tarballs containing the other pre-built binaries—this is what
+the ‘.tar.xz.drv’ derivations do.  Guix modules such as ‘ftp-client.scm’
+are used for this purpose.  The ‘module-import.drv’ derivations import
+those modules in a directory in the store, using the original layout.
+The ‘module-import-compiled.drv’ derivations compile those modules, and
+write them in an output directory with the right layout.  This
+corresponds to the ‘#:modules’ argument of
+‘build-expression->derivation’ (*note Derivations::).
+
+   Finally, the various tarballs are unpacked by the derivations
+‘gcc-bootstrap-0.drv’, ‘glibc-bootstrap-0.drv’, etc., at which point we
+have a working C tool chain.
+
+Building the Build Tools
+------------------------
+
+Bootstrapping is complete when we have a full tool chain that does not
+depend on the pre-built bootstrap tools discussed above.  This
+no-dependency requirement is verified by checking whether the files of
+the final tool chain contain references to the ‘/nix/store’ directories
+of the bootstrap inputs.  The process that leads to this “final” tool
+chain is described by the package definitions found in the ‘(gnu
+packages base)’ module.
+
+   The first tool that gets built with the bootstrap binaries is GNU
+Make, which is a prerequisite for all the following packages.  From
+there Findutils and Diffutils get built.
+
+   Then come the first-stage Binutils and GCC, built as pseudo cross
+tools—i.e., with ‘--target’ equal to ‘--host’.  They are used to build
+libc.  Thanks to this cross-build trick, this libc is guaranteed not to
+hold any reference to the initial tool chain.
+
+   From there the final Binutils and GCC are built.  GCC uses ‘ld’ from
+the final Binutils, and links programs against the just-built libc.
+This tool chain is used to build the other packages used by Guix and by
+the GNU Build System: Guile, Bash, Coreutils, etc.
+
+   And voilà!  At this point we have the complete set of build tools
+that the GNU Build System expects.  These are in the ‘%final-inputs’
+variables of the ‘(gnu packages base)’ module, and are implicitly used
+by any package that uses ‘gnu-build-system’ (*note Defining Packages::).
+
+Building the Bootstrap Binaries
+-------------------------------
+
+Because the final tool chain does not depend on the bootstrap binaries,
+those rarely need to be updated.  Nevertheless, it is useful to have an
+automated way to produce them, should an update occur, and this is what
+the ‘(gnu packages make-bootstrap)’ module provides.
+
+   The following command builds the tarballs containing the bootstrap
+binaries (Guile, Binutils, GCC, libc, and a tarball containing a mixture
+of Coreutils and other basic command-line tools):
+
+     guix build bootstrap-tarballs
+
+   The generated tarballs are those that should be referred to in the
+‘(gnu packages bootstrap)’ module mentioned at the beginning of this
+section.
+
+   Still here?  Then perhaps by now you’ve started to wonder: when do we
+reach a fixed point?  That is an interesting question!  The answer is
+unknown, but if you would like to investigate further (and have
+significant computational and storage resources to do so), then let us
+know.
+
+
+File: guix.info,  Node: Porting,  Prev: Bootstrapping,  Up: GNU Distribution
+
+6.5 Porting to a New Platform
+=============================
+
+As discussed above, the GNU distribution is self-contained, and
+self-containment is achieved by relying on pre-built “bootstrap
+binaries” (*note Bootstrapping::).  These binaries are specific to an
+operating system kernel, CPU architecture, and application binary
+interface (ABI). Thus, to port the distribution to a platform that is
+not yet supported, one must build those bootstrap binaries, and update
+the ‘(gnu packages bootstrap)’ module to use them on that platform.
+
+   Fortunately, Guix can _cross compile_ those bootstrap binaries.  When
+everything goes well, and assuming the GNU tool chain supports the
+target platform, this can be as simple as running a command like this
+one:
+
+     guix build --target=armv5tel-linux-gnueabi bootstrap-tarballs
+
+   In practice, there may be some complications.  First, it may be that
+the extended GNU triplet that specifies an ABI (like the ‘eabi’ suffix
+above) is not recognized by all the GNU tools.  Typically, glibc
+recognizes some of these, whereas GCC uses an extra ‘--with-abi’
+configure flag (see ‘gcc.scm’ for examples of how to handle this).
+Second, some of the required packages could fail to build for that
+platform.  Lastly, the generated binaries could be broken for some
+reason.
+
+
+File: guix.info,  Node: Contributing,  Next: Acknowledgments,  Prev: GNU Distribution,  Up: Top
+
+7 Contributing
+**************
+
+This project is a cooperative effort, and we need your help to make it
+grow!  Please get in touch with us on <guix-devel@gnu.org>.  We welcome
+ideas, bug reports, patches, and anything that may be helpful to the
+project.  We particularly welcome help on packaging (*note Packaging
+Guidelines::).
+
+   Please see the ‘HACKING’ file
+(http://git.savannah.gnu.org/cgit/guix.git/tree/HACKING) that comes with
+the Guix source code for practical details about contributions.
+
+
+File: guix.info,  Node: Acknowledgments,  Next: GNU Free Documentation License,  Prev: Contributing,  Up: Top
+
+8 Acknowledgments
 *****************
 
 Guix is based on the Nix package manager, which was designed and
@@ -1811,8 +2362,12 @@ Concept Index
  [index ]
 * Menu:
 
+* bootstrap binaries:                    Bootstrapping.       (line  15)
+* bootstrapping:                         Bootstrapping.       (line   6)
 * build users:                           Setting Up the Daemon.
                                                               (line  21)
+* cross-compilation:                     Defining Packages.   (line 122)
+* cross-compilation <1>:                 Invoking guix build. (line  52)
 * daemon:                                Setting Up the Daemon.
                                                               (line   6)
 * derivation:                            Programming Interface.
@@ -1822,14 +2377,20 @@ Concept Index
 * functional package management:         Introduction.        (line  13)
 * garbage collector:                     Invoking guix gc.    (line   6)
 * GNU Build System:                      Defining Packages.   (line  56)
+* multiple-output packages:              Packages with Multiple Outputs.
+                                                              (line   6)
+* package outputs:                       Packages with Multiple Outputs.
+                                                              (line   6)
 * propagated inputs:                     Invoking guix package.
-                                                              (line  45)
+                                                              (line  46)
 * search paths:                          Invoking guix package.
                                                               (line 109)
-* store:                                 Introduction.        (line  27)
+* store:                                 Introduction.        (line  26)
 * store <1>:                             The Store.           (line   6)
 * store paths:                           The Store.           (line   6)
-* strata of code:                        Derivations.         (line 105)
+* strata of code:                        Derivations.         (line 111)
+* substituter:                           Packaging Guidelines.
+                                                              (line  44)
 
 
 File: guix.info,  Node: Function Index,  Prev: Concept Index,  Up: Top
@@ -1842,10 +2403,11 @@ Function Index
 
 * add-text-to-store:                     The Store.           (line  45)
 * build-derivations:                     The Store.           (line  50)
-* build-expression->derivation:          Derivations.         (line  68)
+* build-expression->derivation:          Derivations.         (line  71)
 * close-connection:                      The Store.           (line  31)
 * derivation:                            Derivations.         (line  35)
 * open-connection:                       The Store.           (line  21)
+* package-cross-derivation:              Defining Packages.   (line 125)
 * package-derivation:                    Defining Packages.   (line 113)
 * valid-path?:                           The Store.           (line  42)
 
@@ -1853,35 +2415,47 @@ Function Index
 
 Tag Table:
 Node: Top858
-Node: Introduction2059
-Ref: Introduction-Footnote-14399
-Node: Installation4516
-Node: Requirements5264
-Node: Setting Up the Daemon6534
-Node: Invoking guix-daemon10076
-Node: Package Management14573
-Node: Features15339
-Node: Invoking guix package18191
-Node: Invoking guix gc25853
-Node: Invoking guix pull27976
-Node: Programming Interface29066
-Node: Defining Packages30600
-Ref: Defining Packages-Footnote-136504
-Node: The Store36656
-Node: Derivations39013
-Ref: Derivations-Footnote-144524
-Node: Utilities44641
-Node: Invoking guix build45250
-Node: Invoking guix download48455
-Node: Invoking guix hash49938
-Node: Invoking guix refresh50884
-Ref: Invoking guix refresh-Footnote-153801
-Node: GNU Distribution53854
-Ref: GNU Distribution-Footnote-155623
-Node: Acknowledgments55759
-Node: GNU Free Documentation License56355
-Node: Concept Index81709
-Node: Function Index83215
+Node: Introduction2147
+Ref: Introduction-Footnote-14400
+Node: Installation4517
+Node: Requirements5265
+Node: Setting Up the Daemon6531
+Ref: Setting Up the Daemon-Footnote-110328
+Node: Invoking guix-daemon10664
+Node: Package Management15161
+Node: Features16003
+Node: Invoking guix package18855
+Node: Packages with Multiple Outputs29172
+Node: Invoking guix gc31360
+Node: Invoking guix pull34105
+Node: Programming Interface35195
+Node: Defining Packages36729
+Ref: Defining Packages-Footnote-143088
+Node: The Store43240
+Node: Derivations45634
+Ref: Derivations-Footnote-151484
+Node: Utilities51601
+Node: Invoking guix build52210
+Node: Invoking guix download55891
+Node: Invoking guix hash57374
+Node: Invoking guix refresh58320
+Ref: Invoking guix refresh-Footnote-161237
+Node: GNU Distribution61290
+Ref: GNU Distribution-Footnote-162551
+Node: Installing Debugging Files62687
+Node: Package Modules65345
+Node: Packaging Guidelines66281
+Node: Software Freedom68987
+Node: Package Naming69896
+Node: Version Numbers70867
+Node: Python Modules72088
+Node: Bootstrapping73054
+Node: Porting79100
+Node: Contributing80502
+Node: Acknowledgments81104
+Node: GNU Free Documentation License81696
+Node: Concept Index107050
+Node: Function Index109276
 
 End Tag Table
 

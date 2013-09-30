@@ -24,6 +24,7 @@
   #:use-module (gnu packages)
   #:use-module (gnu packages m4)
   #:use-module (gnu packages linux)
+  #:use-module (gnu packages nettle)
   #:use-module ((gnu packages compression)
                 #:renamer (symbol-prefix-proc 'guix:))
   #:use-module (gnu packages multiprecision)
@@ -44,15 +45,21 @@
        (base32
         "0z6rlalhvfca64jpvksppc9bdhs7jwhiw4y35g5ibvh91xp3rn1l"))))
     (build-system gnu-build-system)
-    (home-page "http://liboop.ofb.net/")
-    (synopsis "`liboop', an event loop library")
-    (description "liboop is an event loop library.")
+    (home-page "http://www.lysator.liu.se/liboop/")
+    (synopsis "Event loop library")
+    (description "Liboop is a low-level event loop management library for
+POSIX-based operating systems. It supports the development of modular,
+multiplexed applications which may respond to events from several sources. It
+replaces the \"select() loop\" and allows the registration of event handlers
+for file and network I/O, timers and signals.  Since processes use these
+mechanisms for almost all external communication, liboop can be used as the
+basis for almost any application.")
     (license lgpl2.1+)))
 
 (define-public lsh
   (package
     (name "lsh")
-    (version "2.0.4")
+    (version "2.1")
     (source
      (origin
       (method url-fetch)
@@ -60,10 +67,11 @@
                           version ".tar.gz"))
       (sha256
        (base32
-        "149hf49xcj99wwvi7hcb59igq4vpyv8har1br1if3lrsw5irsjv1"))))
+        "1qqjy9zfzgny0rkb27c8c7dfsylvb6n0ld8h3an2r83pmaqr9gwb"))))
     (build-system gnu-build-system)
     (inputs
-     `(("linux-pam" ,linux-pam)
+     `(("nettle" ,nettle)
+       ("linux-pam" ,linux-pam)
        ("m4" ,m4)
        ("readline" ,readline)
        ("liboop" ,liboop)
@@ -72,17 +80,9 @@
        ("guile" ,guile-final)
        ("gperf" ,gperf)
        ("psmisc" ,psmisc)                         ; for `killall'
-
-       ("patch/no-root-login" ,(search-patch "lsh-no-root-login.patch"))
-       ("patch/guile-compat" ,(search-patch "lsh-guile-compat.patch"))
-       ("patch/pam-service-name"
-        ,(search-patch "lsh-pam-service-name.patch"))))
+       ))
     (arguments
-     '(#:patches (list (assoc-ref %build-inputs "patch/no-root-login")
-                       (assoc-ref %build-inputs "patch/pam-service-name")
-                       (assoc-ref %build-inputs "patch/guile-compat"))
-
-       ;; Skip the `configure' test that checks whether /dev/ptmx &
+     '(;; Skip the `configure' test that checks whether /dev/ptmx &
        ;; co. work as expected, because it relies on impurities (for
        ;; instance, /dev/pts may be unavailable in chroots.)
        #:configure-flags '("lsh_cv_sys_unix98_ptys=yes")

@@ -19,6 +19,7 @@
 (define-module (gnu packages fontutils)
   #:use-module (gnu packages)
   #:use-module (gnu packages compression)
+  #:use-module (gnu packages ghostscript)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages xml)
   #:use-module ((guix licenses) #:renamer (symbol-prefix-proc 'license:))
@@ -64,18 +65,27 @@ anti-aliased glyph bitmap generation with 256 gray levels.")
 (define-public fontconfig
   (package
    (name "fontconfig")
-   (version "2.10.91")
+   (version "2.10.93")
    (source (origin
             (method url-fetch)
             (uri (string-append
                    "http://www.freedesktop.org/software/fontconfig/release/fontconfig-"
                    version ".tar.bz2"))
             (sha256 (base32
-                     "1vk37q3zj8bjppj3l0pkby1psialpwl263jqf6pbih2hx5a7jwm4"))))
+                     "172j5vsgx2xplsk5mrxrspbn5lrswq6gnxkxjgcrx0j8i0kiz47a"))))
    (build-system gnu-build-system)
    (inputs `(("expat" ,expat)
              ("freetype" ,freetype)
+             ("gs-fonts" ,gs-fonts)
              ("pkg-config" ,pkg-config)))
+   (arguments
+     `(#:configure-flags
+               ;; point to user profile instead of /usr/share/fonts in /etc/fonts.conf
+        (list "--with-default-fonts=~/.guix-profile/share/fonts"
+              ;; register gs-fonts
+              (string-append "--with-add-fonts="
+                             (assoc-ref %build-inputs "gs-fonts")
+                             "/share/fonts"))))
    (synopsis "Fontconfig, a library for configuring and customising font access.")
    (description
     "Fontconfig can discover new fonts when installed automatically;

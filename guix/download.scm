@@ -25,7 +25,6 @@
   #:use-module ((guix build download) #:renamer (symbol-prefix-proc 'build:))
   #:use-module (guix utils)
   #:use-module (srfi srfi-1)
-  #:use-module (srfi srfi-11)
   #:use-module (srfi srfi-26)
   #:export (%mirrors
             url-fetch
@@ -84,7 +83,8 @@
        "http://mirror.csclub.uwaterloo.ca/nongnu/"
        "http://nongnu.askapache.com/"
        "http://savannah.c3sl.ufpr.br/"
-       "http://www.centervenus.com/mirrors/nongnu/")
+       "http://www.centervenus.com/mirrors/nongnu/"
+       "http://download.savannah.gnu.org/releases-noredirect/")
       (sourceforge
        "http://prdownloads.sourceforge.net/"
        "http://heanet.dl.sourceforge.net/sourceforge/"
@@ -98,7 +98,9 @@
        "http://ramses.wh2.tu-dresden.de/pub/mirrors/kernel.org/"
        "http://linux-kernel.uio.no/pub/"
        "http://kernel.osuosl.org/pub/"
-       "ftp://ftp.funet.fi/pub/mirrors/ftp.kernel.org/pub/")
+       "ftp://ftp.funet.fi/pub/mirrors/ftp.kernel.org/pub/"
+       "http://ftp.be.debian.org/pub/"
+       "http://mirror.linux.org.au/")
       (apache             ; from http://www.apache.org/mirrors/dist.html
        "http://www.eu.apache.org/dist/"
        "http://www.us.apache.org/dist/"
@@ -148,7 +150,14 @@
        "ftp://ftp.osuosl.org/pub/CPAN/"
        "ftp://ftp.nara.wide.ad.jp/pub/CPAN/"
        "http://mirrors.163.com/cpan/"
-       "ftp://cpan.mirror.ac.za/"))))
+       "ftp://cpan.mirror.ac.za/")
+      (imagemagick       ; from http://www.imagemagick.org/script/download.php
+       "http://mirror.checkdomain.de/imagemagick/"
+       "ftp://gd.tuwien.ac.at/pub/graphics/ImageMagick/"
+       "http://www.imagemagick.org/download"
+       "ftp://mirror.searchdaimon.com/ImageMagick"
+       "http://mirror.is.co.za/pub/imagemagick/"
+       "ftp://mirror.aarnet.edu.au/pub/imagemagick/"))))
 
 (define (gnutls-derivation store system)
   "Return the GnuTLS derivation for SYSTEM."
@@ -202,27 +211,22 @@ must be a list of symbol/URL-list pairs."
         ((url ...)
          (any https? url)))))
 
-  (let*-values (((gnutls-drv-path gnutls-drv)
-                 (if need-gnutls?
-                     (gnutls-derivation store system)
-                     (values #f #f)))
-                ((gnutls)
-                 (and gnutls-drv
-                      (derivation-output-path
-                       (assoc-ref (derivation-outputs gnutls-drv)
-                                  "out"))))
-                ((env-vars)
-                 (if gnutls
-                     (let ((dir (string-append gnutls "/share/guile/site")))
-                       ;; XXX: `GUILE_LOAD_COMPILED_PATH' is overridden
-                       ;; by `build-expression->derivation', so we can't
-                       ;; set it here.
-                       `(("GUILE_LOAD_PATH" . ,dir)))
-                     '())))
+  (let* ((gnutls-drv (if need-gnutls?
+                         (gnutls-derivation store system)
+                         (values #f #f)))
+         (gnutls     (and gnutls-drv
+                          (derivation->output-path gnutls-drv "out")))
+         (env-vars   (if gnutls
+                         (let ((dir (string-append gnutls "/share/guile/site")))
+                           ;; XXX: `GUILE_LOAD_COMPILED_PATH' is overridden
+                           ;; by `build-expression->derivation', so we can't
+                           ;; set it here.
+                           `(("GUILE_LOAD_PATH" . ,dir)))
+                         '())))
     (build-expression->derivation store (or name file-name) system
                                   builder
                                   (if gnutls-drv
-                                      `(("gnutls" ,gnutls-drv-path))
+                                      `(("gnutls" ,gnutls-drv))
                                       '())
                                   #:hash-algo hash-algo
                                   #:hash hash

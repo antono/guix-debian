@@ -29,11 +29,11 @@
   #:use-module ((gnu packages gettext)
                 #:renamer (symbol-prefix-proc 'gnu:))
   #:use-module (gnu packages glib)
+  #:use-module (gnu packages gnupg)
   #:use-module (gnu packages gperf)
   #:use-module (gnu packages libpng)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages m4)
-  #:use-module (gnu packages openssl)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
@@ -100,7 +100,7 @@ rasterisation.")
 (define-public libdrm
   (package
     (name "libdrm")
-    (version "2.4.42")
+    (version "2.4.46")
     (source
       (origin
         (method url-fetch)
@@ -110,7 +110,7 @@ rasterisation.")
                ".tar.bz2"))
         (sha256
           (base32
-            "1qbnpi64hyqzd650hj6jki1d50pzypdhj3rw9m3whwbqly110rz0"))))
+            "1wah4qmrrcv0gnx65lhrlxb6gprxch92wy8lhxv6102fml6k5krk"))))
     (build-system gnu-build-system)
     (inputs
       `(("libpciaccess" ,libpciaccess)
@@ -184,25 +184,6 @@ tracking.")
 
 ;; compiles only on macos
 ;; (define-public applewmproto
-;;   (package
-;;     (name "applewmproto")
-;;     (version "1.4.2")
-;;     (source
-;;       (origin
-;;         (method url-fetch)
-;;         (uri (string-append
-;;                "mirror://xorg/X11R7.7/src/everything/applewmproto-"
-;;                version
-;;                ".tar.bz2"))
-;;         (sha256
-;;           (base32
-;;             "1zi4p07mp6jmk030p4gmglwxcwp0lzs5mi31y1b4rp8lsqxdxizw"))))
-;;     (build-system gnu-build-system)
-;;     (inputs `(("pkg-config" ,pkg-config)))
-;;     (home-page "http://www.x.org/wiki/")
-;;     (synopsis "xorg implementation of the X Window System")
-;;     (description "X.org provides an implementation of the X Window System")
-;;     (license license:x11)))
   
   
 (define-public bdftopcf
@@ -384,6 +365,11 @@ tracking.")
         ("font-util", font-util)
         ("mkfontdir" ,mkfontdir)
         ("pkg-config" ,pkg-config)))
+    (arguments
+      `(#:configure-flags (list
+        ;; install fonts into subdirectory of package output instead of
+        ;; font-util-?.?.?/share/fonts/X11
+        (string-append "--with-fontrootdir=" %output "/share/fonts/X11"))))
     (home-page "http://www.x.org/wiki/")
     (synopsis "xorg implementation of the X Window System")
     (description "X.org provides an implementation of the X Window System")
@@ -410,73 +396,19 @@ tracking.")
         ("font-util", font-util)
         ("mkfontdir" ,mkfontdir)
         ("pkg-config" ,pkg-config)))
+    (arguments
+      `(#:configure-flags (list
+        (string-append "--with-fontrootdir=" %output "/share/fonts/X11"))))
     (home-page "http://www.x.org/wiki/")
     (synopsis "xorg implementation of the X Window System")
     (description "X.org provides an implementation of the X Window System")
     (license license:x11)))
 
 
+;; non-free license
 ;; (define-public font-adobe-utopia100dpi
-;;   (package
-;;     (name "font-adobe-utopia100dpi")
-;;     (version "1.0.4")
-;;     (source
-;;       (origin
-;;         (method url-fetch)
-;;         (uri (string-append
-;;                "mirror://xorg/X11R7.7/src/everything/font-adobe-utopia-100dpi-"
-;;                version
-;;                ".tar.bz2"))
-;;         (sha256
-;;           (base32
-;;             "19dd9znam1ah72jmdh7i6ny2ss2r6m21z9v0l43xvikw48zmwvyi"))))
-;;     (build-system gnu-build-system)
-;;     (home-page "http://www.x.org/wiki/")
-;;     (synopsis "xorg implementation of the X Window System")
-;;     (description "X.org provides an implementation of the X Window System")
-;;     (license non-free)))
-;; 
-;; 
 ;; (define-public font-adobe-utopia75dpi
-;;   (package
-;;     (name "font-adobe-utopia75dpi")
-;;     (version "1.0.4")
-;;     (source
-;;       (origin
-;;         (method url-fetch)
-;;         (uri (string-append
-;;                "mirror://xorg/X11R7.7/src/everything/font-adobe-utopia-75dpi-"
-;;                version
-;;                ".tar.bz2"))
-;;         (sha256
-;;           (base32
-;;             "152wigpph5wvl4k9m3l4mchxxisgsnzlx033mn5iqrpkc6f72cl7"))))
-;;     (build-system gnu-build-system)
-;;     (home-page "http://www.x.org/wiki/")
-;;     (synopsis "xorg implementation of the X Window System")
-;;     (description "X.org provides an implementation of the X Window System")
-;;     (license non-free)))
-;; 
-;; 
 ;; (define-public font-adobe-utopia-type1
-;;   (package
-;;     (name "font-adobe-utopia-type1")
-;;     (version "1.0.4")
-;;     (source
-;;       (origin
-;;         (method url-fetch)
-;;         (uri (string-append
-;;                "mirror://xorg/X11R7.7/src/everything/font-adobe-utopia-type1-"
-;;                version
-;;                ".tar.bz2"))
-;;         (sha256
-;;           (base32
-;;             "0xw0pdnzj5jljsbbhakc6q9ha2qnca1jr81zk7w70yl9bw83b54p"))))
-;;     (build-system gnu-build-system)
-;;     (home-page "http://www.x.org/wiki/")
-;;     (synopsis "xorg implementation of the X Window System")
-;;     (description "X.org provides an implementation of the X Window System")
-;;     (license non-free)))
 
 
 (define-public font-alias
@@ -526,187 +458,15 @@ tracking.")
     (license license:x11)))
 
 
+;; non-free license
 ;; (define-public font-bh100dpi
-;;   (package
-;;     (name "font-bh100dpi")
-;;     (version "1.0.3")
-;;     (source
-;;       (origin
-;;         (method url-fetch)
-;;         (uri (string-append
-;;                "mirror://xorg/X11R7.7/src/everything/font-bh-100dpi-"
-;;                version
-;;                ".tar.bz2"))
-;;         (sha256
-;;           (base32
-;;             "10cl4gm38dw68jzln99ijix730y7cbx8np096gmpjjwff1i73h13"))))
-;;     (build-system gnu-build-system)
-;;     (home-page "http://www.x.org/wiki/")
-;;     (synopsis "xorg implementation of the X Window System")
-;;     (description "X.org provides an implementation of the X Window System")
-;;     (license non-free)))
-;; 
-;; 
 ;; (define-public font-bh75dpi
-;;   (package
-;;     (name "font-bh75dpi")
-;;     (version "1.0.3")
-;;     (source
-;;       (origin
-;;         (method url-fetch)
-;;         (uri (string-append
-;;                "mirror://xorg/X11R7.7/src/everything/font-bh-75dpi-"
-;;                version
-;;                ".tar.bz2"))
-;;         (sha256
-;;           (base32
-;;             "073jmhf0sr2j1l8da97pzsqj805f7mf9r2gy92j4diljmi8sm1il"))))
-;;     (build-system gnu-build-system)
-;;     (home-page "http://www.x.org/wiki/")
-;;     (synopsis "xorg implementation of the X Window System")
-;;     (description "X.org provides an implementation of the X Window System")
-;;     (license non-free)))
-;; 
-;; 
 ;; (define-public font-bh-lucidatypewriter100dpi
-;;   (package
-;;     (name "font-bh-lucidatypewriter100dpi")
-;;     (version "1.0.3")
-;;     (source
-;;       (origin
-;;         (method url-fetch)
-;;         (uri (string-append
-;;                "mirror://xorg/X11R7.7/src/everything/font-bh-lucidatypewriter-100dpi-"
-;;                version
-;;                ".tar.bz2"))
-;;         (sha256
-;;           (base32
-;;             "1fqzckxdzjv4802iad2fdrkpaxl4w0hhs9lxlkyraq2kq9ik7a32"))))
-;;     (build-system gnu-build-system)
-;;     (home-page "http://www.x.org/wiki/")
-;;     (synopsis "xorg implementation of the X Window System")
-;;     (description "X.org provides an implementation of the X Window System")
-;;     (license non-free)))
-;; 
-;; 
 ;; (define-public font-bh-lucidatypewriter75dpi
-;;   (package
-;;     (name "font-bh-lucidatypewriter75dpi")
-;;     (version "1.0.3")
-;;     (source
-;;       (origin
-;;         (method url-fetch)
-;;         (uri (string-append
-;;                "mirror://xorg/X11R7.7/src/everything/font-bh-lucidatypewriter-75dpi-"
-;;                version
-;;                ".tar.bz2"))
-;;         (sha256
-;;           (base32
-;;             "0cfbxdp5m12cm7jsh3my0lym9328cgm7fa9faz2hqj05wbxnmhaa"))))
-;;     (build-system gnu-build-system)
-;;     (home-page "http://www.x.org/wiki/")
-;;     (synopsis "xorg implementation of the X Window System")
-;;     (description "X.org provides an implementation of the X Window System")
-;;     (license non-free)))
-;; 
-;; 
+;; (define-public font-bh-ttf
 ;; (define-public font-bh-type1
-;;   (package
-;;     (name "font-bh-type1")
-;;     (version "1.0.3")
-;;     (source
-;;       (origin
-;;         (method url-fetch)
-;;         (uri (string-append
-;;                "mirror://xorg/X11R7.7/src/everything/font-bh-ttf-"
-;;                version
-;;                ".tar.bz2"))
-;;         (sha256
-;;           (base32
-;;             "0pyjmc0ha288d4i4j0si4dh3ncf3jiwwjljvddrb0k8v4xiyljqv"))))
-;;     (build-system gnu-build-system)
-;;     (inputs
-;;       `(("mkfontscale" ,mkfontscale)
-;;         ("mkfontdir" ,mkfontdir)
-;;         ("pkg-config" ,pkg-config)))
-;;     (home-page "http://www.x.org/wiki/")
-;;     (synopsis "xorg implementation of the X Window System")
-;;     (description "X.org provides an implementation of the X Window System")
-;;     (license non-free)))
-;;
-;;
 ;; (define-public font-bitstream100dpi
-;;   (package
-;;     (name "font-bitstream100dpi")
-;;     (version "1.0.3")
-;;     (source
-;;       (origin
-;;         (method url-fetch)
-;;         (uri (string-append
-;;                "mirror://xorg/X11R7.7/src/everything/font-bh-ttf-"
-;;                version
-;;                ".tar.bz2"))
-;;         (sha256
-;;           (base32
-;;             "0pyjmc0ha288d4i4j0si4dh3ncf3jiwwjljvddrb0k8v4xiyljqv"))))
-;;     (build-system gnu-build-system)
-;;     (inputs
-;;       `(("mkfontscale" ,mkfontscale)
-;;         ("mkfontdir" ,mkfontdir)
-;;         ("pkg-config" ,pkg-config)))
-;;     (home-page "http://www.x.org/wiki/")
-;;     (synopsis "xorg implementation of the X Window System")
-;;     (description "X.org provides an implementation of the X Window System")
-;;     (license non-free)))
-;;
-;;
 ;; (define-public font-bitstream75dpi
-;;   (package
-;;     (name "font-bitstream75dpi")
-;;     (version "1.0.3")
-;;     (source
-;;       (origin
-;;         (method url-fetch)
-;;         (uri (string-append
-;;                "mirror://xorg/X11R7.7/src/everything/font-bh-ttf-"
-;;                version
-;;                ".tar.bz2"))
-;;         (sha256
-;;           (base32
-;;             "0pyjmc0ha288d4i4j0si4dh3ncf3jiwwjljvddrb0k8v4xiyljqv"))))
-;;     (build-system gnu-build-system)
-;;     (inputs
-;;       `(("mkfontscale" ,mkfontscale)
-;;         ("mkfontdir" ,mkfontdir)
-;;         ("pkg-config" ,pkg-config)))
-;;     (home-page "http://www.x.org/wiki/")
-;;     (synopsis "xorg implementation of the X Window System")
-;;     (description "X.org provides an implementation of the X Window System")
-;;     (license non-free)))
-
-
-(define-public font-bitstream-type1
-  (package
-    (name "font-bitstream-type1")
-    (version "1.0.3")
-    (source
-      (origin
-        (method url-fetch)
-        (uri (string-append
-               "mirror://xorg/X11R7.7/src/everything/font-bh-ttf-"
-               version
-               ".tar.bz2"))
-        (sha256
-          (base32
-            "0pyjmc0ha288d4i4j0si4dh3ncf3jiwwjljvddrb0k8v4xiyljqv"))))
-    (build-system gnu-build-system)
-    (inputs
-      `(("mkfontdir" ,mkfontdir)
-        ("pkg-config" ,pkg-config)))
-    (home-page "http://www.x.org/wiki/")
-    (synopsis "xorg implementation of the X Window System")
-    (description "X.org provides an implementation of the X Window System")
-    (license license:x11)))
 
 
 (define-public font-cronyx-cyrillic
@@ -734,55 +494,11 @@ tracking.")
     (license license:x11)))
 
 
+;; no license
 ;; (define-public font-cursor-misc
-;;   (package
-;;     (name "font-cursor-misc")
-;;     (version "1.0.3")
-;;     (source
-;;       (origin
-;;         (method url-fetch)
-;;         (uri (string-append
-;;                "mirror://xorg/X11R7.7/src/everything/font-cursor-misc-"
-;;                version
-;;                ".tar.bz2"))
-;;         (sha256
-;;           (base32
-;;             "0dd6vfiagjc4zmvlskrbjz85jfqhf060cpys8j0y1qpcbsrkwdhp"))))
-;;     (build-system gnu-build-system)
-;;     (inputs
-;;       `(("mkfontscale" ,mkfontscale)
-;;         ("mkfontdir" ,mkfontdir)
-;;         ("bdftopcf" ,bdftopcf)
-;;         ("pkg-config" ,pkg-config)))
-;;     (home-page "http://www.x.org/wiki/")
-;;     (synopsis "xorg implementation of the X Window System")
-;;     (description "X.org provides an implementation of the X Window System")
-;;     (license none)))
-;; 
-;; 
+
+;; non-free license
 ;; (define-public font-daewoo-misc
-;;   (package
-;;     (name "font-daewoo-misc")
-;;     (version "1.0.3")
-;;     (source
-;;       (origin
-;;         (method url-fetch)
-;;         (uri (string-append
-;;                "mirror://xorg/X11R7.7/src/everything/font-daewoo-misc-"
-;;                version
-;;                ".tar.bz2"))
-;;         (sha256
-;;           (base32
-;;             "1s2bbhizzgbbbn5wqs3vw53n619cclxksljvm759h9p1prqdwrdw"))))
-;;     (build-system gnu-build-system)
-;;     (inputs
-;;       `(("mkfontdir" ,mkfontdir)
-;;         ("bdftopcf" ,bdftopcf)
-;;         ("pkg-config" ,pkg-config)))
-;;     (home-page "http://www.x.org/wiki/")
-;;     (synopsis "xorg implementation of the X Window System")
-;;     (description "X.org provides an implementation of the X Window System")
-;;     (license non-free)))
 
 
 (define-public font-dec-misc
@@ -810,30 +526,8 @@ tracking.")
     (license license:x11)))
 
 
+;; non-free license
 ;; (define-public font-ibm-type1
-;;   (package
-;;     (name "font-ibm-type1")
-;;     (version "1.0.3")
-;;     (source
-;;       (origin
-;;         (method url-fetch)
-;;         (uri (string-append
-;;                "mirror://xorg/X11R7.7/src/everything/font-cronyx-cyrillic-"
-;;                version
-;;                ".tar.bz2"))
-;;         (sha256
-;;           (base32
-;;             "1pyjll4adch3z5cg663s6vhi02k8m6488f0mrasg81ssvg9jinzx"))))
-;;     (build-system gnu-build-system)
-;;     (inputs
-;;       `(("mkfontdir" ,mkfontdir)
-;;         ("bdftopcf" ,bdftopcf)
-;;         ("pkg-config" ,pkg-config)))
-;;     (home-page "http://www.x.org/wiki/")
-;;     (synopsis "xorg implementation of the X Window System")
-;;     (description "X.org provides an implementation of the X Window System")
-;;     (license non-free)))
-
 
 (define-public font-isas-misc
   (package
@@ -860,29 +554,8 @@ tracking.")
     (license license:x11)))
 
 
+;; non-free license
 ;; (define-public font-jis-misc
-;;   (package
-;;     (name "font-jis-misc")
-;;     (version "1.0.3")
-;;     (source
-;;       (origin
-;;         (method url-fetch)
-;;         (uri (string-append
-;;                "mirror://xorg/X11R7.7/src/everything/font-jis-misc-"
-;;                version
-;;                ".tar.bz2"))
-;;         (sha256
-;;           (base32
-;;             "0rdc3xdz12pnv951538q6wilx8mrdndpkphpbblszsv7nc8cw61b"))))
-;;     (build-system gnu-build-system)
-;;     (inputs
-;;       `(("mkfontdir" ,mkfontdir)
-;;         ("bdftopcf" ,bdftopcf)
-;;         ("pkg-config" ,pkg-config)))
-;;     (home-page "http://www.x.org/wiki/")
-;;     (synopsis "xorg implementation of the X Window System")
-;;     (description "X.org provides an implementation of the X Window System")
-;;     (license non-free)))
 
 
 (define-public font-micro-misc
@@ -959,29 +632,8 @@ tracking.")
     (license license:x11)))
 
 
+;; non-free license
 ;; (define-public font-misc-meltho
-;;   (package
-;;     (name "font-misc-meltho")
-;;     (version "1.0.3")
-;;     (source
-;;       (origin
-;;         (method url-fetch)
-;;         (uri (string-append
-;;                "mirror://xorg/X11R7.7/src/everything/font-misc-meltho-"
-;;                version
-;;                ".tar.bz2"))
-;;         (sha256
-;;           (base32
-;;             "148793fqwzrc3bmh2vlw5fdiwjc2n7vs25cic35gfp452czk489p"))))
-;;     (build-system gnu-build-system)
-;;     (inputs
-;;       `(("mkfontscale" ,mkfontscale)
-;;         ("mkfontdir" ,mkfontdir)
-;;         ("pkg-config" ,pkg-config)))
-;;     (home-page "http://www.x.org/wiki/")
-;;     (synopsis "xorg implementation of the X Window System")
-;;     (description "X.org provides an implementation of the X Window System")
-;;     (license non-free)))
 
 
 (define-public font-misc-misc
@@ -1004,6 +656,9 @@ tracking.")
         ("font-util" ,font-util)
         ("bdftopcf" ,bdftopcf)
         ("pkg-config" ,pkg-config)))
+    (arguments
+      `(#:configure-flags (list
+        (string-append "--with-fontrootdir=" %output "/share/fonts/X11"))))
     (home-page "http://www.x.org/wiki/")
     (synopsis "xorg implementation of the X Window System")
     (description "X.org provides an implementation of the X Window System")
@@ -1055,6 +710,9 @@ tracking.")
         ("font-util" ,font-util)
         ("bdftopcf" ,bdftopcf)
         ("pkg-config" ,pkg-config)))
+    (arguments
+      `(#:configure-flags (list
+        (string-append "--with-fontrootdir=" %output "/share/fonts/X11"))))
     (home-page "http://www.x.org/wiki/")
     (synopsis "xorg implementation of the X Window System")
     (description "X.org provides an implementation of the X Window System")
@@ -1321,30 +979,6 @@ tracking.")
 
 ;; requires applewmproto, which compiles only on macos
 ;; (define-public libapplewm
-;;   (package
-;;     (name "libapplewm")
-;;     (version "1.4.1")
-;;     (source
-;;       (origin
-;;         (method url-fetch)
-;;         (uri (string-append
-;;                "mirror://xorg/X11R7.7/src/everything/libAppleWM-"
-;;                version
-;;                ".tar.bz2"))
-;;         (sha256
-;;           (base32
-;;             "0r8x28n45q89x91mz8mv0zkkcxi8wazkac886fyvflhiv2y8ap2y"))))
-;;     (build-system gnu-build-system)
-;;     (inputs
-;;       `(("xextproto" ,xextproto)
-;;         ("libxext" ,libxext)
-;;         ("libx11" ,libx11)
-;;         ("applewmproto" ,applewmproto)
-;;         ("pkg-config" ,pkg-config)))
-;;     (home-page "http://www.x.org/wiki/")
-;;     (synopsis "xorg implementation of the X Window System")
-;;     (description "X.org provides an implementation of the X Window System")
-;;     (license license:x11)))
 
 
 (define-public libdmx
@@ -2223,7 +1857,7 @@ tracking.")
             "0ds4qg6slidrzyz6q9ckq0a19hn6blzpnvciy4brh741gn49jpdd"))))
     (build-system gnu-build-system)
     (inputs
-      `(("pkg-config" ,pkg-config) ("python" ,python)))
+      `(("pkg-config" ,pkg-config) ("python" ,python-wrapper)))
     (home-page "http://www.x.org/wiki/")
     (synopsis "xorg implementation of the X Window System")
     (description "X.org provides an implementation of the X Window System")
@@ -2295,6 +1929,11 @@ tracking.")
       `(("libxcursor" ,libxcursor)
         ("pkg-config" ,pkg-config)
         ("xcursorgen" ,xcursorgen)))
+    (arguments
+     `(#:configure-flags
+       (list (string-append "--with-cursordir="
+                            (assoc-ref %outputs "out")
+                            "/share/icons"))))
     (home-page "http://www.x.org/wiki/")
     (synopsis "xorg implementation of the X Window System")
     (description "X.org provides an implementation of the X Window System")
@@ -2457,7 +2096,6 @@ tracking.")
     (license license:x11)))
 
 
-;; FIXME: Tries to install file joystick-properties.h into ...--xorg-server-1.12.2/include/xorg
 (define-public xf86-input-joystick
   (package
     (name "xf86-input-joystick")
@@ -2475,6 +2113,11 @@ tracking.")
     (build-system gnu-build-system)
     (inputs `(("pkg-config" ,pkg-config)
               ("xorg-server" ,xorg-server)))
+    (arguments
+     `(#:configure-flags
+       (list (string-append "--with-sdkdir="
+                            (assoc-ref %outputs "out")
+                            "/include/xorg"))))
     (home-page "http://www.x.org/wiki/")
     (synopsis "xorg implementation of the X Window System")
     (description "X.org provides an implementation of the X Window System")
@@ -2547,13 +2190,20 @@ tracking.")
               ("mtdev" ,mtdev)
               ("pkg-config" ,pkg-config)
               ("xorg-server" ,xorg-server)))
+    (arguments
+     `(#:configure-flags
+       (list (string-append "--with-sdkdir="
+                            (assoc-ref %outputs "out")
+                            "/include/xorg")
+             (string-append "--with-xorg-conf-dir="
+                            (assoc-ref %outputs "out")
+                            "/share/X11/xorg.conf.d"))))
     (home-page "http://www.x.org/wiki/")
     (synopsis "xorg implementation of the X Window System")
     (description "X.org provides an implementation of the X Window System")
     (license license:x11)))
 
 
-;; FIXME: Installation tries to create ...-xorg-server-1.12.2/share/X11/xorg.conf.d
 (define-public xf86-input-vmmouse
   (package
     (name "xf86-input-vmmouse")
@@ -2571,6 +2221,11 @@ tracking.")
     (build-system gnu-build-system)
     (inputs `(("pkg-config" ,pkg-config)
               ("xorg-server" ,xorg-server)))
+    (arguments
+     `(#:configure-flags
+       (list(string-append "--with-xorg-conf-dir="
+                            (assoc-ref %outputs "out")
+                            "/share/X11/xorg.conf.d"))))
     (home-page "http://www.x.org/wiki/")
     (synopsis "xorg implementation of the X Window System")
     (description "X.org provides an implementation of the X Window System")
@@ -2694,26 +2349,8 @@ tracking.")
     (license license:x11)))
 
 
+;; non-free license
 ;; (define-public xf86-video-dummy
-;;   (package
-;;     (name "xf86-video-dummy")
-;;     (version "0.3.5")
-;;     (source
-;;       (origin
-;;         (method url-fetch)
-;;         (uri (string-append
-;;                "mirror://xorg/X11R7.7/src/everything/xf86-video-dummy-"
-;;                version
-;;                ".tar.bz2"))
-;;         (sha256
-;;           (base32
-;;             "0pyr50kqh7g84r4p0x09ay5kxax20dip9sh8h3cbd4xv8cswdbfm"))))
-;;     (build-system gnu-build-system)
-;;     (inputs `(("pkg-config" ,pkg-config)))
-;;     (home-page "http://www.x.org/wiki/")
-;;     (synopsis "xorg implementation of the X Window System")
-;;     (description "X.org provides an implementation of the X Window System")
-;;     (license non-free)))
 
 
 (define-public xf86-video-fbdev
@@ -3227,26 +2864,8 @@ tracking.")
     (license license:x11)))
 
 
+;; no license
 ;; (define-public xf86-video-v4l
-;;   (package
-;;     (name "xf86-video-v4l")
-;;     (version "0.2.0")
-;;     (source
-;;       (origin
-;;         (method url-fetch)
-;;         (uri (string-append
-;;                "mirror://xorg/X11R7.7/src/everything/xf86-video-v4l-"
-;;                version
-;;                ".tar.bz2"))
-;;         (sha256
-;;           (base32
-;;             "0pcjc75hgbih3qvhpsx8d4fljysfk025slxcqyyhr45dzch93zyb"))))
-;;     (build-system gnu-build-system)
-;;     (inputs `(("pkg-config" ,pkg-config)))
-;;     (home-page "http://www.x.org/wiki/")
-;;     (synopsis "xorg implementation of the X Window System")
-;;     (description "X.org provides an implementation of the X Window System")
-;;     (license none)))
 
 
 (define-public xf86-video-vesa
@@ -3323,26 +2942,6 @@ tracking.")
 
 ;; Only relevant for the frame buffer on BSD systems.
 ;; (define-public xf86-video-wsfb
-;;   (package
-;;     (name "xf86-video-wsfb")
-;;     (version "0.4.0")
-;;     (source
-;;       (origin
-;;         (method url-fetch)
-;;         (uri (string-append
-;;                "mirror://xorg/X11R7.7/src/everything/xf86-video-wsfb-"
-;;                version
-;;                ".tar.bz2"))
-;;         (sha256
-;;           (base32
-;;             "0hr8397wpd0by1hc47fqqrnaw3qdqd8aqgwgzv38w5k3l3jy6p4p"))))
-;;     (build-system gnu-build-system)
-;;     (inputs `(("pkg-config" ,pkg-config)
-;;               ("xorg-server" ,xorg-server)))
-;;     (home-page "http://www.x.org/wiki/")
-;;     (synopsis "xorg implementation of the X Window System")
-;;     (description "X.org provides an implementation of the X Window System")
-;;     (license license:bsd-2)))
 
 
 (define-public xf86bigfontproto
@@ -3531,9 +3130,9 @@ tracking.")
     (license license:x11)))
 
 
-(define-public xkbcomp
+(define xkbcomp-intermediate ; used as input for xkeyboard-config
   (package
-    (name "xkbcomp")
+    (name "xkbcomp-intermediate")
     (version "1.2.4")
     (source
       (origin
@@ -3555,6 +3154,18 @@ tracking.")
     (synopsis "xorg implementation of the X Window System")
     (description "X.org provides an implementation of the X Window System")
     (license license:x11)))
+
+(define-public xkbcomp ; using xkeyboard-config as input
+  (package (inherit xkbcomp-intermediate)
+    (name "xkbcomp")
+    (inputs
+      `(,@(package-inputs xkbcomp-intermediate)
+        ("xkeyboard-config" ,xkeyboard-config)))
+    (arguments
+     `(#:configure-flags
+       (list (string-append "--with-xkb-config-root="
+                            (assoc-ref %build-inputs "xkeyboard-config")
+                            "/share/X11/xkb"))))))
 
 
 (define-public xkbevd
@@ -3629,7 +3240,7 @@ tracking.")
         ("intltool" ,intltool)
         ("libx11" ,libx11)
         ("pkg-config" ,pkg-config)
-        ("xkbcomp" ,xkbcomp)))
+        ("xkbcomp-intermediate" ,xkbcomp-intermediate)))
     (home-page "http://www.x.org/wiki/")
     (synopsis "xorg implementation of the X Window System")
     (description "X.org provides an implementation of the X Window System")
@@ -3734,26 +3345,8 @@ tracking.")
     (license license:x11)))
 
 
+;; no license
 ;; (define-public xorg-docs
-;;   (package
-;;     (name "xorg-docs")
-;;     (version "1.7")
-;;     (source
-;;       (origin
-;;         (method url-fetch)
-;;         (uri (string-append
-;;                "mirror://xorg/X11R7.7/src/everything/xorg-docs-"
-;;                version
-;;                ".tar.bz2"))
-;;         (sha256
-;;           (base32
-;;             "0prphdba6kgr1bxk7r07wxxx6x6pqjw6prr5qclypsb5sf5r3cdr"))))
-;;     (build-system gnu-build-system)
-;;     (inputs `(("pkg-config" ,pkg-config)))
-;;     (home-page "http://www.x.org/wiki/")
-;;     (synopsis "xorg implementation of the X Window System")
-;;     (description "X.org provides an implementation of the X Window System")
-;;     (license none)))
 
 
 (define-public xorg-sgml-doctools
@@ -4579,9 +4172,9 @@ tracking.")
 (define-public mesa
   (package
     (name "mesa")
-    ;; In newer versions (9.0.5 and 9.1 tested), "make" results in an
+    ;; In newer versions (9.0.5, 9.1 and 9.2 tested), "make" results in an
     ;; infinite configure loop, see
-    ;; https://bugs.freedesktop.org/show_bug.cgi?id=61527
+    ;; https://bugs.freedesktop.org/show_bug.cgi?id=58812
     (version "8.0.5")
     (source
       (origin
@@ -4609,7 +4202,7 @@ tracking.")
         ("libxml2" ,libxml2)
         ("makedepend" ,makedepend)
         ("pkg-config" ,pkg-config)
-        ("python" ,python)))
+        ("python" ,python-2))) ; incompatible with Python 3 (print syntax)
     (arguments
       `(#:configure-flags
          `("--with-gallium-drivers=r600,svga,swrast") ; drop r300 from the default list as it requires llvm
@@ -4655,7 +4248,7 @@ emulation to complete hardware acceleration for modern GPUs.")
       `(("xcb-proto" ,xcb-proto)
         ("libxslt" ,libxslt)
         ("pkg-config" ,pkg-config)
-        ("python" ,python)))
+        ("python" ,python-wrapper)))
     (home-page "http://www.x.org/wiki/")
     (synopsis "xorg implementation of the X Window System")
     (description "X.org provides an implementation of the X Window System")
@@ -4697,6 +4290,7 @@ emulation to complete hardware acceleration for modern GPUs.")
         ("dbus" ,dbus)
         ("dmxproto" ,dmxproto)
         ("libdmx" ,libdmx)
+        ("libgcrypt" ,libgcrypt)
         ("libxau" ,libxau)
         ("libxaw" ,libxaw)
         ("libxdmcp" ,libxdmcp)
@@ -4708,9 +4302,8 @@ emulation to complete hardware acceleration for modern GPUs.")
         ("libxt" ,libxt)
         ("libxv" ,libxv)
         ("mesa" ,mesa)
-        ("openssl" ,openssl)
         ("pkg-config" ,pkg-config)
-        ("python" ,python)
+        ("python" ,python-wrapper)
         ("recordproto" ,recordproto)
         ("resourceproto" ,resourceproto)
         ("scrnsaverproto" ,scrnsaverproto)
@@ -4719,10 +4312,30 @@ emulation to complete hardware acceleration for modern GPUs.")
         ("xf86dgaproto" ,xf86dgaproto)
         ("xf86driproto" ,xf86driproto)
         ("xf86vidmodeproto" ,xf86vidmodeproto)
-;;        ("xkbutils" ,xkbutils)
-;;        ("xkeyboard-config" ,xkeyboard-config)
+        ("xkbcomp" ,xkbcomp)
+        ("xkeyboard-config" ,xkeyboard-config)
         ("xtrans" ,xtrans)
         ("zlib" ,zlib)))
+    (arguments
+     `(#:configure-flags
+       (list (string-append "--with-xkb-path="
+                            (assoc-ref %build-inputs "xkeyboard-config")
+                            "/share/X11/xkb")
+             (string-append "--with-xkb-output="
+                            "/tmp") ; FIXME: This is a bit doubtful; where should
+                                    ; the compiled keyboard maps go?
+             (string-append "--with-xkb-bin-directory="
+                            (assoc-ref %build-inputs "xkbcomp")
+                            "/bin"))
+       #:phases
+        (alist-replace
+         'configure
+         (lambda* (#:key outputs #:allow-other-keys #:rest args)
+           (let ((configure (assoc-ref %standard-phases 'configure)))
+             (substitute* (find-files "." "\\.c$")
+               (("/bin/sh") (which "sh")))
+             (apply configure args)))
+         %standard-phases)))
     (home-page "http://www.x.org/wiki/")
     (synopsis "xorg implementation of the X Window System")
     (description "X.org provides an implementation of the X Window System")

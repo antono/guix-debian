@@ -30,8 +30,10 @@
     (source
      (origin
       (method url-fetch)
-      (uri (string-append "http://zlib.net/zlib-"
-                          version ".tar.gz"))
+      (uri (list (string-append "http://zlib.net/zlib-"
+                                 version ".tar.gz")
+                 (string-append "mirror://sourceforge/libpng/zlib-"
+                                 version ".tar.gz")))
       (sha256
        (base32
         "1i96gsdvxqb6skp9a58bacf1wxamwi9m9pg4yn7cpf7g7239r77s"))))
@@ -64,14 +66,14 @@ in compression.")
 (define-public gzip
   (package
    (name "gzip")
-   (version "1.5")
+   (version "1.6")
    (source (origin
             (method url-fetch)
             (uri (string-append "mirror://gnu/gzip/gzip-"
                                 version ".tar.gz"))
             (sha256
              (base32
-              "18rm80kar7n016g8bsyy1a3zk50i2826xdgs874yh64rzj7nxmdm"))))
+              "0zlgdm4v3dndrbiz7b67mbbj25dpwqbmbzjiycssvrfrcfvq7swp"))))
    (build-system gnu-build-system)
    (synopsis "General file (de)compression (using lzw)")
    (arguments
@@ -187,6 +189,7 @@ than gzip and 15 % smaller output than bzip2.")
        (base32
         "0wryshs446s7cclrbjykyj766znhcpnr7s3cxy33ybfn6vwfcygz"))))
     (build-system gnu-build-system)
+    (arguments '(#:configure-flags '("--enable-shared")))
     (home-page "http://www.oberhumer.com/opensource/lzo")
     (synopsis
      "A data compresion library suitable for real-time data de-/compression")
@@ -198,3 +201,24 @@ compression ratio.
 LZO is written in ANSI C.  Both the source code and the compressed data
 format are designed to be portable across platforms.")
     (license license:gpl2+)))
+
+(define-public lzip
+  (package
+    (name "lzip")
+    (version "1.14")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "mirror://savannah/lzip/lzip-"
+                                 version ".tar.gz"))
+             (sha256
+              (base32
+               "1rybhk2pxpfh2789ck9mrkdv3bpx7b7miwndlshb5vb02m9crxbz"))))
+    (build-system gnu-build-system)
+    (home-page "http://www.nongnu.org/lzip/lzip.html")
+    (synopsis "Lossless data compressor based on the LZMA algorithm")
+    (description
+     "Lzip is a lossless data compressor with a user interface similar to the
+one of gzip or bzip2.  Lzip decompresses almost as fast as gzip and compresses
+more than bzip2, which makes it well suited for software distribution and data
+archiving.  Lzip is a clean implementation of the LZMA algorithm.")
+    (license license:gpl3+)))

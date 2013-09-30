@@ -1,5 +1,8 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013 Nikita Karetnikov <nikita@karetnikov.org>
+;;; Copyright © 2013 Cyril Roelandt <tipecaml@gmail.com>
+;;; Copyright © 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -17,14 +20,25 @@
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (gnu packages version-control)
-  #:use-module ((guix licenses) #:select (gpl2+ gpl3+))
+  #:use-module ((guix licenses) #:select (asl2.0 gpl1+ gpl2 gpl2+ gpl3+))
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system python)
   #:use-module (guix build utils)
   #:use-module ((gnu packages gettext)
-                #:renamer (symbol-prefix-proc 'guix:)))
+                #:renamer (symbol-prefix-proc 'guix:))
+  #:use-module (gnu packages apr)
+  #:use-module (gnu packages curl)
+  #:use-module (gnu packages nano)
+  #:use-module (gnu packages openssl)
+  #:use-module (gnu packages perl)
+  #:use-module (gnu packages python)
+  #:use-module (gnu packages sqlite)
+  #:use-module (gnu packages system)
+  #:use-module (gnu packages xml)
+  #:use-module (gnu packages emacs)
+  #:use-module (gnu packages compression))
 
 (define-public bazaar
   (package
@@ -44,7 +58,9 @@
      ;; require Zsh.
      `(("gettext" ,guix:gettext)))
     (arguments
-     `(#:tests? #f)) ; no test target
+     `(#:tests? #f ; no test target
+       #:python ,python-2)) ; Python 3 apparently not yet supported, see
+                            ; https://answers.launchpad.net/bzr/+question/229048
     (home-page "https://gnu.org/software/bazaar")
     (synopsis "Decentralized revision control system")
     (description
@@ -53,6 +69,77 @@ central version control and distributed version control.  Developers can
 organize their workspace in whichever way they want.  It is possible to work
 from a command line or use a GUI application.")
     (license gpl2+)))
+
+(define-public git
+  (package
+   (name "git")
+   (version "1.8.4")
+   (source (origin
+            (method url-fetch)
+            (uri (string-append "http://git-core.googlecode.com/files/git-"
+                                version ".tar.gz"))
+            (sha256
+             (base32
+              "156bwqqgaw65rsvbb4wih5jfg94bxyf6p16mdwf0ky3f4ln55s2i"))))
+   (build-system gnu-build-system)
+   (inputs
+    `(("curl" ,curl)
+      ("expat" ,expat)
+      ("gettext" ,guix:gettext)
+      ("openssl" ,openssl)
+      ("perl" ,perl)
+      ("python" ,python-2) ; CAVEAT: incompatible with python-3 according to INSTALL
+      ("zlib" ,zlib)))
+   (arguments
+    `(#:make-flags `("V=1") ; more verbose compilation
+      #:test-target "test"
+      #:tests? #f ; FIXME: Many tests are failing
+      #:phases
+       (alist-replace
+        'configure
+        (lambda* (#:key #:allow-other-keys #:rest args)
+          (let ((configure (assoc-ref %standard-phases 'configure)))
+            (and (apply configure args)
+                 (substitute* "Makefile"
+                   (("/bin/sh") (which "sh"))
+                   (("/usr/bin/perl") (which "perl"))
+                   (("/usr/bin/python") (which "python"))))))
+         %standard-phases)))
+   (synopsis "Distributed version control system")
+   (description
+    "Git is a free distributed version control system designed to handle
+everything from small to very large projects with speed and efficiency.")
+   (license gpl2)
+   (home-page "http://git-scm.com/")))
+
+(define-public subversion
+  (package
+    (name "subversion")
+    (version "1.7.8")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "http://archive.apache.org/dist/subversion/subversion-"
+                                 version ".tar.bz2"))
+             (sha256
+              (base32
+               "11inl9n1riahfnbk1fax0dysm2swakzhzhpmm2zvga6fikcx90zw"))))
+    (build-system gnu-build-system)
+    (inputs
+      `(("apr" ,apr)
+        ("apr-util" ,apr-util)
+        ("perl" ,perl)
+        ("python" ,python-2) ; incompatible with Python 3 (print syntax)
+        ("sqlite" ,sqlite)
+        ("zlib" ,zlib)))
+    (home-page "http://subversion.apache.org/")
+    (synopsis "Subversion, a revision control system")
+    (description
+     "Subversion exists to be universally recognized and adopted as an
+open-source, centralized version control system characterized by its
+reliability as a safe haven for valuable data; the simplicity of its model and
+usage; and its ability to support the needs of a wide variety of users and
+projects, from individuals to large-scale enterprise operations.")
+    (license asl2.0)))
 
 (define-public rcs
   (package
@@ -74,4 +161,53 @@ files. RCS automates the storing, retrieval, logging, identification, and
 merging of revisions.  RCS is useful for text that is revised frequently,
 including source code, programs, documentation, graphics, papers, and form
 letters.")
+    (license gpl3+)))
+
+(define-public cvs
+  (package
+    (name "cvs")
+    (version "1.12.13")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append
+                   "http://ftp.gnu.org/non-gnu/cvs/source/feature/"
+                   version "/cvs-" version ".tar.bz2"))
+             (sha256
+              (base32
+               "0pjir8cwn0087mxszzbsi1gyfc6373vif96cw4q3m1x6p49kd1bq"))))
+    (build-system gnu-build-system)
+    (arguments
+     ;; XXX: The test suite looks flawed, and the package is obsolete anyway.
+     '(#:tests? #f))
+    (inputs `(("zlib" ,zlib)
+              ("nano" ,nano)))                    ; the default editor
+    (home-page "http://cvs.nongnu.org")
+    (synopsis "Historical centralized version control system")
+    (description
+     "CVS is a version control system, an important component of Source
+Configuration Management (SCM).  Using it, you can record the history of
+sources files, and documents.  It fills a similar role to the free software
+RCS, PRCS, and Aegis packages.")
+    (license gpl1+)))
+
+(define-public vc-dwim
+  (package
+    (name "vc-dwim")
+    (version "1.7")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "mirror://gnu/vc-dwim/vc-dwim-"
+                                 version ".tar.xz"))
+             (sha256
+              (base32
+               "094pjwshvazlgagc254in2xvrp93vhcj0kb5ms17qs7sch99x9z2"))))
+    (build-system gnu-build-system)
+    (inputs `(("perl" ,perl)
+              ("inetutils" ,inetutils)     ; for `hostname', used in the tests
+              ("emacs" ,emacs)))           ; for `ctags'
+    (home-page "http://www.gnu.org/software/vc-dwim/")
+    (synopsis "Version-control-agnostic ChangeLog diff and commit tool")
+    (description
+     "vc-dwim is a version-control-agnostic ChangeLog diff and commit
+tool. vc-chlog is a helper tool for writing GNU-style ChangeLog entries.")
     (license gpl3+)))

@@ -121,27 +121,27 @@ exec ~a --no-auto-compile \"$0\" \"$@\"
                    (use-modules (guix build utils))
                    (let ((result (apply system* ,autoconf
                                         (cdr (command-line)))))
-                     (if (and (zero? result)
-                              (file-exists? "configure")
-                              (not (file-exists? "/bin/sh")))
-                         (begin
-                           (patch-shebang "configure")
-                           #t)
-                         (exit (status:exit-val result)))))
+                     (when (and (file-exists? "configure")
+                                (not (file-exists? "/bin/sh")))
+                       ;; Patch regardless of RESULT, because `autoconf
+                       ;; -Werror' can both create a `configure' file and
+                       ;; return a non-zero exit code.
+                       (patch-shebang "configure"))
+                     (exit (status:exit-val result))))
                 port)))
            (chmod (string-append bin "/autoconf") #o555)))))))
 
 (define-public automake
   (package
     (name "automake")
-    (version "1.13.1")
+    (version "1.14")
     (source (origin
              (method url-fetch)
              (uri (string-append "mirror://gnu/automake/automake-"
                                  version ".tar.xz"))
              (sha256
               (base32
-               "12yi1bzkipi7qdmkdy77pazljsa9z7q66hi6c4rq73p7hbv6rkbf"))))
+               "0nc0zqq8j336kamizzd86wb19vhbwywv5avcjh3cyx230xfqy671"))))
     (build-system gnu-build-system)
     (inputs
      `(("autoconf" ,autoconf-wrapper)
@@ -231,28 +231,30 @@ Standards.  Automake requires the use of Autoconf.")
 
     (arguments
      `(#:patches (list (assoc-ref %build-inputs "patch/skip-tests"))
-       #:phases (alist-cons-before
-                 'check 'pre-check
-                 (lambda* (#:key inputs #:allow-other-keys)
-                   ;; Run the test suite in parallel, if possible.
-                   (let ((ncores
-                          (cond
-                           ((getenv "NIX_BUILD_CORES")
-                            =>
-                            (lambda (n)
-                              (if (zero? (string->number n))
-                                  (number->string (current-processor-count))
-                                  n)))
-                           (else "1"))))
-                    (setenv "TESTSUITEFLAGS"
-                            (string-append "-j" ncores)))
+       ,@(if (%current-target-system)
+             '()                        ; no `check' phase when cross-building
+             '(#:phases (alist-cons-before
+                         'check 'pre-check
+                         (lambda* (#:key inputs #:allow-other-keys)
+                           ;; Run the test suite in parallel, if possible.
+                           (let ((ncores
+                                  (cond
+                                   ((getenv "NIX_BUILD_CORES")
+                                    =>
+                                    (lambda (n)
+                                      (if (zero? (string->number n))
+                                          (number->string (current-processor-count))
+                                          n)))
+                                   (else "1"))))
+                             (setenv "TESTSUITEFLAGS"
+                                     (string-append "-j" ncores)))
 
-                   ;; Path references to /bin/sh.
-                   (let ((bash (assoc-ref inputs "bash")))
-                     (substitute* "tests/testsuite"
-                       (("/bin/sh")
-                        (string-append bash "/bin/bash")))))
-                 %standard-phases)))
+                           ;; Path references to /bin/sh.
+                           (let ((bash (assoc-ref inputs "bash")))
+                             (substitute* "tests/testsuite"
+                               (("/bin/sh")
+                                (string-append bash "/bin/bash")))))
+                         %standard-phases)))))
     (inputs `(("patch/skip-tests"
                ,(search-patch "libtool-skip-tests.patch"))))
     (synopsis "Generic shared library support tools")

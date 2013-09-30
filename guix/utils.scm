@@ -36,7 +36,6 @@
   #:autoload   (system foreign) (pointer->procedure)
   #:export (bytevector->base16-string
             base16-string->bytevector
-            sha256
 
             %nixpkgs-directory
             nixpkgs-derivation
@@ -57,8 +56,10 @@
 
             gnu-triplet->nix-system
             %current-system
+            %current-target-system
             version-compare
             version>?
+            guile-version>?
             package-name->name+version
             string-tokenize*
             file-extension
@@ -137,23 +138,6 @@ evaluate to a simple datum."
                    s)
       bv)))
 
-
-;;;
-;;; Hash.
-;;;
-
-(define sha256
-  (let ((hash   (pointer->procedure void
-                                    (dynamic-func "gcry_md_hash_buffer"
-                                                  (dynamic-link %libgcrypt))
-                                    `(,int * * ,size_t)))
-        (sha256 8))                        ; GCRY_MD_SHA256, as of 1.5.0
-    (lambda (bv)
-      "Return the SHA256 of BV as a bytevector."
-      (let ((digest (make-bytevector (/ 256 8))))
-        (hash sha256 (bytevector->pointer digest)
-              (bytevector->pointer bv) (bytevector-length bv))
-        digest))))
 
 
 ;;;
@@ -163,7 +147,8 @@ evaluate to a simple datum."
 (define (filtered-port command input)
   "Return an input port where data drained from INPUT is filtered through
 COMMAND (a list).  In addition, return a list of PIDs that the caller must
-wait."
+wait.  When INPUT is a file port, it must be unbuffered; otherwise, any
+buffered data is lost."
   (let loop ((input input)
              (pids '()))
     (if (file-port? input)
@@ -309,6 +294,11 @@ returned by `config.guess'."
   ;; By default, this is equal to (gnu-triplet->nix-system %host-type).
   (make-parameter %system))
 
+(define %current-target-system
+  ;; Either #f or a GNU triplet representing the target system we are
+  ;; cross-building to.
+  (make-parameter #f))
+
 (define version-compare
   (let ((strverscmp
          (let ((sym (or (dynamic-func "strverscmp" (dynamic-link))
@@ -326,6 +316,15 @@ or '= when they denote equal versions."
 (define (version>? a b)
   "Return #t when A denotes a newer version than B."
   (eq? '> (version-compare a b)))
+
+(define (guile-version>? str)
+  "Return #t if the running Guile version is greater than STR."
+  ;; Note: Using (version>? (version) "2.0.5") or similar doesn't work,
+  ;; because the result of (version) can have a prefix, like "2.0.5-deb1".
+  (version>? (string-append (major-version) "."
+                            (minor-version) "."
+                            (micro-version))
+             str))
 
 (define (package-name->name+version name)
   "Given NAME, a package name like \"foo-0.9.1b\", return two values:

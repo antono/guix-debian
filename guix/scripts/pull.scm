@@ -29,7 +29,6 @@
   #:use-module (gnu packages compression)
   #:use-module (gnu packages gnupg)
   #:use-module (srfi srfi-1)
-  #:use-module (srfi srfi-11)
   #:use-module (srfi srfi-37)
   #:export (guix-pull))
 
@@ -106,6 +105,8 @@ files."
                      (when (string-suffix? ".scm" file)
                        (let ((go (string-append (string-drop-right file 4)
                                                 ".go")))
+                         (format (current-error-port)
+                                 "compiling '~a'...~%" file)
                          (compile-file file
                                        #:output-file go
                                        #:opts %auto-compilation-options))))
@@ -196,13 +197,9 @@ Download and deploy the latest version of Guix.\n"))
                         (if (assoc-ref opts 'verbose?)
                             (current-error-port)
                             (%make-void-port "w"))))
-          (let*-values (((config-dir)
-                         (config-directory))
-                        ((source drv)
-                         (unpack store tarball))
-                        ((source-dir)
-                         (derivation-output-path
-                          (assoc-ref (derivation-outputs drv) "out"))))
+          (let* ((config-dir (config-directory))
+                 (source     (unpack store tarball))
+                 (source-dir (derivation->output-path source)))
             (if (show-what-to-build store (list source))
                 (if (build-derivations store (list source))
                     (let ((latest (string-append config-dir "/latest")))
