@@ -1,5 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -21,7 +22,8 @@
   #:use-module (gnu packages)
   #:use-module (guix packages)
   #:use-module (guix download)
-  #:use-module (guix build-system gnu))
+  #:use-module (guix build-system gnu)
+  #:use-module (guix build-system perl))
 
 (define-public perl
   ;; Yeah, Perl...  It is required early in the bootstrap process by Linux.
@@ -34,11 +36,11 @@
                                  version ".tar.gz"))
              (sha256
               (base32
-               "15qxzba3a50c9nik5ydgyfp62x7h9vxxn12yd1jgl93hb1wj96km"))))
+               "15qxzba3a50c9nik5ydgyfp62x7h9vxxn12yd1jgl93hb1wj96km"))
+             (patches (list (search-patch "perl-no-sys-dirs.patch")))))
     (build-system gnu-build-system)
     (arguments
      '(#:tests? #f
-       #:patches (list (assoc-ref %build-inputs "patch/no-sys-dirs"))
        #:phases
        (alist-replace
         'configure
@@ -62,7 +64,6 @@
                       (string-append "-Dlocincpth=" libc "/include")
                       (string-append "-Dloclibpth=" libc "/lib")))))
         %standard-phases)))
-    (inputs `(("patch/no-sys-dirs" ,(search-patch "perl-no-sys-dirs.patch"))))
     (native-search-paths (list (search-path-specification
                                 (variable "PERL5LIB")
                                 (directories '("lib/perl5/site_perl")))))
@@ -72,3 +73,32 @@
 24 years of development.")
     (home-page "http://www.perl.org/")
     (license gpl1+)))                          ; or "Artistic"
+
+(define-public perl-file-list
+  (package
+    (name "perl-file-list")
+    (version "0.3.1")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append
+                   "mirror://cpan/authors/id/D/DO/DOPACKI/File-List-"
+                   version ".tar.gz"))
+             (sha256
+              (base32
+               "00m5ax4aq59hdvav6yc4g63vhx3a57006rglyypagvrzfxjvm8s8"))))
+    (build-system perl-build-system)
+    (arguments
+     `(#:phases
+       (alist-cons-after
+        'unpack 'cd
+        (lambda* _
+         (chdir "List"))
+       %standard-phases)))
+    (license (package-license perl))
+    (synopsis "Perl extension for crawling directory trees and compiling
+lists of files")
+    (description
+     "The File::List module crawls the directory tree starting at the
+provided base directory and can return files (and/or directories if desired)
+matching a regular expression.")
+    (home-page "http://search.cpan.org/~dopacki/File-List/")))

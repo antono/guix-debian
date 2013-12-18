@@ -31,7 +31,10 @@
   #:use-module (gnu packages libpng)
   #:use-module (gnu packages libtiff)
   #:use-module (gnu packages pkg-config)
-  #:use-module (gnu packages xorg))
+  #:use-module (gnu packages xorg)
+  #:use-module (gnu packages glib)
+  #:use-module (gnu packages gtk)
+  #:use-module (srfi srfi-1))
 
 (define-public poppler
   (package
@@ -47,7 +50,6 @@
    ;; FIXME: more dependencies could  be added
    ;;  cairo output:       no (requires cairo >= 1.10.0)
    ;;  qt4 wrapper:        no
-   ;;  glib wrapper:       no (requires cairo output)
    ;;    introspection:    no
    ;;  use gtk-doc:        no
    ;;  use libcurl:        no
@@ -58,7 +60,14 @@
              ("libpng" ,libpng)
              ("libtiff" ,libtiff)
              ("pkg-config" ,pkg-config)
-             ("zlib" ,zlib)))
+             ("zlib" ,zlib)
+
+             ;; To build poppler-glib (as needed by Evince), we need Cairo and
+             ;; GLib.  But of course, that Cairo must not depend on Poppler.
+             ("cairo" ,(package (inherit cairo)
+                         (inputs (alist-delete "poppler"
+                                               (package-inputs cairo)))))
+             ("glib" ,glib)))
    (arguments
     `(#:tests? #f ; no test data provided with the tarball
       #:configure-flags
@@ -79,7 +88,8 @@
             (uri (string-append "ftp://ftp.foolabs.com/pub/xpdf/xpdf-"
                                 version ".tar.gz"))
             (sha256 (base32
-                     "1jnfzdqc54wa73lw28kjv0m7120mksb0zkcn81jdlvijyvc67kq2"))))
+                     "1jnfzdqc54wa73lw28kjv0m7120mksb0zkcn81jdlvijyvc67kq2"))
+            (patches (list (search-patch "xpdf-constchar.patch")))))
    (build-system gnu-build-system)
    (inputs `(("freetype" ,freetype)
              ("gs-fonts" ,gs-fonts)
@@ -90,13 +100,9 @@
              ("libxp" ,libxp)
              ("libxpm" ,libxpm)
              ("libxt" ,libxt)
-             ("zlib" ,zlib)
-             ("patch/constchar"
-                 ,(search-patch "xpdf-constchar.patch"))))
+             ("zlib" ,zlib)))
    (arguments
     `(#:tests? #f ; there is no check target
-      #:patches (list (assoc-ref %build-inputs
-                                 "patch/constchar"))
       #:phases
        (alist-replace
         'install

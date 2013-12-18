@@ -35,22 +35,14 @@
                    ".tar.gz"))
              (sha256
               (base32
-               "0fh0gbbp0iiq3wbkf503xb40r8ljk42vyj9bnlflbz82d6ipy1rm"))))
+               "0fh0gbbp0iiq3wbkf503xb40r8ljk42vyj9bnlflbz82d6ipy1rm"))
+             (patches (list (search-patch "cpio-gets-undeclared.patch")))))
     (build-system gnu-build-system)
-    (arguments
-     '(#:patches (list (assoc-ref %build-inputs "patch/gets-undeclared"))))
-    (inputs `(("patch/gets-undeclared"
-               ,(search-patch "cpio-gets-undeclared.patch"))))
     (home-page "http://www.gnu.org/software/rush/")
     (synopsis "Restricted user (login) shell")
     (description
-     "GNU Rush is a Restricted User Shell, designed for sites providing
-limited remote access to their resources, such as svn or git repositories,
-scp, or the like.  Using a sophisticated configuration file, Rush gives you
-complete control over the command lines that users execute, as well as over
-the usage of system resources, such as virtual memory, CPU time, etc.
-
-In particular, it allows remote programs to be run in a chrooted environment,
-which is important with such programs as sftp-server or scp, that lack this
-ability.")
+     "GNU Rush is a restricted user shell, for systems on which users are to
+be provided with only limited functionality or resources. Administrators set
+user rights via a configuration file which can be used to limit, for example,
+the commands that can be executed, CPU time, or virtual memory usage.")
     (license gpl3+)))

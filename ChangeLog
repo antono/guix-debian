@@ -1,4 +1,2226 @@
+2013-12-11  Ludovic Courtès  <ludo@gnu.org>
+
+	Update 'NEWS'.
+
+	build: Remove '..' from srcdir/builddir in 'pre-inst-env'.
+	* pre-inst-env.in (abs_top_srcdir, abs_top_builddir): New variables.
+	  Use them instead of @abs_top_srcdir@ and @abs_top_builddir@.
+	  This fixes the "package-field-location, relative file name" test in
+	  'make distcheck'.
+
+	doc: Slightly improve the "System Configuration" node.
+	* doc/guix.texi (System Configuration): Add paragraph on upgrades and
+	  rollback, moved from "Using the Configuration System".
+	  (Using the Configuration System): Change variable name to
+	  'komputilo'.  Add xref to "Package Modules".
+
+	gnu: gdb: Upgrade to 7.6.2.
+	* gnu/packages/gdb.scm (gdb): Update to 7.6.2.
+
+	gnu: vm: Increase size of VM image.
+	* gnu/system/vm.scm (system-qemu-image): Add 'disk-image-size'
+	  parameter; increase it.
+
+	store: Optimize 'store-path-package-name' and 'store-path-hash-part'.
+	* guix/store.scm (store-regexp*): New procedure.
+	  (store-path-package-name, store-path-hash-part): Use it.
+
+	store: Add tests for 'store-path-package-name'.
+	* tests/store.scm ("store-path-package-name", "store-path-package-name
+	  #f"): New tests.
+
+2013-12-10  Ludovic Courtès  <ludo@gnu.org>
+
+	Update '.po' files.
+
+2013-12-10  Andreas Enge  <andreas@enge.fr>
+
+	NEWS: Small changes.
+	NEWS: Typos and very minor changes.
+
+2013-12-10  Ludovic Courtès  <ludo@gnu.org>
+
+	Update 'NEWS'.
+
+	gnu: Honor the operating system's locale and timezone.
+	* gnu/system.scm (etc-directory): Add 'locale' and 'timezone'
+	  parameters.  Set 'LC_ALL', 'TZ', and 'TZDIR' in /etc/profile.
+	  (operating-system-derivation): Adjust call accordingly.
+	* gnu/system/vm.scm (%demo-operating-system): Change locale to
+	  'en_US.UTF-8'.  Add TZDATA to 'packages'.
+
+	hydra: Add zlib, gzip, and xz to the core package set.
+	* build-aux/hydra/gnu-system.scm (%core-packages): Add zlib, gzip, and xz.
+
+2013-12-10  John Darrington  <jmd@gnu.org>
+
+	gnu: compression: Fix cross-compilation of zlib.
+	* gnu/packages/compression.scm : Zlib uses a non-standard
+	  way of configuring for cross-compilation.  Thanks to Ludovic
+	  for showing me the correct way to fix this.
+
+2013-12-10  Ludovic Courtès  <ludo@gnu.org>
+
+	doc: First stab at documenting whole-system configuration.
+	* doc/guix.texi (Features): Add xref to "Using the Configuration
+	  System".
+	  (System Configuration, Using the Configuration System, Defining
+	  Services): New nodes.
+
+	gnu: Allow a plain list of packages in 'operating-system'.
+	* gnu/system.scm (union): Allow (PACKAGE OUTPUT), (PACKAGE), and
+	  PACKAGE.
+	  (<operating-system>)[packages]: Make the default a list of package?
+	  objects.
+	* gnu/system/vm.scm (%demo-operating-system): Likewise.  Add a few
+	  packages.
+
+	gnu: Add 'inputs' field to <user-account>; make 'shell' a monadic value.
+	* gnu/system/shadow.scm (<user-account>)[inputs]: New field.
+	  (passwd-file): Bind the 'shell' field of each account.
+	* gnu/system/vm.scm (%demo-operating-system): Remove 'shell' field.
+	* gnu/system/dmd.scm (guix-build-accounts): Store a monadic value in
+	  'shell'.  Add 'inputs' field.
+	* gnu/system.scm (operating-system-derivation): Remove 'shell' field for
+	  'root' account.  Add all the 'user-account-inputs' to EXTRAS.
+
+	gnu: dmd: Avoid "already exists" error on startup.
+	* gnu/system/dmd.scm (dmd-configuration-file)[config]: Remove
+	  "/var/nix/gcroots/etc-directory" before trying to recreate it.
+
+	gnu: Add (gnu system).
+	* gnu/system/vm.scm (lower-inputs): Move to monads.scm.
+	  (qemu-image): Don't add GRUB-CONFIGURATION to the INPUTS-TO-COPY.
+	  (union, file-union, etc-directory): Move to gnu/system.scm.
+	  (%demo-operating-system): New variable.
+	  (system-qemu-image): Add 'os' parameter.  Rewrite in terms of
+	  'operating-system-derivation'.
+	* guix/monads.scm (lower-inputs): New procedure.
+	* gnu/system/grub.scm (grub-configuration-file): Change 'entries' to be
+	  a plain list instead of a list of monadic values.
+	* gnu/system.scm: New file.
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add it.
+
+	monads: Fix 'anym'.
+	* guix/monads.scm (anym): Fix successful case.
+	* tests/monads.scm ("anym"): New test.
+
+2013-12-10  Andreas Enge  <andreas@enge.fr>
+
+	gnu: perl-xml-dom: Propagate inputs.
+	* gnu/packages/xml.scm (perl-xml-dom): Drop inputs that are obtained through
+	    propagation, propagate the other inputs.
+
+	gnu: perl-libxml: Propagate input.
+	* gnu/packages/xml.scm (perl-libxml): Propagate input perl-xml-parser.
+
+	gnu: perl-http-message: Propagate input perl-http-date.
+	* gnu/packages/web.scm (perl-http-message): Propagate input perl-http-date.
+	* gnu/packages/web.scm (perl-http-cookies, perl-http-daemon): Drop input perl-http-date.
+
+2013-12-09  Andreas Enge  <andreas@enge.fr>
+
+	gnu: perl-libwww: Propagate all inputs.
+	* gnu/packages/web.scm (perl-libwww): Drop inputs that appear through
+	    propagation, and propagate all others.
+
+	gnu: perl-file-listing: Propagate input.
+	* gnu/packages/web.scm (perl-file-listing): Propagate input perl-http-date.
+
+	gnu: perl-www-robotrules: Propagate input.
+	* gnu/packages/web.scm (perl-www-robotrules): Propagate input perl-uri.
+
+	gnu: perl-http-negotiate: Propagate input.
+	* gnu/packages/web.scm (perl-http-negotiate): Propagate input
+	    perl-http-message, drop input perl-uri (propagated by perl-http-message).
+
+	gnu: perl-http-daemon: Propagate inputs.
+	* gnu/packages/web.scm (perl-http-daemon): Propagate inputs perl-http-date,
+	    perl-http-message and perl-lwp-mediatypes; drop input perl-uri
+	    (propagated by perl-http-message).
+
+	gnu: perl-http-cookies: Propagate inputs.
+	* gnu/packages/web.scm (perl-http-cookies): Propagate inputs perl-http-date
+	    and perl-http-message; drop input perl-uri (itself propagated from
+	    perl-http-message).
+
+	gnu: perl-http-message: Propagate input perl-uri.
+	* gnu/packages/web.scm (perl-http-message): Propagate input perl-uri,
+	    since "perl -MHTTP::Message" complains that it is missing.
+
+	gnu: Add perl-xml-dom.
+	* gnu/packages/xml.scm (perl-xml-dom): New variable.
+
+	gnu: Add perl-libwww.
+	* gnu/packages/web.scm (perl-libwww): New variable.
+
+	gnu: Add perl-encode-locale.
+	* gnu/packages/web.scm (perl-encode-locale): New variable.
+
+	gnu: Add perl-file-listing.
+	* gnu/packages/web.scm (perl-file-listing): New variable.
+
+	gnu: Add perl-file-list.
+	* gnu/packages/perl.scm (perl-file-list): New variable.
+
+	build-system/perl: Honour phases argument in perl build system.
+	* guix/build-system/perl.scm (perl-build): Propagate phases argument to
+	    builder.
+
+2013-12-08  Andreas Enge  <andreas@enge.fr>
+
+	gnu: rcs: Update to 5.9.2.
+	* gnu/packages/version-control.scm (rcs): Update to 5.9.2.
+
+	gnu: parallel: Update to 20131122.
+	* gnu/packages/parallel.scm (parallel): Update to 20131122.
+
+2013-12-08  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: Populate /etc upon startup.
+	* gnu/packages/patches/dmd-getpw.patch: New file.
+	* gnu-system.am (dist_patch_DATA): Add it.
+	* gnu/packages/system.scm (dmd): Use it.
+	* gnu/system/vm.scm (system-qemu-image): Don't explicitly populate /etc;
+	  don't add ETC to the GC roots.
+	* gnu/system/dmd.scm (dmd-configuration-file): Add 'etc' parameter.
+	  [config]: Populate /etc from there.
+
+2013-12-08  Andreas Enge  <andreas@enge.fr>
+
+	gnu: Add perl-net-http.
+	* gnu/packages/web.scm (perl-net-http): New variable.
+
+	gnu: Add perl-www-robotrules.
+	* gnu/packages/web.scm (perl-www-robotrules): New variable.
+
+	gnu: Add perl-http-negotiate.
+	* gnu/packages/web.scm (perl-http-negotiate): New variable.
+
+	gnu: bison: Update to 3.0.2.
+	* gnu/packages/bison.scm (bison): Update to 3.0.2.
+
+	gnu: Add perl-http-daemon.
+	* gnu/packages/web.scm (perl-http-daemon): New variable.
+
+2013-12-07  Andreas Enge  <andreas@enge.fr>
+
+	gnu: Add perl-http-cookies.
+	* gnu/packages/web.scm (perl-http-cookies): New variable.
+
+	gnu: Add perl-http-message.
+	* gnu/packages/web.scm (perl-http-message): New variable.
+
+	gnu: Add perl-io-html.
+	* gnu/packages/web.scm (perl-io-html): New variable.
+
+	gnu: Add perl-lwp-mediatypes.
+	* gnu/packages/web.scm (perl-lwp-mediatypes): New variable.
+
+	gnu: Add perl-uri.
+	* gnu/packages/web.scm (perl-uri): New variable.
+
+	gnu: Add perl-http-date.
+	* gnu/packages/web.scm (perl-http-date): New variable.
+
+	gnu: Add perl-html-parser.
+	* gnu/packages/web.scm (perl-html-parser): New variable.
+
+	gnu: Add perl-html-tagset.
+	* gnu/packages/web.scm (perl-html-tagset): New variable.
+
+	gnu: Rename perl-xml-parser-perlsax to perl-libxml.
+	* gnu/packages/xml.scm (perl-libxml): Rename from perl-xml-parser-perlsax.
+
+2013-12-07  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: dmd: Add 'pam-services' field to <service>.
+	* gnu/system/dmd.scm (<service>)[pam-services]: New field.
+	  (mingetty-service): Add #:motd and #:allow-empty-passwords?
+	  parameters.  Add MOTD to 'inputs' field; add 'pam-services' field.
+	* gnu/system/vm.scm (system-qemu-image): Aggregate PAM entries from
+	  SERVICES.
+
+	gnu: vm: Fix inputs in 'file-union'.
+	* gnu/system/vm.scm (file-union): Filter out members of FILES that are
+	  outputs of INPUTS.
+
+	gnu: dmd: Add 'user-accounts' and 'user-groups' fields to <service>.
+	* gnu/system/shadow.scm (guix-build-accounts): Move to...
+	* gnu/system/dmd.scm (guix-build-accounts): ... here.
+	  (<service>)[user-accounts, user-groups]: New fields.
+	  (guix-service): New #:build-user-id and #:build-accounts parameters.
+	  Use 'guix-build-accounts' and set the 'user-accounts' and
+	  'user-groups' fields accordingly.
+	* gnu/system/vm.scm (system-qemu-image): Remove use of
+	  'guix-build-accounts'.  Augment ACCOUNTS and GROUPS from what SERVICES
+	  demand.
+
+	doc: Adjust "Building from Git" instructions.
+	* HACKING (Building from Git): As a follow-up to ff1cbb9, update the
+	  error reported when pkg.m4 is missing.  Suggested by
+	  John Darrington <john@darrington.wattle.id.au>.
+
+	gnu: Move /etc/resolv.conf handling to the networking service.
+	* gnu/system/vm.scm (etc-directory): Remove 'resolv.conf'.
+	  (system-qemu-image): Use 'static-networking-service' with
+	  #:name-servers.  Don't populate the image with /etc/resolv.conf.
+	* gnu/system/dmd.scm (static-networking-service): Add #:name-servers
+	  parameter.  Use it to populate /etc/resolv.conf.
+
+	gnu: vm: Factorize /etc creation.
+	* gnu/system/vm.scm (expression->derivation-in-linux-vm)[lower-inputs]:
+	  Move to top-level...
+	  (lower-inputs): ... here.  New variable.
+	  (file-union, etc-directory): New procedures.
+	  (system-qemu-image): Use 'etc-directory'; remove redundant code, and
+	  register the result of 'etc-directory' as a GC root.
+
+2013-12-06  Andreas Enge  <andreas@enge.fr>
+
+	gnu: pulseaudio: Disable tests on mips64el.
+	* gnu/packages/pulseaudio.scm (pulseaudio): Drop tests also on mips64el.
+
+	gnu: Add perl-xml-regexp.
+	* gnu/packages/xml.scm (perl-xml-regexp): New variable.
+
+	gnu: Add perl-xml-parser-perlsax.
+	* gnu/packages/xml.scm (perl-xml-parser-perlsax): New variable.
+
+	gnu: libmicrohttpd: Upgrade to 0.9.32.
+	* gnu/packages/gnunet.scm (libmicrohttpd): Upgrade to 0.9.32.
+
+	gnu: soprano: Add input raptor2.
+	* gnu/packages/rdf.scm (soprano): Add input raptor2.
+
+	gnu: Add raptor2.
+	* gnu/packages/rdf.scm (raptor2): New variable.
+
+2013-12-05  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: pulseaudio: Fix typo introduced in 76dcc99.
+	* gnu/packages/pulseaudio.scm (pulseaudio): Disable tests on i686.
+	  (pavucontrol): Remove 'arguments'.
+
+	monads: Remove erroneous comment.
+	* guix/monads.scm (sequence): Remove erroneous comment.
+
+	gnu: pulseaudio: Disable tests on i686.
+	* gnu/packages/pulseaudio.scm (pavucontrol): New 'arguments' field.
+
+2013-12-05  Ludovic Courtès  <ludo@gnu.org>
+
+	build: Work around build problem on systems that lack (gnutls).
+	Reported at <https://lists.gnu.org/archive/html/guix-devel/2013-12/msg00002.html>.
+
+	* Makefile.am (MODULES): Shuffle modules to work around build failure
+	  on systems that lack the (gnutls) module.
+
+2013-12-05  Andreas Enge  <andreas@enge.fr>
+
+	gnu: ffmpeg: Enable tests.
+	* gnu/packages/video.scm (ffmpeg): Add upstream patch and re-enable tests.
+	* gnu/packages/patches/ffmpeg-check.patch: New file.
+	* gnu-system.am (dist_patch_DATA): Register patch.
+
+2013-12-04  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: Move 'guile-ssh' to (gnu packages ssh).
+	Reported by John Darrington <john@darrington.wattle.id.au>.
+
+	* gnu/packages/guile.scm (guile-ssh): Move to...
+	* gnu/packages/ssh.scm (guile-ssh): ... here.  New variable.
+	  This fixes a circular dependency issue, as reported at
+	  <https://lists.gnu.org/archive/html/guix-devel/2013-12/msg00024.html>.
+
+2013-12-04  Ludovic Courtès  <ludo@gnu.org>
+
+	build-system/gnu: Fix reference to Gettext in 'dist-package'.
+	* guix/build-system/gnu.scm (dist-package): Change 'gettext' to
+	  'gnu-gettext'.
+
+	derivations: Use more keyword parameters for 'build-expression->derivation'.
+	* guix/derivations.scm (build-expression->derivation): Turn 'system' and
+	  'inputs' into keyword parameters.
+	  Adjust callers accordingly.
+	* gnu/system/linux.scm, gnu/system/vm.scm, guix/build-system/cmake.scm,
+	  guix/build-system/gnu.scm, guix/build-system/perl.scm,
+	  guix/build-system/python.scm, guix/build-system/trivial.scm,
+	  guix/download.scm, guix/packages.scm, guix/profiles.scm,
+	  guix/scripts/pull.scm, tests/derivations.scm, tests/guix-build.sh,
+	  tests/monads.scm, tests/store.scm, tests/union.scm: Adjust users of
+	  'build-expression->derivation' and 'derivation-expression'
+	  accordingly.
+	* doc/guix.texi (Derivations): Adjust 'build-expression->derivation'
+	  documentation accordingly.
+	  (The Store Monad): Likewise for 'derivation-expression'.
+
+	Augment 'gitignore'.
+
+	nls: Add Vietnamese translation.
+	* po/vi.po: New file.
+	* po/LINGUAS: Add 'vi'.
+
+	Update 'eo.po'.
+
+2013-12-04  Andreas Enge  <andreas@enge.fr>
+
+	gnu: ffmpeg: Disable tests.
+	* gnu/packages/video.scm (ffmpeg): Disable tests, see
+	    https://trac.ffmpeg.org/ticket/3177 .
+
+2013-12-04  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: Add Guile-SSH.
+	* gnu/packages/guile.scm (guile-ssh): New variable.
+
+	gnu: libssh: Add $libdir to RUNPATH of libssh_threads.so.
+	* gnu/packages/ssh.scm (libssh)[arguments]: Add #:phases, #:modules, and
+	  #:imported-modules.
+	  [native-inputs]: New field.
+
+	gnu: Improve synopses in vpn.scm.
+	* gnu/packages/vpn.scm (vpnc): Shorten synopsis, and fix spelling.
+	  (openconnect): Fix synopsis spelling.
+
+2013-12-03  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: Add missing copyright line.
+	* gnu/packages/vpn.scm: Add copyright line lost in commit 7af8a9b.
+
+	gnu: patchelf: Shorten synopsis.
+	* gnu/packages/patchelf.scm (patchelf): Shorten synopsis.
+
+2013-12-03  Eric Bavier  <bavier@member.fsf.org>
+
+	Add GNU Serveez
+	* gnu/packages/serveez.scm: New file
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add it
+
+2013-12-03  John Darrington  <jmd@gnu.org>
+
+	gnu: Add mtools.
+	* gnu/packages/mtools.scm: New file.
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add it.
+
+2013-12-03  Eric Bavier  <bavier@member.fsf.org>
+
+	gnu: Add gnu-pw-mgr
+	* gnu/packages/gnu-pw-mgr.scm: New file
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add it
+
+2013-12-03  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: Move GVPE to vpn.scm.
+	* gnu/packages/vpn.scm (gvpe): New variable, moved from...
+	* gnu/packages/gvpe.scm: ... here.  Remove.
+	* gnu-system.am (GNU_SYSTEM_MODULES): Remove 'gvpe.scm'.
+
+	gnu: Add Guile-WM.
+	* gnu/packages/guile-wm.scm (guile-wm): New variable.
+
+	gnu-maintenance: Ignore "redirect" blurbs.
+	* guix/gnu-maintenance.scm (official-gnu-packages)[official-description]:
+	  Return #f for blurbs that start with "redirect ".
+
+2013-12-02  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: dmd: Update start/stop of standard service definitions.
+	* gnu/system/dmd.scm (mingetty-service): Add 'stop' field.
+	  (nscd-service): Run with '--foreground'.  Change 'stop' to use
+	  'make-kill-destructor'.
+	  (syslog-service): Run with '--no-detach'; change 'stop' similarly.
+	  (guix-service): Likewise for 'stop'.
+	  (static-networking-service): Remove 'sleep' call from 'start'.  Change
+	  'stop' to return #f when networking was actually stopped.
+
+	gnu: dmd: Upgrade to 0.1.
+	* gnu/packages/system.scm (dmd): Upgrade to 0.1.  Move PKG-CONFIG to
+	  'native-inputs'.
+
+	gnu: Add Guile-XCB.
+	* gnu/packages/guile-wm.scm: New file.
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add it.
+
+2013-12-02  John Darrington  <john@darrington.wattle.id.au>
+
+	gnu: pspp: Enabled build of the gui
+	* gnu/packages/math.scm (pspp): Removed the --without-gui flag
+	and added the necessary inputs to build it.
+
+	gnu: Add GtkSourceView.
+	* gnu/packages/gtk.scm (gtksourceview): New variable.
+
+2013-12-01  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: Synchronize descriptions with 'gnumaint'.
+
+2013-11-29  gzg  <gzg@riseup.net>
+
+	Update references from Guy's old name
+
+2013-11-28  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: Add libssh.
+	* gnu/packages/ssh.scm (libssh): New variable.
+
+	build-system/cmake: Build out of source tree by default.
+	* guix/build-system/cmake.scm (cmake-build): Change 'out-of-source?' to
+	  default to #t.
+	* guix/build/cmake-build-system.scm (configure): Add 'out-of-source?'
+	  keyword parameter and honor it.
+
+	gnu: dmd: Add service documentation.
+	* gnu/system/dmd.scm (<service>): Add 'documentation' field.
+	  (host-name-service, mingetty-service, nscd-service, syslog-service,
+	  static-networking-service): Provide a 'documentation' value.
+	  (dmd-configuration-file): Use it.
+
+	gnu: qemu/smb-shares: Keep the original patches.
+	* gnu/packages/qemu.scm (qemu/smb-shares): Keep the patches from
+	  QEMU-HEADLESS.
+
+2013-11-27  Andreas Enge  <andreas@enge.fr>
+
+	gnu: luit: Accomodate stricter warnings of gcc-4.8.
+	* gnu/packages/patches/luit-posix.patch: New file.
+	* gnu-system.am (dist_patch_DATA): Register patch.
+	* gnu/packages/xorg.scm (luit): Apply patch.
+
+	gnu: ffmpeg: Update to 2.1.1.
+	* gnu/packages/video.scm (ffmpeg): Update to 2.1.1.
+
+2013-11-26  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: qemu: Upgrade to 1.6.1.
+	* gnu/packages/patches/qemu-make-4.0.patch: New file.
+	* gnu/packages/qemu.scm (qemu-headless): Use it.  Upgrade to 1.6.1.
+	* gnu-system.am (dist_patch_DATA): Add it.
+
+	gnu: mit-krb5: Build with GCC 4.7.
+	* gnu/packages/mit-krb5.scm (mit-krb5): Make BISON and PERL native
+	  inputs.  Add GCC-4.7 as a native input.
+
+	substitute-binary: Work around Guile 2.0.5's broken 'n-par-map'.
+	* guix/scripts/substitute-binary.scm (n-par-map*): New procedure.
+	  (guix-substitute-binary): Use it instead of 'n-par-map'.
+	  Reported by Nikita Karetnikov and Eric Bavier.
+
+	Add Guy to 'AUTHORS'.
+
+	gnu: xmodmap: Add patch to allow builds with GCC 4.8.
+	* gnu/packages/patches/xmodmap-asprintf.patch: New file.
+	* gnu/packages/xorg.scm (xmodmap): Use it.
+	* gnu-system.am (dist_patch_DATA): Add it.
+
+2013-11-25  Andreas Enge  <andreas@enge.fr>
+
+	gnu: Correct typo in previous commit.
+	* gnu/packages/rdf.scm: Name module rdf.
+
+	gnu: Add soprano.
+	* gnu/packages/rdf.scm: New file.
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add module.
+
+2013-11-25  gzg  <gzg@riseup.net>
+
+	gnu: Add SLiM.
+	* gnu/packages/slim.scm: New file.
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add it.
+
+2013-11-25  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: iproute2: Upgrade to 3.12.0.
+	* gnu/packages/linux.scm (iproute): Upgrade to 3.12.0.
+
+2013-11-24  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: {binutils,bash,gnu-make}-final are private.
+	* gnu/packages/base.scm (binutils-final, bash-final, gnu-make-final):
+	  Use 'define', not 'define-public'.
+
+	list-packages: Make 'snippet-link' more tolerant.
+	* build-aux/list-packages.scm (package->sxml)[snippet-link]: If
+	  'package-field-location' returns #f, use 'package-location.
+
+	Add John to 'AUTHORS'.
+
+2013-11-24  John Darrington  <john@darrington.wattle.id.au>
+
+	gnu: pixman: Upgrade to 0.32.4.
+	* gnu/packages/xorg.scm (pixman): Upgrade to 0.32.4.
+
+2013-11-24  Ludovic Courtès  <ludo@gnu.org>
+
+	guix package: Honor the current output when upgrading.
+	* guix/scripts/package.scm (specification->package+output): Pass OUTPUT
+	  to 'package-specification->name+version+output'.
+
+2013-11-23  Ludovic Courtès  <ludo@gnu.org>
+
+	Merge branch 'core-updates'
+	Conflicts:
+		gnu/packages/gnunet.scm
+
+	doc: List the supported platforms.
+	* doc/guix.texi (GNU Distribution): List the supported platforms.
+
+	gnu: net-tools: Adjust to removal of the 'patch' phase.
+	* gnu/packages/linux.scm (net-tools): Adjust to removal of the 'patch'
+	  phase.  Reported by Mark H. Weaver <mhw@netris.org>.
+
+2013-11-23  Andreas Enge  <andreas@enge.fr>
+
+	gnu: libextractor: Add input.
+	* gnu/packages/gnunet.scm (libextractor): Add input exiv2.
+
+2013-11-23  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: qemu: Add GUI version.
+	* gnu/packages/qemu.scm (qemu): Rename to...
+	  (qemu-headless): ... this.
+	  (qemu/smb-shares): Inherit from it.
+	  (qemu): New variable.
+	* gnu/packages/grub.scm (qemu-for-tests): Inherit from QEMU-HEADLESS.
+
+	gnu: sdl: Propagate libx11.
+	* gnu/packages/sdl.scm (sdl): Propagate LIBX11.
+	  (sdl-gfx, sdl-ttf): Remove LIBX11 from 'inputs'.
+
+2013-11-23  Ludovic Courtès  <ludo@gnu.org>
+
+	build: Make sure pkg.m4 is present.
+	Suggested by John Darrington <john@darrington.wattle.id.au>.
+
+	* configure.ac: Forbid occurrences of 'PKG_CHECK_MODULES' in the
+	  output.
+
+2013-11-23  Andreas Enge  <andreas@enge.fr>
+
+	gnu: libextractor: Add optional inputs.
+	* gnu/packages/gnunet.scm (libextractor): Add inputs ffmpeg and gstreamer.
+
+2013-11-23  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: make-bootstrap: Add missing inputs for Canadian cross of '%gcc-static'.
+	* gnu/packages/make-bootstrap.scm (%gcc-static): Add 'native-inputs'
+	  field.
+
+2013-11-23  David Thompson  <dthompson2@worcester.edu>
+
+	gnu: Add SDL extension libraries.
+	* gnu/packages/sdl.scm (sdl-gfx, sdl-image, sdl-mixer, sdl-net, sdl-ttf): New
+	  variables.
+
+2013-11-22  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: Add PowerTOP.
+	* gnu/packages/linux.scm (powertop): New variable.
+
+	gnu: Add libnl.
+	* gnu/packages/linux.scm (libnl): New variable.
+
+2013-11-21  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: apl: Adjust to gettext renaming.
+	* gnu/packages/apl.scm (apl): Use GNU-GETTEXT.
+
+2013-11-20  Ludovic Courtès  <ludo@gnu.org>
+
+	hydra: Adjust to gettext package rename.
+	* build-aux/hydra/gnu-system.scm (%core-packages): Change 'gettext' to
+	  'gnu-gettext'.
+
+	Merge branch 'master' into core-updates
+	Conflicts:
+		guix/packages.scm
+
+	gnu: gettext: Rename binding to 'gnu-gettext'.
+	* gnu/packages/gettext.scm (gettext): Rename to...
+	  (gnu-gettext): ... this.  This is used to work around the circular
+	  dependency introduced in commit c42a4b7, which users with a #:renamer
+	  cannot cope with.
+	* gnu/packages/acl.scm, gnu/packages/attr.scm, gnu/packages/cdrom.scm,
+	  gnu/packages/fdisk.scm, gnu/packages/gkrellm.scm, gnu/packages/glib.scm,
+	  gnu/packages/gnunet.scm, gnu/packages/grub.scm, gnu/packages/linux.scm,
+	  gnu/packages/maths.scm, gnu/packages/nano.scm, gnu/packages/parted.scm,
+	  gnu/packages/system.scm, gnu/packages/version-control.scm,
+	  gnu/packages/vpn.scm, gnu/packages/w3m.scm, gnu/packages/wget.scm:
+	  Adjust accordingly.
+
+2013-11-20  Eric Bavier  <bavier@member.fsf.org>
+
+	gnu: Add GNU Parallel.
+	* gnu/packages/parallel.scm: New file.
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add it.
+
+2013-11-20  Ludovic Courtès  <ludo@gnu.org>
+
+	build-system/python: Add #:test-target parameter.
+	* guix/build-system/python.scm (python-build): Add #:test-target
+	  parameter.  Reported by Eric Bavier <ericbavier@gmail.com>.
+
+	gnu: make-bootstrap: Simplify '%gcc-static'.
+	* gnu/packages/make-bootstrap.scm (%gcc-static): Add a bunch of
+	  --disable configure flags.  Remove useless 'inputs' field.
+
+2013-11-20  David Thompson  <dthompson2@worcester.edu>
+
+	gnu: Add SDL and SDL2.
+	* gnu/packages/sdl.scm (sdl, sdl2): New variables.
+
+2013-11-19  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: autogen: Upgrade to 5.18.2.
+	* gnu/packages/autogen.scm (autogen): Upgrade to 5.18.2.
+
+	gnu: bison: Upgrade to 3.0.1.
+	* gnu/packages/bison.scm (bison): Upgrade to 3.0.1.
+
+	gnu: hello: Upgrade to 2.9.
+	* gnu/packages/base.scm (hello): Upgrade to 2.9.  Remove 'arguments' and
+	  'inputs' fields, which were never needed.
+
+	gnu: libextractor: Upgrade to 1.2.
+	* gnu/packages/gnunet.scm (libextractor): Upgrade to 1.2.
+
+	gnu: freeipmi: Upgrade to 1.3.3.
+	* gnu/packages/freeipmi.scm (freeipmi): Upgrade to 1.3.3.
+
+	gnu: rcs: Upgrade to 5.9.1.
+	* gnu/packages/version-control.scm (rcs): Upgrade to 5.9.1.  Add ed as
+	  an input.
+
+	gnu: lightning: Upgrade to 2.0.2.
+	* gnu/packages/lightning.scm (lightning): Upgrade to 2.0.2.
+
+	gnu: linux-libre: Upgrade to 3.12.
+	* gnu/packages/linux.scm (linux-libre): Upgrade to 3.12.
+
+	gnu: vm: Really create a QCOW2-format image.
+	* gnu/system/vm.scm (expression->derivation-in-linux-vm): Pass "-f
+	  qcow2" to 'qemu-img create'.
+
+	doc: Link to package-list.html.
+	* doc/guix.texi (GNU Distribution): Add link to package-list.html.
+
+	list-packages: Produce link to the origin snippet, if any.
+	* build-aux/list-packages.scm (package->sxml)[patches](snippet-link):
+	  New procedure.
+	  Use it to produce a link to the 'origin-snippet', if any.
+
+2013-11-18  Ludovic Courtès  <ludo@gnu.org>
+
+	packages: 'package-field-location' returns a relative file name.
+	* guix/packages.scm (package-field-location): Set
+	  %FILE-PORT-NAME-CANONICALIZATION.
+	* tests/packages.scm ("package-field-location, relative file name"): New
+	  test.
+
+	guix build: '-e' can be passed a monadic thunk.
+	* guix/ui.scm (read/eval): New procedure.
+	  (read/eval-package-expression): Use it.
+	* guix/scripts/build.scm (derivations-from-package-expressions): Rename to...
+	  (derivation-from-expression): ... this.  Accept procedures, under the
+	  assumption that they are monadic thunk.
+	  (show-help): Adjust accordingly.
+	  (guix-build): Ditto.
+	* tests/guix-build.sh: Add test.
+	* doc/guix.texi (Invoking guix build): Augment description of '-e'.
+
+	doc: Mention Linux containers; emphasize reproducible builds.
+	* doc/guix.texi (Introduction): Use "containers" instead of "chroots".
+	  (Invoking guix-daemon): Add @cindex entries.  Mention the Linux
+	  container features.
+	  (Features): Add sentence on build reproducibility.
+
+2013-11-18  Andreas Enge  <andreas@enge.fr>
+
+	gnu: pspp: Add input cairo.
+	* gnu/packages/maths.scm (pspp): Add cairo and further necessary inputs.
+	* gnu/packages/patches/pspp-tests.patch: New file, thanks to
+	  John Darrington <john@darrington.wattle.id.au>.
+	* gnu-system.am (dist_patch_DATA): Register patch.
+
+	gnu: gettext: Enable "xgettext --language=glade".
+	* gnu/packages/gettext.scm (gettext): Add input expat, explicitly link with it.
+
+2013-11-18  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: gcc: Really always link against libgcc_s.so.
+	* gnu/packages/gcc.scm (gcc-4.7): Add snippet to add -lgcc_s to the
+	  "lib" spec.  Remove --as-needed trick from 65d3b7c: it had no effect
+	  in cases where we have !static-libgcc && !shared-libgcc.
+
+	gnu: gettext: Upgrade to 0.18.3.1.
+	* gnu/packages/gettext.scm (gettext): Upgrade to 0.18.3.1.
+
+	gnu: gcc: Always link against libgcc_s.so.
+	* gnu/packages/gcc.scm (gcc-4.7)[pre-configure]: Add snippet to #undef
+	  USE_LD_AS_NEEDED.
+
+	gnu: tar: Upgrade to 1.27.1.
+	* gnu/packages/base.scm (tar): Upgrade to 1.27.1.
+
+2013-11-16  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: glibc: Really disable 'ldconfig' and /etc/ld.so.cache.
+	* gnu/packages/base.scm (glibc): Add 'snippet' to set use_ldconfig=no.
+	  Remove "glibc-no-ld-so-cache.patch"; that patch would still build
+	  'ldconfig', and ld.so would still contain ld.so.cache-related code,
+	  and would look for info in /etc/etc/ld.so.cache (sic).
+	* gnu/packages/patches/glibc-no-ld-so-cache.patch: Remove.
+	* gnu-system.am (dist_patch_DATA): Adjust accordingly.
+
+2013-11-16  Ludovic Courtès  <ludo@gnu.org>
+
+	tests: Adjust to bootstrap tarball updates.
+	Reported by Mark H. Weaver <mhw@netris.org>.
+
+	* tests/packages.scm ("package-source-derivation, snippet"): Change to
+	  "guile-2.0.9.tar.xz".
+	* tests/union.scm ("union-build"): Check or include/c++ being a symlink.
+
+2013-11-16  Ludovic Courtès  <ludo@gnu.org>
+
+	doc: Improve "Installing Guix from Guix" section.
+	Reported by Mark H. Weaver <mhw@netris.org>.
+
+	* README (Installing Guix from Guix): Explicitly mention $PATH
+	  separately.  Mention $ACLOCAL_PATH, not $ACLOCAL.  Give the exact
+	  command to install the dependencies.  Remove mention of
+	  $GUIX_LD_WRAPPER_ALLOW_IMPURITIES, which is no longer needed.
+
+2013-11-16  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: cflow: Install Emacs mode.
+	* gnu/packages/cflow.scm (cflow): Add Emacs as an input.
+
+	gnu: Switch to GCC 4.8 as the default compiler.
+	* build-aux/download.scm (file-name->uri): Update URL to /20131110.
+	* gnu-system.am (nodist_bootstrap_x86_64_linux_DATA,
+	  nodist_bootstrap_i686_linux_DATA): Change base name to
+	  'guile-2.0.9.tar.xz'.
+	  (gnu/packages/bootstrap/x86_64-linux/guile-2.0.9.tar.xz,
+	  gnu/packages/bootstrap/i686-linux/guile-2.0.9.tar.xz): New targets.
+	  (gnu/packages/bootstrap/x86_64-linux/guile-2.0.7.tar.xz,
+	  gnu/packages/bootstrap/i686-linux/guile-2.0.7.tar.xz): Remove.
+	  (gnu/packages/bootstrap/mips64el-linux/guile-2.0.9.tar.xz): Update
+	  hash.
+	* gnu/packages/base.scm (gcc-boot0): Base upon GCC-4.8.  Enable C++, and
+	  add a few --disable flags.  Remove MPFR workaround.
+	  (cross-gcc-wrapper): Base upon GCC-4.8.  Wrap both 'gcc' and 'g++'.
+	  (libstdc++): New variable.
+	  (gcc-final): Add it as an input; pass corresponding -I and -L flags.
+	* gnu/packages/bootstrap.scm (%bootstrap-guile): Always use
+	  "guile-2.0.9.tar.xz.
+	  (%bootstrap-coreutils&co): Update hashes.
+	  (%bootstrap-binutils): Update URL and hashes.
+	  (%bootstrap-glibc): Likewise.
+	  (%bootstrap-gcc): Likewise.
+	* gnu/packages/gcc.scm (gcc-4.7): Add LDFLAGS.
+	  Add --disable-libstdcxx-pch.
+	  Modify the GNU_USER*_SPEC macros from gnu-user*.h instead of the raw
+	  _SPEC macros.
+
+2013-11-14  Ludovic Courtès  <ludo@gnu.org>
+
+	substitute-binary: Adjust timeout handling for Guile > 2.0.9.
+	* guix/scripts/substitute-binary.scm (with-timeout): Update comment to
+	  mention the fix's commit ID.
+	  (fetch): In the 'with-timeout' handler, close PORT only one Guile
+	  versions < 2.0.9.39.  Before that, on Guile >= 2.0.9.39, the HTTP
+	  client would end up trying to read from a closed file descriptor.
+
+2013-11-13  Ludovic Courtès  <ludo@gnu.org>
+
+	derivations: Allow 'map-derivations' to replace sources.
+	* guix/derivations.scm (map-derivation)[input->output-paths]: Allow
+	  non-derivation inputs.
+	  Allow replacements to be store files.  Replace in SOURCES too.
+	* tests/derivations.scm ("map-derivation, sources"): New test.
+
+	packages: Suitably cope with indirect store paths as package sources.
+	* guix/packages.scm (package-source-derivation): Don't let indirect
+	  store paths pass through.
+	* tests/packages.scm ("package-source-derivation, indirect store path"):
+	  New test.
+
+	store: Make 'direct-store-path?' public.
+	* guix/store.scm (direct-store-path?): New procedure.
+	* guix/derivations.scm (derivation)[direct-store-path?]: Remove.
+	* tests/store.scm ("direct-store-path?"): New test.
+
+	derivations: Add 'map-derivation'.
+	* guix/derivations.scm (map-derivation): New procedure.
+	* tests/derivations.scm ("map-derivation"): New test.
+
+	utils: Add 'string-replace-substring'.
+	* guix/utils.scm (string-replace-substring): New procedure.  Based on
+	  code by Mark H. Weaver.
+	* tests/utils.scm ("string-replace-substring"): New test.
+
+2013-11-12  Andreas Enge  <andreas@enge.fr>
+
+	gnu: Add IceCat.
+	* gnu/packages/gnuzilla.scm: New file.
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add it.
+
+2013-11-12  Nikita Karetnikov  <nikita@karetnikov.org>
+
+	gnu: Add GNU APL.
+	* gnu/packages/apl.scm: New file.
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add it.
+
+2013-11-12  Ludovic Courtès  <ludo@gnu.org>
+
+	guix build: Add '--log-file'.
+	* guix/scripts/build.scm (show-help): Add '--log-file'.
+	  (%options): Likewise.
+	  (guix-build): Set %FILE-PORT-NAME-CANONICALIZATION.  Honor '--log-file'.
+	* tests/guix-build.sh: Add '--log-file' tests.
+	* doc/guix.texi (Invoking guix build): Document '--log-file'.
+
+	store: Add 'log-file' procedure.
+	* guix/store.scm (log-file): New procedure.
+	* tests/store.scm ("log-file, derivation", "log-file, output file
+	  name"): New tests.
+
+2013-11-11  Andreas Enge  <andreas@enge.fr>
+
+	gnu: Add phonon.
+	* gnu/packages/kde.scm (phonon): New variable.
+
+	gnu: qt: Enable SIMD instructions available on x86_64.
+	* gnu/packages/qt.scm (qt, qt-4): Enable mmx, 3dnow, sse and sse2 on x86_64.
+
+2013-11-11  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: Add GVPE.
+	* gnu/packages/gvpe.scm: New file.
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add it.
+
+	gnu: Add GNU complexity.
+	* gnu/packages/complexity.scm: New file.
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add it.
+
+2013-11-09  Ludovic Courtès  <ludo@gnu.org>
+
+	nls: Add Serbian translation.
+	* po/sr.po: New file.
+	* po/LINGUAS: Add 'sr'.
+
+2013-11-08  Ludovic Courtès  <ludo@gnu.org>
+
+	substitute-binary: Increase lookup concurrency to reduce latency.
+	* guix/scripts/substitute-binary.scm (%lookup-threads): New variable.
+	  (guix-substitute-binary): Use 'n-par-map' instead of 'par-map' for
+	  batch 'lookup-narinfo' calls.
+
+	Merge branch 'master' into core-updates
+	Conflicts:
+		guix/packages.scm
+
+2013-11-07  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: lapack: Use origin snippet to remove the non-free files.
+	* gnu/packages/maths.scm (lapack): Add 'snippet' field with contents of
+	  former 'remove-non-free-files' phase; remove that phase.
+
+	packages: Add a 'snippet' field to <origin>.
+	* guix/packages.scm (<origin>): Add 'snippet', 'modules', and
+	  'imported-modules' fields.
+	  (patch-and-repack): Make 'inputs' a keyword parameter.  Add 'snippet',
+	  'modules', and 'imported-modules' parameters.  Accept SOURCE as a raw
+	  file name.  Insert SNIPPET in BUILDER.  Pass IMPORTED-MODULES to
+	  'build-expression->derivation'.
+	  (package-source-derivation): Pass the extra arguments to
+	  'patch-and-repack'.
+	* tests/packages.scm ("package-source-derivation, snippet"): New test.
+	* doc/guix.texi (Defining Packages): Mention the 'patches' and 'snippet'
+	  fields.
+	  (Invoking guix build): Tell that --source has patches and snippets
+	  applied.
+	  (Software Freedom): Mention packages that contain non-free code.
+
+2013-11-07  Ludovic Courtès  <ludo@gnu.org>
+
+	doc: Document current security issue with substitutes.
+	Suggested by Mark H. Weaver <mhw@netris.org>.
+
+	* doc/guix.texi (Features): Add note about unauthenticated binaries.
+
+2013-11-07  Ludovic Courtès  <ludo@gnu.org>
+
+	doc: Improve documentation of '--no-substitutes'.
+	Suggested by Mark H. Weaver <mhw@netris.org>.
+
+	* doc/guix.texi (Invoking guix package): Spell out the --no-substitutes
+	  documentation.
+	  (Invoking guix build): Use the more complete --no-substitutes
+	  documentation.
+	  (Invoking guix-daemon): Explain the interaction with what clients ask
+	  for.
+
+2013-11-07  Nikita Karetnikov  <nikita@karetnikov.org>
+
+	gnu: Add LAPACK.
+	* gnu/packages/maths.scm (lapack): New variable.
+
+2013-11-07  Ludovic Courtès  <ludo@gnu.org>
+
+	Add indentation rule for 'origin'.
+
+2013-11-04  Ludovic Courtès  <ludo@gnu.org>
+
+	tests: Fix max-silent-time test.
+	* tests/derivations.scm ("build-expression->derivation and
+	  max-silent-time"): Use STORE instead of %STORE.  Change BUILDER to
+	  succeed by default.  Return #f when no exception is raised.
+
+	tests: Add the builder as an input to raw derivations.
+	* tests/derivations.scm ("build derivation with 1 source",
+	  "derivation with local file as input",
+	  "derivation with a fixed-output input",
+	  "multiple-output derivation",
+	  "multiple-output derivation, non-alphabetic order",
+	  "user of multiple-output derivation"): Add %BASH as an input, needed
+	  in chroot builds.
+
+2013-11-04  Mark H Weaver  <mhw@netris.org>
+
+	gnu: mit-krb5: don't assume arguments are evaluated right-to-left.
+	* gnu/packages/patches/mit-krb5-init-fix.patch: New file.
+	* gnu/packages/mit-krb5.scm (mit-krb5): Apply patch at the end of the custom
+	  unpack phase.
+	* gnu-system.am (dist_patch_DATA): Add patch.
+
+	Add mips64el-linux to the list of supported systems.
+	* m4/guix.m4 (GUIX_ASSERT_SUPPORTED_SYSTEM): Add mips64el-linux to the list of
+	  supported systems.
+
+2013-11-04  Mark H Weaver  <mhw@netris.org>
+
+	gnu: add bootstrap support for mips64el-linux using the MIPS N32 ABI.
+	* .gitignore: Add entry for bootstrap/mips64el-linux/guile-2.0.9.tar.xz.
+
+	* gnu-system.am (bootstrap_mips64el_linuxdir,
+	  dist_bootstrap_mips64el_linux_DATA, nodist_bootstrap_mips64el_linux_DATA):
+	  New variables.
+	  (DISTCLEANFILES): Add $(nodist_bootstrap_mips64el_linux_DATA).
+	  (gnu/packages/bootstrap/mips64el-linux/guile-2.0.9.tar.xz): New target.
+
+	* build-aux/download.scm (file-name->uri): Adapt to the newer mips64el-linux
+	  bootstrap tarballs.
+
+	* gnu/packages/bootstrap.scm (%bootstrap-guile, %bootstrap-coreutils&co,
+	  %bootstrap-binutils, %bootstrap-glibc, %bootstrap-gcc): Adapt to the newer
+	  mips64el-linux bootstrap tarballs.
+
+	* gnu/packages/bootstrap/mips64el-linux/bash:
+	* gnu/packages/bootstrap/mips64el-linux/mkdir:
+	* gnu/packages/bootstrap/mips64el-linux/tar:
+	* gnu/packages/bootstrap/mips64el-linux/xz: New files.
+
+2013-11-04  Mark H Weaver  <mhw@netris.org>
+
+	gnu: liboop: fix deplibs check method for mips64.
+	* gnu/packages/patches/liboop-mips64-deplibs-fix.patch: New file.
+	* gnu/packages/lsh.scm (liboop): Add patch.
+	* gnu-system.am (dist_patch_DATA): Add patch.
+
+	gnu: gd: fix deplibs check method for mips64.
+	* gnu/packages/patches/gd-mips64-deplibs-fix.patch: New file.
+	* gnu/packages/gd.scm (gd): Add patch.
+	* gnu-system.am (dist_patch_DATA): Add patch.
+
+	gnu: libmad: Fix MIPS assembler code to work with new GCC.
+	* gnu/packages/patches/libmad-mips-newgcc.patch: New file.
+	* gnu/packages/mp3.scm (libmad): Add patch.
+	* gnu-system.am (dist_patch_DATA): Add patch.
+
+	gnu: libtheora: patch ancient config.guess to support mips64.
+	* gnu/packages/patches/libtheora-config-guess.patch: New file.
+	* gnu/packages/oggvorbis.scm (libtheora): Add patch.
+	* gnu-system.am (dist_patch_DATA): Add patch.
+
+	gnu: alsa-lib: fix atomic op declarations for MIPS.
+	* gnu/packages/patches/alsa-lib-mips-atomic-fix.patch: New file.
+	* gnu/packages/linux.scm (alsa-lib): Add patch.
+	* gnu-system.am (dist_patch_DATA): Add patch.
+
+	gnu: gdb: patch-makefile-SHELL for all Makefile.in files.
+	* gnu/packages/gdb.scm (gdb): patch-makefile-SHELL for all Makefile.in files
+	  after configure.
+
+	gnu: gdb: Fix opcode table for Loongson fused multiply-add.
+	* gnu/packages/patches/gdb-loongson-madd-fix.patch: New file.
+	* gnu/packages/gdb.scm (gdb): Add patch.
+	* gnu-system.am (dist_patch_DATA): Add patch.
+
+	gnu: libffi: fix handling of uint32_t arguments on MIPS N32.
+	* gnu/packages/patches/libffi-mips-n32-fix.patch: New file.
+	* gnu/packages/libffi.scm (libffi): Add patch.
+	* gnu-system.am (dist_patch_DATA): Add patch.
+
+	gnu: libtool: skip a test that fails on MIPS N32.
+	* gnu/packages/patches/libtool-skip-tests-for-mips.patch: New file.
+	* gnu/packages/autotools.scm (libtool): Add patch.
+	* gnu-system.am (dist_patch_DATA): Add patch.
+
+	gnu: binutils: apply fixes and workarounds for Loongson 2F CPUs.
+	* gnu/packages/patches/binutils-loongson-madd-fix.patch: New file.
+	* gnu/packages/patches/binutils-loongson-workaround.patch: New file.
+	* gnu/packages/base.scm (binutils): Add patches.
+	* gnu-system.am (dist_patch_DATA): Add patches.
+
+2013-11-03  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: recutils: Upgrade to 1.6.
+	* gnu/packages/recutils.scm (recutils): Upgrade to 1.6.  Add cURL and
+	  libgcrypt as inputs.
+
+	ui: Make '--version' output GCS-compliant.
+	* guix/ui.scm (show-version-and-exit): Display copyright year, license,
+	  and LACK OF WARRANTY.
+
+	gnu: make-bootstrap: Build libc and Guile without a .gnu_debuglink.
+	* gnu/packages/make-bootstrap.scm (glibc-for-bootstrap, %guile-static):
+	  Add 'outputs' field.
+
+2013-11-02  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: make-bootstrap: Allow bit-reproducibility for 'glibc-stripped'.
+	* gnu/packages/make-bootstrap.scm (%glibc-stripped): Remove '.install'
+	  and '..install.cmd' files.
+
+2013-11-02  Cyril Roelandt  <tipecaml@gmail.com>
+
+	gnu: cmake: Bump to 2.8.12
+	* gnu/packages/cmake.scm: bump to 2.8.12
+
+2013-11-02  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: make-bootstrap: Add C++ header files to the bootstrap GCC.
+	* gnu/packages/make-bootstrap.scm (%gcc-stripped): Add $gcc/include/c++.
+
+	gnu: cross-gcc: Fix build of 'gcc-cross-sans-libc'.
+	* gnu/packages/cross-base.scm (cross-gcc): Add "--disable-libatomic".
+
+	doc: Document the syntax of the '--remove' argument.
+	* doc/guix.texi (Invoking guix package): Document the syntax of
+	  '--remove' patterns.
+
+2013-11-01  Ludovic Courtès  <ludo@gnu.org>
+
+	guix package: Show the output name of what's being removed.
+	* guix/scripts/package.scm (show-what-to-remove/install): Show the
+	  output name of packages being removed.
+
+	guix package: Fix indentation of "will be removed" messages.
+	* guix/scripts/package.scm (show-what-to-remove/install): Remove extra
+	  indentation from the removal sentences.
+
+2013-11-01  Ludovic Courtès  <ludo@gnu.org>
+
+	guix package: Allow removal of a specific package output.
+	Fixes <http://bugs.gnu.org/15756>.
+
+	* guix/profiles.scm (<manifest-pattern>): New record type.
+	  (remove-manifest-entry): Remove.
+	  (entry-predicate, manifest-matching-entries): New procedures.
+	  (manifest-remove): Accept a list of <manifest-pattern>.
+	  (manifest-installed?): Replace 'name' parameter by 'pattern', a
+	  <manifest-pattern>.
+	* guix/scripts/package.scm (options->removable): Return a list of
+	  <manifest-pattern>.
+	  (guix-package)[process-action]: Use 'manifest-matching-entries' to
+	  compute the list of packages to remove.
+	* tests/profiles.scm: New file.
+	* Makefile.am (SCM_TESTS): Add it.
+
+2013-11-01  Ludovic Courtès  <ludo@gnu.org>
+
+	guix package: Separate '--remove' option processing.
+	* guix/scripts/package.scm (options->removable): New procedure.
+	  (guix-package)[process-actions]: Use it.  Rename 'remove*' to 'remove'
+	  and 'install*' to 'install'.
+
+	ui: Factorize package specification parsing.
+	* guix/ui.scm (package-specification->name+version+output): New
+	  procedure.
+	* guix/scripts/package.scm (specification->package+output): Use it.
+	* tests/ui.scm ("package-specification->name+version+output"): New test.
+
+	Add (guix profiles).
+	* guix/scripts/package.scm (show-what-to-remove/install): New procedure,
+	  moved from...
+	  (guix-package): ... here.
+	  (<manifest>, make-manifest, <manifest-entry>,
+	  profile-manifest, manifest->sexp, sexp->manifest, read-manifest,
+	  write-manifest, remove-manifest-entry, manifest-remove,
+	  manifest-installed?, manifest=?, profile-regexp, generation-numbers,
+	  previous-generation-number, profile-derivation, generation-number,
+	  generation-file-name, generation-time, lower-input): Move to...
+	* guix/profiles.scm: ... here.  New file.
+	* Makefile.am (MODULES): Add it.
+
+2013-11-01  Nikita Karetnikov  <nikita@karetnikov.org>
+
+	gnu: Add GCC front ends for Fortran, Go, Objective C, and Objective C++.
+	* gnu/packages/gcc.scm (custom-gcc, gfortran-4.8, gccgo-4.8)
+	  (gcc-objc-4.8, gcc-objc++-4.8): New variables.
+
+2013-11-01  Andreas Enge  <andreas@enge.fr>
+
+	gnu: ffmpeg: Fix typo in configure flags.
+	* gnu/packages/video.scm (ffmpeg): Add "d" in "3d" in configure flags.
+
+2013-11-01  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: Revert to GCC 4.7 as the default compiler.
+	GCC 4.8 relies on C++ headers (<cstring>, <iosfwd>, etc.) that are
+	missing from the current bootstrap GCC.
+
+	* gnu/packages/base.scm (gcc-boot0, cross-gcc-wrapper, gcc-final): Base
+	  on GCC-4.7.  This reverts part of commit 9ae7cee.
+
+2013-11-01  Andreas Enge  <andreas@enge.fr>
+
+	gnu: Add ffmpeg.
+	* gnu/packages/video.scm: New file.
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add module.
+
+2013-11-01  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: Switch to GCC 4.8 as the default compiler.
+	* gnu/packages/base.scm (gcc-boot0, cross-gcc-wrapper, gcc-final): Base
+	  on GCC-4.8.
+	* gnu/packages/cross-base.scm (cross-gcc): Likewise.
+	* gnu/packages/make-bootstrap.scm (package-with-relocatable-glibc,
+	  %gcc-static, %gcc-stripped): Likewise.
+
+	gnu: grep: Update to 2.15.
+	* gnu/packages/base.scm (grep): Update to 2.15.
+
+	Merge branch 'master' into core-updates
+
+2013-11-01  Mark H Weaver  <mhw@netris.org>
+
+	gnu: pulseaudio: increase timeout of thread test.
+	* gnu/packages/patches/pulseaudio-test-timeouts.patch: New file.
+	* gnu/packages/pulseaudio.scm (pulseaudio): Add patch.
+	* gnu-system.am (dist_patch_DATA): Add patch.
+
+2013-10-31  Ludovic Courtès  <ludo@gnu.org>
+
+	union: Do not warn when identical files collide.
+	* guix/build/union.scm (file=?): New procedure.
+	  (union-build)[resolve-collision]: Do not warn when identical files
+	  collide.
+
+	gnu: Add bridge-utils.
+	* gnu/packages/linux.scm (bridge-utils): New variable.
+
+2013-10-30  Andreas Enge  <andreas@enge.fr>
+
+	gnu: libmicrohttpd: Update to 0.9.31.
+	* gnu/packages/gnunet.scm (libmicrohttpd): Update to 0.9.31,
+	    synchronise the description with GNU SRC.
+
+	gnu: Add gst-plugins-base-0.10.
+	* gnu/packages/gstreamer.scm (gst-plugins-base-0.10): New variable.
+
+	gnu: gstreamer-0.10: Propagate input libxml2.
+	* gnu/packages/gstreamer.scm (gstreamer-0.10): Propagate input libxml2.
+
+2013-10-30  Ludovic Courtès  <ludo@gnu.org>
+
+	guix package: Factorize generation file name computation.
+	* guix/scripts/package.scm (generation-file-name): New procedure.
+	  Change all occurrences of (format #f "~a-~a-link" profile number) to
+	  use it.
+
+	guix package: Specify inputs for each manifest entry.
+	* guix/scripts/package.scm (<manifest-entry>): Add 'inputs' field.
+	  (manifest=?, lower-input): New procedure.
+	  (profile-derivation)[builder]: Add #:log-port argument to
+	  'union-build'.
+	  [ensure-valid-input]: Remove.
+	  Add each entry's inputs to the input list.
+	  (options->installable): Return just the list of entries.
+	  [package->manifest-entry]: Set 'inputs' field.
+	  [canonicalize-deps]: Rename to...
+	  [deduplicate]: ... this.  Remove input fiddling.
+	  (guix-package)[process-actions]: Use 'manifest=?' to compare the new
+	  and old manifests.  Pass directly PROF-DRV to 'show-what-to-build'.
+	  Pass #:print-build-trace #f to 'set-build-options'.
+
+	union: Make the log port a parameter.
+	* guix/build/union.scm (union-build): Add 'log-port' keyword parameter;
+	  use it.
+
+	derivations: 'derivation-path->output-path' honors the 'output' parameter.
+	* guix/derivations.scm (derivation-path->output-path): Pass OUTPUT.
+	* tests/derivations.scm ("multiple-output derivation,
+	  derivation-path->output-path"): New test.
+
+	guix package: Always use the term "profile", not "user environment".
+	* guix/scripts/package.scm (%user-environment-directory): Rename to...
+	  (%user-profile-directory): ... this.  Update users accordingly.
+	  (profile-derivation): Use the term "profile" instead of "user
+	  environment", and use "profile" as the derivation name.
+
+	guix package: Introduce <manifest> and <manifest-entry> types.
+	* guix/scripts/package.scm (<manifest>, <manifest-entry>): New record
+	  types.
+	  (make-manifest, read-manifest, manifest->sexp, sexp->manifest,
+	  read-manifest, write-manifest, remove-manifest-entry, manifest-remove,
+	  manifest-installed?): New procedures.
+	  (profile-derivation): Take a manifest as the second parameter.  Use
+	  'manifest->sexp'.  Expect <manifest-entry> objects instead of
+	  "tuples".  Adjust callers accordingly.
+	  (search-path-environment-variables): Changes 'packages' parameter to
+	  'entries'.  Rename 'package-in-manifest->package' to
+	  'manifest-entry->package'; expect <manifest-entry> objects.
+	  (display-search-paths): Rename 'packages' to 'entries'.
+	  (options->installable): Change 'installed' to 'manifest'.  Have
+	  'canonicalize-deps' return name/path tuples instead of raw packages.
+	  Rename 'package->tuple' to 'package->manifest-entry'.  Use
+	  <manifest-entry> objects instead of tuples.
+	  (guix-package)[process-actions]: Likewise.  Rename 'packages' to
+	  'entries'.
+	  [process-query]: Use 'manifest-entries' instead of
+	  'manifest-packages'.
+
+	guix package: Better separate option processing.
+	* guix/scripts/package.scm (find-package): Rename to...
+	  (specification->package+output): ... this.  Rename 'name' parmameter
+	  to 'spec'.  Return a package and output name instead of a tuple.
+	  (options->installable): New procedure
+	  (guix-package)[process-actions]: Use it, and remove corresponding
+	  code.
+
+2013-10-30  Andreas Enge  <andreas@enge.fr>
+
+	gnu: Add gstreamer-0.10.
+	* gnu/packages/gstreamer.scm (gstreamer-0.10): New variable.
+	* gnu/packages/patches/gstreamer-0.10-bison3.patch,
+	  gnu/packages/patches/gstreamer-0.10-silly-test.patch: New files.
+	* gnu-system.am (dist_patch_DATA): Add patches.
+
+2013-10-29  Andreas Enge  <andreas@enge.fr>
+
+	gnu: mit-krb5: Update to 1.11.3.
+	* gnu/packages/mit-krb5.scm (mit-krb5): Update to 1.11.3.
+
+2013-10-29  Ludovic Courtès  <ludo@gnu.org>
+
+	guix package: Declutter the entry point.
+	* guix/scripts/package.scm (newest-available-packages,
+	  find-best-packages-by-name, find-package, upgradeable?): New
+	  procedures, moved from...
+	  (guix-package): ... here.
+
+2013-10-29  Mark H Weaver  <mhw@netris.org>
+
+	Change indentation rule for 'package' for the common case.
+	* .dir-locals.el: Change the indentation rule for 'package' to do the right
+	  thing for packages without an inherit clause.
+
+2013-10-29  Ludovic Courtès  <ludo@gnu.org>
+
+	list-runtime-roots: List files referenced by environment variables.
+	Inspired by <https://github.com/NixOS/nix/compare/772b70952f75...4ddd077bfa9a>.
+
+	* nix/scripts/list-runtime-roots.in (%store-directory): New variable.
+	  (proc-environ-roots): New procedure.
+	  (<top-level>): Use it.
+
+2013-10-29  Ludovic Courtès  <ludo@gnu.org>
+
+	doc: Augment the "Porting" section.
+	Reported by Andreas Enge <andreas@enge.fr>.
+
+	* doc/guix.texi (Porting): Document needed changes to (gnu packages
+	  bootstrap) and (gnu packages linux).
+
+2013-10-29  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: Add python2-empy.
+	* gnu/packages/python.scm (python2-empy): New variable.
+
+2013-10-29  Ludovic Courtès  <ludo@gnu.org>
+
+	build-system/{cmake,perl}: Don't use (guix build gnu-build-system).
+	Previously references to '%standard-phases' in builder-side code would
+	refer to the wrong one.
+
+	* guix/build-system/cmake.scm (cmake-build): Remove (guix build
+	  gnu-build-system) from the default MODULES value.
+	* guix/build-system/perl.scm (perl-build): Likewise.
+
+2013-10-28  Nikita Karetnikov  <nikita@karetnikov.org>
+
+	gnu: gcc-4.8: Upgrade to 4.8.2.
+	* gnu/packages/gcc.scm (gcc-4.8): Upgrade to 4.8.2.
+
+2013-10-26  Andreas Enge  <andreas@enge.fr>
+
+	gnu: mesa: Update URI.
+	* gnu/packages/xorg.scm (mesa): Update URI.
+
+	gnu: lzip: Update to 1.15.
+	* gnu/packages/compression.scm (lzip): Update to 1.15.
+
+2013-10-26  David Thompson  <dthompson2@worcester.edu>
+
+	gnu: Add libmikmod.
+	* gnu/packages/sdl.scm: New file.
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add it.
+
+2013-10-26  Eric Bavier  <bavier@member.fsf.org>
+
+	gnu: Add Pem.
+	 * gnu/packages/pem.scm: New file.
+	 * gnu-system.am (GNU_SYSTEM_MODULES): Add it.
+
+2013-10-26  Andreas Enge  <andreas@enge.fr>
+
+	gnu: Add sharutils.
+	* gnu/packages/compression.scm (sharutils): New variable.
+
+2013-10-25  Andreas Enge  <andreas@enge.fr>
+
+	gnu: rsync: Update to 3.1.0.
+	* gnu/packages/rsync.scm (rsync): Update to 3.1.0.
+
+2013-10-24  Andreas Enge  <andreas@enge.fr>
+
+	gnu: gmp: Update to 5.1.3.
+	* gnu/packages/multiprecision.scm (gmp): Update to 5.1.3.
+
+2013-10-23  Andreas Enge  <andreas@enge.fr>
+
+	gnu: qt: Correct source uri.
+	* gnu/packages/qt.scm (qt-4): Correct source uri (reported by
+	    Cyril Roelandt <tipecaml@gmail.com>).
+
+2013-10-22  Andreas Enge  <andreas@enge.fr>
+
+	gnu: Add GLPK.
+	* gnu/packages/maths.scm (glpk): New variable.
+
+2013-10-19  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: Add GNU Alive.
+	* gnu/packages/system.scm (alive): New variable.
+
+2013-10-18  Ludovic Courtès  <ludo@gnu.org>
+
+	build: Build the bootstrap-graph.{png,eps,pdf} under $(top_srcdir).
+	Fixes <http://bugs.gnu.org/15640>.
+	Reported by Eric Bavier <ericbavier@gmail.com>.
+
+	* doc.am (EXTRA_DIST): Add doc/images/bootstrap-graph.pdf to the
+	  distribution.
+	  (pdf-local, info-local, ps-local): Prepend $(top_srcdir) to the image
+	  file names.
+
+2013-10-18  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: dfc: Add missing input.
+	* gnu/packages/system.scm (dfc): Add 'native-inputs' field.
+
+2013-10-17  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: glib: Work around test failure in 'gio/tests/network-address.c'.
+	* gnu/packages/patches/glib-tests-newnet.patch: New file.
+	* gnu/packages/glib.scm (glib): Use it.
+	* gnu-system.am (dist_patch_DATA): Add it.
+
+	gnu: evince: Set search path for MIME info.
+	* gnu/packages/gnome.scm (evince): Add #:phases argument.  Remove "perl"
+	  and "perl-xml-parser" inputs since they are not directly needed; move
+	  "intltool" to 'native-inputs'.
+
+	gnu: Add shared-mime-info.
+	* gnu/packages/gnome.scm (shared-mime-info): New variable.
+
+	gnu: Add SCons.
+	* gnu/packages/python.scm (scons): New variable.
+
+2013-10-17  Nikita Karetnikov  <nikita@karetnikov.org>
+
+	doc: Improve the copyright notice.
+
+2013-10-16  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: make: Update to 4.0, with Guile support.
+	* gnu/packages/base.scm (gnu-make): Update to 4.0.  Add Guile as an input.
+	  (gnu-make-boot0): Patch 'build.sh' so it does not attempt to build 'guile.c'.
+	  (gnu-make-final): New variable.
+	  (%final-inputs): Use it.
+	  (glibc): Add 'glibc-make-4.0.patch'.
+	* gnu/packages/patches/glibc-make-4.0.patch: New file.
+	* gnu-system.am (dist_patch_DATA): Add it.
+
+	gnu: base: Fix circular dependency between %final-outputs and <origin> inputs.
+	* gnu/packages/base.scm (%final-inputs): Add
+	  'package-with-bootstrap-guile' to 'finalize'.
+
+2013-10-16  Ludovic Courtès  <ludo@gnu.org>
+
+	utils: 'find-files' always returns a proper list.
+	Reported at <http://bugs.gnu.org/15608>.
+
+	* guix/build/utils.scm (find-files): Change the 'error' procedure to
+	  return RESULT.  Before we would end up with an improper list.
+
+2013-10-16  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: readline: Turn 'patches' into a list.
+	* gnu/packages/readline.scm (readline): Turn 'patches' into a list.
+
+2013-10-16  Andreas Enge  <andreas@enge.fr>
+
+	gnu: harfbuzz: Update to 0.9.22.
+	* gnu/packages/gtk.scm (harfbuzz): Update to 0.9.22; should solve the test
+	    problems on i686.
+
+2013-10-16  Ludovic Courtès  <ludo@gnu.org>
+
+	Update 'AUTHORS'.
+
+2013-10-16  Eric Bavier  <bavier@member.fsf.org>
+
+	gnu: Add autogen package
+	* gnu/package/autogen.scm: New file
+	* gnu-system.am: Add it
+
+2013-10-15  Ludovic Courtès  <ludo@gnu.org>
+
+	Remove weirdnesses caused by 'letrec*' behavior of record field initializers.
+	* gnu/packages/bootstrap.scm (package-from-tarball): Remove '*' from
+	  parameter names.  Adjust accordingly.
+	* gnu/packages/linux-initrd.scm (expression->initrd): Use 'name'
+	  directly, removing the 'name*' alias.
+	* gnu/packages/linux.scm (linux-libre-headers, linux-libre): Rename
+	  'version*' to 'version'.
+
+	records: define-record-type*: Field bindings are bound with 'let*'.
+	* guix/records.scm (define-record-type*): Wrap field bindings in a
+	  'let*', not in a 'letrec*', which turned out to be pointlessly
+	  inconvenient.
+	* tests/records.scm: Adjust test names accordingly.
+
+	build: Add 'clean-go' target.
+	* Makefile.am (clean-go): New phony target.
+
+	guix package: '--search' matches against package names.
+	* guix/scripts/package.scm (find-packages-by-description): Return
+	  packages whose name matches RX.
+
+2013-10-14  Ludovic Courtès  <ludo@gnu.org>
+
+	Thank Jeffrin and David.
+
+2013-10-14  David Thompson  <dthompson2@worcester.edu>
+
+	gnu: Add libtheora.
+	* gnu/packages/oggvorbis.scm (libtheora): New variable.
+
+2013-10-14  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: subversion, cmake: Clean up descriptions.
+	* gnu/packages/cmake.scm (cmake): Simplify the synopsis.
+	* gnu/packages/version-control.scm (subversion): Remove "open-source"
+	  from the description.
+
+2013-10-13  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: Add libgnome-keyring and Evince.
+	* gnu/packages/gnome.scm (libgnome-keyring, evince): New variables.
+
+	gnu: poppler: Build the poppler-glib bindings.
+	* gnu/packages/pdf.scm (poppler): Add Cairo and GLib as inputs.
+
+	gnu: Add dogtail.
+	* gnu/packages/python.scm (python2-dogtail): New variable.
+
+	pull: Compile modules correctly regardless of the compilation order.
+	* guix/scripts/pull.scm (unpack)[builder]: Work around
+	  <http://bugs.gnu.org/15602>.
+
+2013-10-13  Andreas Enge  <andreas@enge.fr>
+
+	gnu: kde: Add module and automoc4 package.
+	* gnu/packages/kde.scm: New file.
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add it.
+
+	guix: Make cmake build system aware of usual paths.
+	*  guix/build/cmake-build-system.scm (configure): Set CMAKE_LIBRARY_PATH to
+	     LIBRARY_PATH and CMAKE_INCLUDE_PATH to CPATH.
+
+	gnu: cmake: Update patch to work with new system.
+	* gnu/packages/patches/cmake-fix-tests.patch: Update to work with -p1.
+	* gnu/packages/cmake.scm (cmake): Drop patch flag -p0.
+
+	gnu: gsl: Update to 1.16.
+	* gnu/packages/maths.scm (gsl): Update to 1.16, disable parallel tests
+	    leading to a failure in vector.
+
+	gnu: gtk+: Update to 3.10.1.
+	* gnu/packages/gtk.scm (gtk+): Update to 3.10.1, drop no longer needed
+	    configure flag.
+
+2013-10-13  Ludovic Courtès  <ludo@gnu.org>
+
+	pull: Simplify the builder.
+	* guix/scripts/pull.scm (unpack)[builder]: Use 'copy-recursively' and
+	  'copy-file' instead of 'file-system-fold'.
+
+	doc: Document "guix pull --url".
+	* doc/guix.texi (Invoking guix pull): Add --url.
+
+2013-10-12  Andreas Enge  <andreas@enge.fr>
+
+	gnu: qt: Add patch to distribution.
+	* gnu-system.am (dist_patch_DATA): Add qt patch.
+
+2013-10-12  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: qemu-with-multiple-smb-shares: Fix typo.
+	* gnu/packages/qemu.scm (qemu/smb-shares): Turn 'patches' into a list.
+
+	build-system/perl: Lazily resolve (gnu packages perl).
+	* guix/build-system/perl.scm (default-perl): New procedure.
+	  (perl-build): Use it.
+
+	pull: Add '--url' option.
+	* guix/scripts/pull.scm (%default-options): Add 'tarball-url' pair.
+	  (%options, show-help): Add '--url'.
+	  (guix-pull): Honor it.
+
+	download: Support 'file://' URLs.
+	* guix/download.scm (download-to-store): When URL has a 'file' scheme or
+	  no scheme, use 'add-to-store' directly.
+
+	guix: Add missing call to 'bindtextdomain'.
+	* scripts/guix.in (config-lookup): Add "localedir" entry.
+	  (run-guix-main): Add call to 'bindtextdomain'.
+	* guix/ui.scm (initialize-guix): Use %GETTEXT-DOMAIN instead of a
+	  literal.
+
+2013-10-12  Andreas Enge  <andreas@enge.fr>
+
+	gnu: Add gp2c.
+	* gnu/packages/algebra.scm (gp2c): New variable.
+
+	gnu: Add Qt 4.8.5.
+	* gnu/packages/qt.scm (qt-4): New variable.
+	* gnu/packages/patches/qt4-tests.patch: New file, patch dropping tests
+	    requiring a running X server.
+
+2013-10-11  Arne Babenhauserheide  <arne.babenhauserheide@kit.edu>
+
+	gnu: Add Mercurial.
+	* gnu/packages/version-control.scm (mercurial): New variable.
+
+2013-10-11  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu-maintenance: Adjust URL of package description file.
+	* guix/gnu-maintenance.scm (%package-description-url): Adjust to the
+	  new URL.
+
+2013-10-11  Nikita Karetnikov  <nikita@karetnikov.org>
+
+	gnu: Add GNU acct.
+	* gnu/packages/acct.scm: New file.
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add it.
+
+2013-10-11  Cyril Roelandt  <tipecaml@gmail.com>
+
+	gnu: Valgrind: make it work with glibc 2.18.
+	* gnu/packages/patches/valgrind-glibc.patch: update it.
+
+2013-10-10  Ludovic Courtès  <ludo@gnu.org>
+
+	build-system/{gnu,cmake}: Remove #:patches and #:patch-flags parameters.
+	* guix/build/gnu-build-system.scm (patch): Remove.
+	  (%standard-phases): Remove 'patch'.
+	* guix/build-system/gnu.scm (gnu-build, gnu-cross-build): Remove
+	  #:patches and #:patch-flags parameters.
+	* guix/build-system/cmake.scm (cmake-build): Likewise.
+	* guix/build-system/python.scm (package-with-explicit-python): Update
+	  comment.
+
+	gnu: Use the 'patches' field of <origin>.
+	* gnu/packages/autotools.scm (libtool): Add 'patches' field to the
+	  origin.  Remove 'inputs' field.
+	* gnu/packages/base.scm (findutils, gnu-make, binutils, glibc):
+	  Likewise.
+	* gnu/packages/m4.scm (m4): Likewise.
+	* gnu/packages/perl.scm (perl): Likewise.
+	* gnu/packages/readline.scm (readline): Likewise.
+
+	gnu: bootstrap: Use the bootstrap tools for <origin> patching.
+	* gnu/packages/bootstrap.scm (bootstrap-origin): Override the
+	  'patch-guile' and 'patch-inputs' fields of SOURCE.
+
+	packages: The 'patch-guile' field of <origin> is now a package.
+	* guix/packages.scm (default-guile): Return a package instead of a
+	  derivation.
+	  (package-source-derivation): Adjust accordingly.
+
+	gnu: tar: Update to 1.17.
+	* gnu/packages/base.scm (tar): Update to 1.17.  Remove 'arguments' and
+	  'inputs'.
+	* gnu/packages/patches/tar-gets-undeclared.patch: Remove.
+	* gnu-system.am (dist_patch_DATA): Remove 'tar-gets-undeclared.patch'.
+
+	gnu: linux-libre-headers: Support cross-compilation.
+	* gnu/packages/linux.scm (linux-libre-headers):
+	  When (%current-target-system) is true, pass it as the argument to
+	  'build-phase'.  This fixes cross-compilation.
+	  Reported by Mark H. Weaver <mhw@netris.org>.
+
+	daemon: Set the umask to 022 when starting.
+	* nix/nix-daemon/guix-daemon.cc (main): Add 'umask' call.
+	* test-env.in: Remove use of 'umask'.
+
+	gnu: Add pavucontrol.
+	* gnu/packages/pulseaudio.scm (pavucontrol): New variable.
+
+2013-10-10  Andreas Enge  <andreas@enge.fr>
+
+	gnu: qt: Propagate input mesa.
+	* gnu/packages/qt.scm (qt): Propagate input mesa.
+
+	gnu: qt: Do not use special SSE etc. instructions.
+	* gnu/packages/qt.scm (qt): Add configure flags to disable machine specific
+	    instructions.
+
+	gnu: qt: Add input pulseaudio.
+	* gnu/packages/qt.scm (qt): Add input pulseaudio.
+
+2013-10-09  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: Add Pangomm, ATKmm, and GTKmm.
+	* gnu/packages/gtk.scm (atk)[synopsis]: Fix typo.
+	  (pangomm, atkmm, gtkmm): New variables.
+
+	list-packages: Show a list of patches for each package.
+	* build-aux/list-packages.scm (list-join): New procedure.
+	  (package->sxml)[patch-url]: New procedure.
+	  Use it.
+
+	snix: Prefer descriptions from the Womb rather than from Nixpkgs.
+	* guix/snix.scm (snix-derivation->guix-package): Use
+	  'gnu-package-doc-description' as the description for GNU packages.
+
+	Synchronize package descriptions with the Womb.
+	* gnu/packages/algebra.scm,
+	  gnu/packages/aspell.scm,
+	  gnu/packages/autotools.scm,
+	  gnu/packages/base.scm,
+	  gnu/packages/bash.scm,
+	  gnu/packages/bison.scm,
+	  gnu/packages/cdrom.scm,
+	  gnu/packages/cflow.scm,
+	  gnu/packages/compression.scm,
+	  gnu/packages/cpio.scm,
+	  gnu/packages/cppi.scm,
+	  gnu/packages/ddrescue.scm,
+	  gnu/packages/dejagnu.scm,
+	  gnu/packages/ed.scm,
+	  gnu/packages/emacs.scm,
+	  gnu/packages/fdisk.scm,
+	  gnu/packages/freeipmi.scm,
+	  gnu/packages/gawk.scm,
+	  gnu/packages/gcal.scm,
+	  gnu/packages/gcc.scm,
+	  gnu/packages/gdb.scm,
+	  gnu/packages/gdbm.scm,
+	  gnu/packages/gettext.scm,
+	  gnu/packages/ghostscript.scm,
+	  gnu/packages/global.scm,
+	  gnu/packages/gnunet.scm,
+	  gnu/packages/gnupg.scm,
+	  gnu/packages/gnutls.scm,
+	  gnu/packages/gperf.scm,
+	  gnu/packages/gprolog.scm,
+	  gnu/packages/groff.scm,
+	  gnu/packages/grub.scm,
+	  gnu/packages/gsasl.scm,
+	  gnu/packages/guile.scm,
+	  gnu/packages/gv.scm,
+	  gnu/packages/help2man.scm,
+	  gnu/packages/idutils.scm,
+	  gnu/packages/indent.scm,
+	  gnu/packages/less.scm,
+	  gnu/packages/libidn.scm,
+	  gnu/packages/libsigsegv.scm,
+	  gnu/packages/libunistring.scm,
+	  gnu/packages/lightning.scm,
+	  gnu/packages/linux.scm,
+	  gnu/packages/lsh.scm,
+	  gnu/packages/m4.scm,
+	  gnu/packages/mail.scm,
+	  gnu/packages/maths.scm,
+	  gnu/packages/multiprecision.scm,
+	  gnu/packages/nano.scm,
+	  gnu/packages/ncurses.scm,
+	  gnu/packages/nettle.scm,
+	  gnu/packages/ocrad.scm,
+	  gnu/packages/oggvorbis.scm,
+	  gnu/packages/parted.scm,
+	  gnu/packages/plotutils.scm,
+	  gnu/packages/pth.scm,
+	  gnu/packages/readline.scm,
+	  gnu/packages/recutils.scm,
+	  gnu/packages/rush.scm,
+	  gnu/packages/scheme.scm,
+	  gnu/packages/screen.scm,
+	  gnu/packages/shishi.scm,
+	  gnu/packages/smalltalk.scm,
+	  gnu/packages/system.scm,
+	  gnu/packages/texinfo.scm,
+	  gnu/packages/time.scm,
+	  gnu/packages/unrtf.scm,
+	  gnu/packages/version-control.scm,
+	  gnu/packages/wdiff.scm,
+	  gnu/packages/wget.scm,
+	  gnu/packages/which.scm,
+	  gnu/packages/xnee.scm,
+	  gnu/packages/zile.scm: Change value of the 'description' field to that
+	  of the Womb.
+
+	build: 'sync-descriptions' now compares GNU package descriptions.
+	* build-aux/sync-synopses.scm: Rename to...
+	* build-aux/sync-descriptions.scm: ... this.  Compare the value of
+	  'gnu-package-doc-description' and 'package-description' and report any
+	  mismatch.
+	* Makefile.am (EXTRA_DIST): Adjust accordingly.
+	  (sync-synopses): Rename to...
+	  (sync-descriptions): ... this.
+
+	gnu-maintenance: Get descriptions from 'gnumaint/pkgdescr.txt'.
+	* guix/gnu-maintenance.scm (%gnumaint-base-url): New variable.
+	  (%package-list-url): Use it.
+	  (%gsrc-package-list-url): Remove.
+	  (%package-description-url): New variable.
+	  (official-gnu-packages): Change to use %PACKAGE-DESCRIPTION-URL
+	  instead of %GSRC-PACKAGE-LIST-URL.  Adjust recutils field names
+	  accordingly.
+
+	Update 'TODO'.
+
+	gnu: Use the 'patches' field of <origin>.
+	* gnu/packages/apr.scm,
+	  gnu/packages/autotools.scm,
+	  gnu/packages/avahi.scm,
+	  gnu/packages/cdrom.scm,
+	  gnu/packages/cmake.scm,
+	  gnu/packages/cpio.scm,
+	  gnu/packages/cross-base.scm,
+	  gnu/packages/emacs.scm,
+	  gnu/packages/flex.scm,
+	  gnu/packages/fontutils.scm,
+	  gnu/packages/glib.scm,
+	  gnu/packages/grub.scm,
+	  gnu/packages/guile.scm,
+	  gnu/packages/idutils.scm,
+	  gnu/packages/libevent.scm,
+	  gnu/packages/linux.scm,
+	  gnu/packages/mail.scm,
+	  gnu/packages/make-bootstrap.scm,
+	  gnu/packages/mp3.scm,
+	  gnu/packages/oggvorbis.scm,
+	  gnu/packages/pdf.scm,
+	  gnu/packages/plotutils.scm,
+	  gnu/packages/qemu.scm,
+	  gnu/packages/recutils.scm,
+	  gnu/packages/rush.scm,
+	  gnu/packages/scheme.scm,
+	  gnu/packages/system.scm,
+	  gnu/packages/tcsh.scm,
+	  gnu/packages/valgrind.scm,
+	  gnu/packages/vpn.scm,
+	  gnu/packages/w3m: Use the 'patches' field of <origin> instead of
+	  adding a patch as input plus using #:patches.
+
+2013-10-09  Ludovic Courtès  <ludo@gnu.org>
+
+	packages: Add 'patches' and related fields to <origin>.
+	See <https://lists.gnu.org/archive/html/guix-devel/2013-09/msg00137.html>
+	for the rationale.
+
+	* guix/packages.scm (<origin>)[patches, patch-flags, patch-inputs,
+	  patch-guile]: New fields.
+	  (%standard-patch-inputs, default-guile, patch-and-repack): New
+	  procedures.
+	  (package-source-derivation): When 'patches' is non-empty, call
+	  'patch-and-repack'.
+	* guix/utils.scm (file-sans-extension): New procedure.
+
+2013-10-08  Andreas Enge  <andreas@enge.fr>
+
+	gnu: Add Qt 5.1.1.
+	* gnu/packages/qt.scm (qt): New variable.
+
+2013-10-07  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: Add Cairomm.
+	* gnu/packages/gtk.scm (cairomm): New variable.
+
+2013-10-06  Ludovic Courtès  <ludo@gnu.org>
+
+	Update 'AUTHORS'.
+	* AUTHORS: Add Alex, Joshua, and Aljosha.
+
+	Augment 'TODO'.
+
+	gnu: Add alsa-utils.
+	* gnu/packages/linux.scm (alsa-utils): New variable.
+
+	gnu: xmlto: Keep references to libxml2, libxslt, and util-linux programs.
+	* gnu/packages/xml.scm (xmlto): Add 'arguments' field.
+	  [inputs]: Add libxml2 and libxslt.
+
+	gnu: Gracefully handle circular dependencies between 'base' and 'linux'.
+	* gnu/packages/base.scm (linux-libre-headers-boot0): Turn into a thunk.
+	  User updated.
+
+2013-10-06  Andreas Enge  <andreas@enge.fr>
+
+	gnu: pari-gp: Update to 2.5.5.
+	* gnu/packages/algebra.scm (pari-gp): Update to 2.5.5.
+
+	gnu: mutt: Add input gpgme.
+	* gnu/packages/mail.scm (mutt): Add input gpgme.
+
+	gnu: Add gpgme.
+	* gnu/packages/gnupg.scm (gpgme): New variable.
+
+	gnu: icu4c: Patch RUNPATH of libraries.
+	* gnu/packages/icu4c.scm (icu4c): Elf-patch RUNPATH of libraries, for instance
+	    of libicuuc.so.
+
+	gnu: cdparanoia: Fix links of internal libraries into binary.
+	* gnu/packages/cdrom.scm (cdparanoia): Use patchelf to link internal libraries
+	    into binary.
+
+2013-10-06  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: Add libsigc++ and glibmm.
+	* gnu/packages/glib.scm (libsigc++, glibmm): New variable.
+
+2013-10-05  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: gobject-introspection: Export via #:export.
+	* gnu/packages/glib.scm: Export 'gobject-instrospection' via the
+	  #:export clause.
+
+2013-10-05  Joshua S. Grant  <youlysses@riseup.net>
+
+	gnu: Add freeglut, glu, and FTGL.
+	* gnu/packages/gl.scm: New file.
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add it.
+
+2013-10-05  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: ao: Build PulseAudio back-end.
+	* gnu/packages/oggvorbis.scm (ao): Add PulseAudio as an input.
+
+	gnu: oggvorbis: Use #:export clause.
+	* gnu/packages/oggvorbis.scm: Use #:export clause instead of
+	  'define-public'.
+
+	gnu: pulseaudio: Add dependency on libcap.
+	* gnu/packages/pulseaudio.scm (pulseaudio): Add dependency on libcap.
+
+	gnu: Add libcap.
+	* gnu/packages/linux.scm (libcap): New variable.
+
+	download: Add Debian mirrors.
+	* guix/download.scm (%mirrors)[debian]: New set of mirrors.
+
+	gnu: gnupg: Upgrade to 2.0.22.
+	* gnu/packages/gnupg.scm (gnupg): Update to 2.0.22. This release fixes
+	  security issue CVE-2013-4402 in the OpenPGP packet parser.
+
+2013-10-04  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: Add PulseAudio and related libraries.
+	* gnu/packages/pulseaudio.scm: New file.
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add it.
+
+	gnu: Add FFTW.
+	* gnu/packages/algebra.scm (fftw): New variable.
+
+2013-10-04  Andreas Enge  <andreas@enge.fr>
+
+	gnu: Add libxkbcommon.
+	* gnu/packages/qt.scm: New file.
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add it.
+
+	gnu: xorg: Add xcb-util-renderutil.
+	* gnu/packages/xorg.scm (xcb-util-renderutil): New variable.
+
+	gnu: xorg: Add xcb-util-keysyms.
+	* gnu/packages/xorg.scm (xcb-util-keysyms): New variable.
+
+	gnu: xorg: Add xcb-util-image.
+	* gnu/packages/xorg.scm (xcb-util-image): New variable.
+
+	gnu: xorg: Add xcb-util.
+	* gnu/packages/xorg.scm (xcb-util): New variable.
+	* gnu/packages/xorg.scm (xcb-util-wm): Expand the description.
+
+2013-10-03  Andreas Enge  <andreas@enge.fr>
+
+	gnu: xorg: Add xcb-util-wm.
+	* gnu/packages/xorg.scm (xcb-util-wm): New variable.
+
+2013-10-03  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: Add Netcat.
+	* gnu/packages/system.scm (netcat): New variable.
+
+	monads: Allow resolution of a monad's bind/return at expansion time.
+	* guix/monads.scm (<monad>): Turn in a raw SRFI-9 record type.
+	  (define-monad): New macro.
+	  (with-monad): Add a case for when MONAD is a macro.
+	  (identity-return, identity-bind, store-return, store-bind): Inline.
+	  (%identity-monad, %store-monad): Use 'define-monad'.
+	* tests/monads.scm ("monad?"): New test.
+
+	gnu: vm: Rewrite helper functions as monadic functions.
+	* gnu/system/dmd.scm (host-name-service, nscd-service, mingetty-service,
+	  syslog-service, guix-service, static-networking-service): Rewrite as
+	  monadic functions.
+	  (dmd-configuration-file): Use 'text-file' instead of
+	  'add-text-to-store'.
+	* gnu/system/grub.scm (grub-configuration-file): Rewrite as a monadic
+	  function.
+	* gnu/system/linux.scm (pam-services->directory): Likewise.
+	* gnu/system/shadow.scm (group-file, passwd-file, guix-build-accounts):
+	  Likewise.
+	* gnu/system/vm.scm (expression->derivation-in-linux-vm, qemu-image,
+	  union, system-qemu-image): Likewise.
+
+	Add (guix monads).
+	* guix/monads.scm: New file.
+	* tests/monads.scm: New file.
+	* Makefile.am (MODULES): Add guix/monads.scm.
+	  (SCM_TESTS): Add tests/monads.scm.
+	* doc/guix.texi (The Store Monad): New node.
+	  (The Store): Reference it.
+
+2013-10-03  Andreas Enge  <andreas@enge.fr>
+
+	gnu: libxcb: Enable xcb-xkb.
+	* gnu/packages/xorg.scm (libxcb): Add configure flag "--enable-xkb".
+
+	gnu: gnome: Add brasero.
+	* gnu/packages/gnome.scm (brasero): New variable; not totally usable due to
+	    lacking inputs.
+
+2013-10-02  Andreas Enge  <andreas@enge.fr>
+
+	gnu: Add hicolor-icon-theme.
+	* gnu/packages/gnome.scm (hicolor-icon-theme): New variable.
+
+	gnu: gnome: Add gnome-icon-theme.
+	* gnu/packages/gnome.scm (gnome-icon-theme): New variable.
+
+	gnu: Add icon-naming-utils.
+	* gnu/packages/gnome.scm (icon-naming-utils): New variable.
+
+	gnu: Add perl-xml-simple.
+	* gnu/packages/xml.scm (perl-xml-simple): New variable.
+
+	gnu: gnome: Add gsettings-desktop-schemas.
+	* gnu/packages/gnome.scm (gsettings-desktop-schemas): New variable.
+
+	gnu: xnee: Drop input gtk+.
+	* gnu/packages/xnee.scm (xnee): Drop unused input gtk+.
+
+	gnu: itstool: Really push the modification announced in 9000d556.
+	* gnu/packages/glib.scm (itstool): Do as announced in 9000d556.
+
+	gnu: itstool: Add propagated inputs python-2 and libxml2.
+	* gnu/packages/glib.scm (itstool): Add propagated input python-2; it is needed
+	    to rewrite the shebang in the output python script and must be propagated
+	    so that PYTHONPATH gets set when using itstool; and libxml2, imported as a
+	    module by the script.
+
+	gnu: Add libcanberra.
+	* gnu/packages/libcanberra.scm: New file.
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add it.
+
+	gnu: libvorbis: Propagate input libogg.
+	* gnu/packages/oggvorbis.scm (libvorbis): Propagate input libogg, as
+	    stipulated by the pkg-config files.
+
+	gnu: gnome: Add libnotify.
+	* gnu/packages/gnome.scm (libnotify): New variable.
+
+	gnu: racket: Revert input from gtk+-3 to gtk+-2.
+	* gnu/packages/scheme.scm (racket): Revert input from gtk+-3 to gtk+-2.
+
+2013-10-01  Andreas Enge  <andreas@enge.fr>
+
+	gnu: gtk+: Propagate inputs.
+	* gnu/packages/gtk.scm (gtk+): Propagate inputs at-spi2-atk, libxi and
+	    libxinerama.
+
+	gnu: Revert inputs from gtk+-3 to gtk+-2.
+	* gnu/packages/cdrom.scm (dvdisaster): Replace input gtk+ by gtk+-2.
+	* gnu/packages/emacs.scm (emacs): Replace input gtk+ by gtk+-2.
+	* gnu/packages/geeqie.scm (geeqie): Replace input gtk+ by gtk+-2.
+	* gnu/packages/gkrellm.scm (gkrellm): Replace input gtk+ by gtk+-2.
+	* gnu/packages/mp3.scm (ripperx): Replace input gtk+ by gtk+-2.
+	* gnu/packages/scheme.scm: Drop duplicate inclusion of module gtk.
+
+	gnu: gtk+-2: Update to 2.24.21.
+	* gnu/packages/gtk.scm (gtk+-2): Update to 2.24.21, add inputs perl and
+	    python.
+
+	gnu: Add Gtk+ 3.
+	* gnu/packages/gtk.scm (gtk+): Switch to version 3.10.0.
+	* gnu/packages/gtk.scm (gtk+-2): New name for version 2.24.20.
+
+	gnu: Drop gtk+-3, erroneously pushed in the previous commit.
+	* gnu/packages/gtk.scm (gtk+-3): Delete variable.
+
+	gnu: Add at-spi2-atk.
+	* gnu/packages/gtk.scm (at-spi2-atk): New variable.
+
+	gnu: atk: Update to 2.10.0.
+	* gnu/packages/gtk.scm (atk): Update to 2.10.0.
+
+	gnu: Add at-spi2-core.
+	* gnu/packages/gtk.scm (at-spi2-core): New variable.
+
+2013-09-30  Andreas Enge  <andreas@enge.fr>
+
+	gnu: libxi: Propagate inputs inputproto and libx11.
+	* gnu/packages/xorg.scm (libxi): Propagate inputs inputproto and libx11,
+	    as stipulated by xi.pc.
+
+	gnu: glib: Update to 2.38.0.
+	* gnu/packages/glib.scm (glib): Update to 2.38.0 and drop rewriting of GTESTER.
+	* gnu/packages/patches/glib-tests-homedir.patch: Update patch for 2.38.0.
+	* gnu/packages/patches/glib-tests-desktop.patch: Update patch for 2.38.0 and
+	    drop test dbus-appinfo.
+
+2013-09-29  Cyril Roelandt  <tipecaml@gmail.com>
+
+	gnu: Add gobject-introspection.
+	* gnu/packages/glib.scm (gobject-introspection): New variable.
+
+2013-09-29  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: git: Add graphical tools to the "gui" output.
+	* gnu/packages/version-control.scm (git): Add "gui" output.  Add Tcl/Tk
+	  as inputs.  Add #:configure-flags.  Augment 'split' phase to handle
+	  graphical user interfaces.
+
+	gnu: git: Do not retain reference from "out" to Subversion.
+	* gnu/packages/version-control.scm (git): Wrap 'git-svn', not 'git', for
+	  PERL5LIB and LD_LIBRARY_PATH.
+
+2013-09-29  Aljosha Papsch  <misc@rpapsch.de>
+
+	Add httpd
+	* gnu/packages/web.scm (httpd): New variable
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add it
+
+2013-09-29  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: bzip2: Allow cross-compilation.
+	Reported by Nikita Karetnikov <nikita@karetnikov.org>.
+
+	* gnu/packages/compression.scm (bzip2): Add 'set-cross-environment'
+	  phase for cross-compilation.
+
+2013-09-29  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: git: Add "svn" output for 'git-svn'.
+	* gnu/packages/version-control.scm (git): Add SUBVERSION as an input.
+	  Add 'split' phase.
+
+	gnu: subversion: Install Perl bindings.
+	* gnu/packages/version-control.scm (subversion): Add
+	  'install-perl-bindings' phase.
+
+	gnu: Add SWIG.
+	* gnu/packages/swig.scm: New file.
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add it.
+
+	gnu: libmicrohttpd: Update to 0.9.30.
+	* gnu/packages/gnunet.scm (libmicrohttpd): Update to 0.9.30.
+
+	gnu: flex: Use Bison 2.7 for tests.
+	* gnu/packages/bison.scm (bison): Move FLEX to 'inputs', and remove the
+	  hack that turned off its test suite.
+	* gnu/packages/flex.scm (flex): Add 'bison-for-tests' in 'inputs', and
+	  use that to run the tests.
+
+	Update 'pt_BR.po'.
+
+2013-09-28  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: Add Skribilo.
+	* gnu/packages/skribilo.scm (skribilo): New variable.
+	* gnu-system.am (GNU_SYSTEM_MODULES): Add it.
+
+	gnu: Add Guile-Cairo.
+	* gnu/packages/gtk.scm (guile-cairo): New variable.
+
+	gnu: xorriso: Update to 1.3.2.
+	* gnu/packages/cdrom.scm (xorriso): Update to 1.3.2.
+
+	gnu: lightning: Update to 2.0.1.
+	* gnu/packages/lightning.scm (lightning): Update to 2.0.1.
+
+	gnu: freeipmi: Update to 1.3.2.
+	* gnu/packages/freeipmi.scm (freeipmi): Update to 1.3.2.
+
+	gnu: gdb: Update to 7.6.1.
+	* gnu/packages/gdb.scm (gdb): Update to 7.6.1.
+
 2013-09-27  Ludovic Courtès  <ludo@gnu.org>
+
+	gnu: bison: Update to 3.0.
+	* gnu/packages/bison.scm (bison): Update to 3.0.  Make Perl a native
+	  input.  Add a variant of Flex as a native input.  Use #:export instead
+	  of 'define-public'.
+	* gnu/packages/flex.scm (flex): Use #:export instead of 'define-public'.
+
+	gnu: units: Update to 2.02.
+	* gnu/packages/maths.scm (units): Update to 2.02.
+
+	gnu: texinfo: Update to 5.2.
+	* gnu/packages/texinfo.scm (texinfo): Update to 5.2.
+
+	gnu: global: Update to 6.2.9.
+	* gnu/packages/global.scm (global): Update to 6.2.9.
+
+	build: Bump version to 0.5.
+	* configure.ac: Switch to 0.5.
+
+	gnu: guix: Update to 0.4.
+	* gnu/packages/package-management.scm (guix): Update to 0.4.
+	  (guix-0.4): Remove.
+	* gnu/system/vm.scm (qemu-image, system-qemu-image): Use GUIX instead of
+	  GUIX-0.4.
+
+	gnu: vm: Remove erroneous store reference.
+	* gnu/system/vm.scm (system-qemu-image): Remove reference from BOOT to
+	  MINGETTY since MINGETTY may not be valid yet.
 
 	Update '.po' files.
 

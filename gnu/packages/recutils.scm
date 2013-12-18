@@ -24,32 +24,37 @@
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages emacs)
   #:use-module (gnu packages check)
-  #:use-module (gnu packages algebra))
+  #:use-module (gnu packages algebra)
+  #:use-module (gnu packages curl)
+  #:use-module (gnu packages gnupg))
 
 (define-public recutils
   (package
    (name "recutils")
-   (version "1.5")
+   (version "1.6")
    (source (origin
             (method url-fetch)
             (uri (string-append "mirror://gnu/recutils/recutils-"
                                 version ".tar.gz"))
             (sha256
              (base32
-              "1v2xzwwwhc5j5kmvg4sv6baxjpsfqh8ln7ilv4mgb1408rs7xmky"))))
+              "0dxmz73n4qaasqymx97nlw6in98r6lnsfp0586hwkn95d3ll306s"))))
    (build-system gnu-build-system)
-   (inputs `(;; TODO: Enable optional deps when they're packaged.
-             ;; ("curl" ,(nixpkgs-derivation "curl"))
-             ("emacs" ,emacs)
-             ("check" ,check)
-             ("bc" ,bc)
-             ("patch/gets"
-              ,(search-patch "diffutils-gets-undeclared.patch"))))
-   (arguments `(#:patches (list (assoc-ref %build-inputs "patch/gets"))))
+   (native-inputs `(("emacs" ,emacs)
+                    ("bc" ,bc)))
+
+   ;; TODO: Add more optional inputs.
+   ;; FIXME: Our Bash doesn't have development headers (need for the 'readrec'
+   ;; built-in command), but it's not clear how to get them installed.
+   (inputs `(("curl" ,curl)
+             ("libgcrypt" ,libgcrypt)
+             ("check" ,check)))
    (synopsis "Manipulate plain text files as databases")
    (description
-    "GNU recutils is a set of tools and libraries to access human-editable,
-text-based databases called recfiles.  The data is stored as a sequence of
-records, each record containing an arbitrary number of named fields.")
+    "GNU Recutils is a set of tools and libraries for creating and
+manipulating text-based, human-editable databases.  Despite being text-based,
+databases created with Recutils carry all of the expected features such as
+unique fields, primary keys, time stamps and more. Many different field types
+are supported, as is encryption.")
    (license gpl3+)
    (home-page "http://www.gnu.org/software/recutils/")))

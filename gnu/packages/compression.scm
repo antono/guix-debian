@@ -1,5 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -21,7 +22,8 @@
                 #:renamer (symbol-prefix-proc 'license:))
   #:use-module (guix packages)
   #:use-module (guix download)
-  #:use-module (guix build-system gnu))
+  #:use-module (guix build-system gnu)
+  #:use-module (gnu packages which))
 
 (define-public zlib
   (package
@@ -42,12 +44,17 @@
      `(#:phases (alist-replace
                  'configure
                  (lambda* (#:key outputs #:allow-other-keys)
-                   ;; Zlib's home-made `configure' doesn't fails when passed
+                   ;; Zlib's home-made `configure' fails when passed
                    ;; extra flags like `--enable-fast-install', so we need to
                    ;; invoke it with just what it understand.
                    (let ((out (assoc-ref outputs "out")))
-                     (zero? (system* "./configure"
-                                     (string-append "--prefix=" out)))))
+                     ;; 'configure' doesn't understand '--host'.
+                     ,@(if (%current-target-system)
+                           `((setenv "CHOST" ,(%current-target-system)))
+                           '())
+                     (zero?
+                      (system* "./configure"
+                               (string-append "--prefix=" out)))))
                  %standard-phases)))
     (home-page "http://zlib.net/")
     (synopsis "The zlib compression library")
@@ -80,13 +87,10 @@ in compression.")
     ;; FIXME: The test suite wants `less', and optionally Perl.
     '(#:tests? #f))
    (description
-    "gzip (GNU zip) is a popular data compression program written by Jean-loup
-Gailly for the GNU project.  Mark Adler wrote the decompression part.
-
-We developed this program as a replacement for compress because of the Unisys
-and IBM patents covering the LZW algorithm used by compress.  These patents
-made it impossible for us to use compress, and we needed a replacement.  The
-superior compression ratio of gzip is just a bonus.")
+    "GNU Gzip provides data compression and decompression utilities; the
+typical extension is \".gz\".  Unlike the \"zip\" format, it compresses a single
+file; as a result, it is often used in conjunction with \"tar\", resulting in
+\".tar.gz\" or \".tgz\", etc.")
    (license license:gpl3+)
    (home-page "http://www.gnu.org/software/gzip/")))
 
@@ -112,7 +116,19 @@ superior compression ratio of gzip is just a bonus.")
                                     base libdir)
                             (copy-file file
                                        (string-append libdir "/" base))))
-                        (find-files "." "^libbz2\\.so"))))))
+                        (find-files "." "^libbz2\\.so")))))
+        (set-cross-environment
+         '(lambda* (#:key target #:allow-other-keys)
+            (substitute* (find-files "." "Makefile")
+              (("CC=.*$")
+               (string-append "CC = " target "-gcc\n"))
+              (("AR=.*$")
+               (string-append "AR = " target "-ar\n"))
+              (("RANLIB=.*$")
+               (string-append "RANLIB = " target "-ranlib\n"))
+              (("^all:(.*)test" _ prerequisites)
+               ;; Remove 'all' -> 'test' dependency.
+               (string-append "all:" prerequisites "\n"))))))
     (package
       (name "bzip2")
       (version "1.0.6")
@@ -129,15 +145,34 @@ superior compression ratio of gzip is just a bonus.")
                     (guix build utils)
                     (srfi srfi-1))
          #:phases
-         (alist-cons-before
-          'build 'build-shared-lib ,build-shared-lib
-          (alist-cons-after
-           'install 'fix-man-dir ,fix-man-dir
-           (alist-cons-after
-            'install 'install-shared-lib ,install-shared-lib
-            (alist-delete 'configure %standard-phases))))
+         ,(if (%current-target-system)
+
+              ;; Cross-compilation: use the cross tools.
+              `(alist-cons-before
+                'build 'build-shared-lib ,build-shared-lib
+                (alist-cons-after
+                 'install 'fix-man-dir ,fix-man-dir
+                 (alist-cons-after
+                  'install 'install-shared-lib ,install-shared-lib
+                  (alist-replace 'configure ,set-cross-environment
+                                 %standard-phases))))
+
+              ;; Native compilation: build the shared library.
+              `(alist-cons-before
+                'build 'build-shared-lib ,build-shared-lib
+                (alist-cons-after
+                 'install 'fix-man-dir ,fix-man-dir
+                 (alist-cons-after
+                  'install 'install-shared-lib ,install-shared-lib
+                  (alist-delete 'configure %standard-phases)))))
+
          #:make-flags (list (string-append "PREFIX="
-                                           (assoc-ref %outputs "out")))))
+                                           (assoc-ref %outputs "out")))
+
+         ;; Don't attempt to run the tests when cross-compiling.
+         ,@(if (%current-target-system)
+               '(#:tests? #f)
+               '())))
       (synopsis "high-quality data compression program")
       (description
        "bzip2 is a freely available, patent free (see below), high-quality data
@@ -205,14 +240,14 @@ format are designed to be portable across platforms.")
 (define-public lzip
   (package
     (name "lzip")
-    (version "1.14")
+    (version "1.15")
     (source (origin
              (method url-fetch)
              (uri (string-append "mirror://savannah/lzip/lzip-"
                                  version ".tar.gz"))
              (sha256
               (base32
-               "1rybhk2pxpfh2789ck9mrkdv3bpx7b7miwndlshb5vb02m9crxbz"))))
+               "1dh5vmj5apizfawnsm50y7z064yx7cz3313przph16gwd3dgrlvw"))))
     (build-system gnu-build-system)
     (home-page "http://www.nongnu.org/lzip/lzip.html")
     (synopsis "Lossless data compressor based on the LZMA algorithm")
@@ -221,4 +256,38 @@ format are designed to be portable across platforms.")
 one of gzip or bzip2.  Lzip decompresses almost as fast as gzip and compresses
 more than bzip2, which makes it well suited for software distribution and data
 archiving.  Lzip is a clean implementation of the LZMA algorithm.")
+    (license license:gpl3+)))
+
+(define-public sharutils
+  (package
+    (name "sharutils")
+    (version "4.14")
+    (source
+     (origin
+      (method url-fetch)
+      (uri (string-append "mirror://gnu/sharutils/sharutils-"
+                          version ".tar.xz"))
+      (sha256
+       (base32
+        "033sq1v0cp0bi1mp320xaqwd4fhakqc5747hh6qa1asjrzpqiqza"))))
+    (build-system gnu-build-system)
+    (inputs
+     `(("which" ,which)))
+    (arguments
+     `(#:phases
+        (alist-cons-after
+         'patch-source-shebangs 'unpatch-source-shebang
+         ;; revert the patch-shebang phase on a script which is
+         ;; in fact test data
+         (lambda* (#:key #:allow-other-keys)
+           (substitute* "tests/shar-1.ok"
+             (((which "sh")) "/bin/sh")))
+         %standard-phases)))
+    (home-page "http://www.gnu.org/software/sharutils/")
+    (synopsis "Archives in shell scripts, uuencode/uudecode")
+    (description
+     "GNU sharutils is a package for creating and manipulating shell
+archives that can be readily emailed.  A shell archive is a file that can be
+processed by a Bourne-type shell to unpack the original collection of files. 
+This package is mostly for compatibility and historical interest.")
     (license license:gpl3+)))

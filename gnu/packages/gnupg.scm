@@ -71,11 +71,10 @@ Daemon and possibly more in the future.")
     (home-page "http://gnupg.org/")
     (synopsis "Cryptographic function library")
     (description
-     "GNU Libgcrypt is a general purpose cryptographic library based on
-the code from GnuPG.  It provides functions for all
-cryptographic building blocks: symmetric ciphers, hash
-algorithms, MACs, public key algorithms, large integer
-functions, random numbers and a lot of supporting functions.")
+     "Libgcrypt is a general-purpose cryptographic library.  It provides the
+standard cryptographic building blocks such as symmetric ciphers, hash
+algorithms, public key algorithms, large integer functions and random number
+generation.")
     (license lgpl2.0+)))
 
 (define-public libassuan
@@ -131,7 +130,7 @@ specifications are building blocks of S/MIME and TLS.")
 (define-public gnupg
   (package
     (name "gnupg")
-    (version "2.0.21")
+    (version "2.0.22")
     (source
      (origin
       (method url-fetch)
@@ -139,7 +138,7 @@ specifications are building blocks of S/MIME and TLS.")
                           ".tar.bz2"))
       (sha256
        (base32
-        "1xgf1q1phdawk6y66haaqcvfnlsqk12jmjin1m2d5x6fqw18kpq0"))))
+        "0lg210acj2rxq291q4cwamg9gx6gh2prb1xa93y5jhw5b6r0lza3"))))
     (build-system gnu-build-system)
     (inputs
      `(("bzip2" ,guix:bzip2)
@@ -165,16 +164,44 @@ specifications are building blocks of S/MIME and TLS.")
     (home-page "http://gnupg.org/")
     (synopsis "GNU Privacy Guard")
     (description
-     "GnuPG is the GNU project's complete and free implementation of
-the OpenPGP standard as defined by RFC4880.  GnuPG allows to
-encrypt and sign your data and communication, features a
-versatile key managment system as well as access modules for all
-kind of public key directories.  GnuPG, also known as GPG, is a
-command line tool with features for easy integration with other
-applications.  A wealth of frontend applications and libraries
-are available.  Version 2 of GnuPG also provides support for
-S/MIME.")
+     "The GNU Privacy Guard is a complete implementation of the OpenPGP
+standard.  It is used to encrypt and sign data and communication.  It
+features powerful key management and the ability to access public key
+servers.  It includes several libraries: libassuan (IPC between GnuPG
+components), libgpg-error (centralized GnuPG error values), and libskba
+(working with X.509 certificates and CMS data).")
     (license gpl3+)))
+
+(define-public gpgme
+  (package
+    (name "gpgme")
+    (version "1.4.3")
+    (source
+     (origin
+      (method url-fetch)
+      (uri (string-append "mirror://gnupg/gpgme/gpgme-" version
+                          ".tar.bz2"))
+      (sha256
+       (base32
+        "15h429h6pd67iiv580bjmwbkadpxsdppw0xrqpcm4dvm24jc271d"))))
+    (build-system gnu-build-system)
+    (inputs
+     `(("gnupg" ,gnupg)
+       ("libassuan" ,libassuan)
+       ("libgpg-error" ,libgpg-error)))
+    (home-page "http://www.gnupg.org/related_software/gpgme/")
+    (synopsis "library providing simplified access to GnuPG functionality")
+    (description
+     "GnuPG Made Easy (GPGME) is a library designed to make access to GnuPG
+easier for applications.  It provides a High-Level Crypto API for encryption,
+decryption, signing, signature verification and key management.  Currently
+it uses GnuPG as its backend but the API isn't restricted to this engine.
+
+Because the direct use of GnuPG from an application can be a complicated
+programming task, it is suggested that all software should try to use GPGME
+instead.  This way bug fixes or improvements can be done at a central place
+and every application benefits from this.")
+    (license lgpl2.1+)))
 
 (define-public pius
   (package

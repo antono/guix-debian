@@ -27,23 +27,16 @@ nodist_noinst_SCRIPTS =				\
 include gnu-system.am
 
 MODULES =					\
-  guix/scripts/build.scm			\
-  guix/scripts/download.scm			\
-  guix/scripts/import.scm			\
-  guix/scripts/package.scm			\
-  guix/scripts/gc.scm				\
-  guix/scripts/hash.scm				\
-  guix/scripts/pull.scm				\
-  guix/scripts/substitute-binary.scm		\
-  guix/scripts/refresh.scm			\
   guix/base32.scm				\
   guix/records.scm				\
   guix/hash.scm					\
   guix/utils.scm				\
+  guix/download.scm				\
+  guix/monads.scm				\
+  guix/profiles.scm				\
   guix/serialization.scm			\
   guix/nar.scm					\
   guix/derivations.scm				\
-  guix/download.scm				\
   guix/gnu-maintenance.scm			\
   guix/licenses.scm				\
   guix/build-system.scm				\
@@ -69,12 +62,22 @@ MODULES =					\
   guix/build/rpath.scm				\
   guix/packages.scm				\
   guix/snix.scm					\
+  guix/scripts/download.scm			\
+  guix/scripts/build.scm			\
+  guix/scripts/import.scm			\
+  guix/scripts/package.scm			\
+  guix/scripts/gc.scm				\
+  guix/scripts/hash.scm				\
+  guix/scripts/pull.scm				\
+  guix/scripts/substitute-binary.scm		\
+  guix/scripts/refresh.scm			\
   guix.scm					\
   $(GNU_SYSTEM_MODULES)
 
 # Because of the autoload hack in (guix build download), we must build it
 # first to avoid errors on systems where (gnutls) is unavailable.
 guix/scripts/download.go: guix/build/download.go
+guix/download.go: guix/build/download.go
 
 
 GOBJECTS = $(MODULES:%.scm=%.go) guix/config.go
@@ -94,6 +97,10 @@ srfi/srfi-37.scm: srfi/srfi-37.scm.in
 
 endif INSTALL_SRFI_37
 
+# Handy way to remove the .go files without removing all the rest.
+clean-go:
+	-$(RM) -f $(GOBJECTS)
+
 
 SCM_TESTS =					\
   tests/base32.scm				\
@@ -107,8 +114,10 @@ SCM_TESTS =					\
   tests/packages.scm				\
   tests/snix.scm				\
   tests/store.scm				\
+  tests/monads.scm				\
   tests/nar.scm					\
-  tests/union.scm
+  tests/union.scm				\
+  tests/profiles.scm
 
 SH_TESTS =					\
   tests/guix-build.sh				\
@@ -154,7 +163,7 @@ EXTRA_DIST =					\
   build-aux/check-available-binaries.scm	\
   build-aux/download.scm			\
   build-aux/list-packages.scm			\
-  build-aux/sync-synopses.scm			\
+  build-aux/sync-descriptions.scm		\
   srfi/srfi-37.scm.in				\
   srfi/srfi-64.scm				\
   srfi/srfi-64.upstream.scm			\
@@ -209,12 +218,12 @@ AM_DISTCHECK_CONFIGURE_FLAGS =			\
   --with-nix-prefix="$(NIX_PREFIX)"		\
   --enable-daemon
 
-dist-hook: sync-synopses gen-ChangeLog assert-no-store-file-names
+dist-hook: sync-descriptions gen-ChangeLog assert-no-store-file-names
 distcheck-hook: assert-binaries-available
 
-sync-synopses:
+sync-descriptions:
 	-$(top_builddir)/pre-inst-env $(GUILE)		\
-	   $(top_srcdir)/build-aux/sync-synopses.scm
+	   $(top_srcdir)/build-aux/sync-descriptions.scm
 
 gen-ChangeLog:
 	if test -d .git; then				\
@@ -238,5 +247,5 @@ assert-binaries-available:
 	$(top_builddir)/pre-inst-env "$(GUILE)"				\
 	  "$(top_srcdir)/build-aux/check-available-binaries.scm"
 
-.PHONY: sync-synopses gen-ChangeLog
+.PHONY: sync-descriptions gen-ChangeLog clean-go
 .PHONY: assert-no-store-file-names assert-binaries-available

@@ -26,10 +26,10 @@
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system python)
   #:use-module (guix build utils)
-  #:use-module ((gnu packages gettext)
-                #:renamer (symbol-prefix-proc 'guix:))
+  #:use-module (gnu packages gettext)
   #:use-module (gnu packages apr)
   #:use-module (gnu packages curl)
+  #:use-module (gnu packages ed)
   #:use-module (gnu packages nano)
   #:use-module (gnu packages openssl)
   #:use-module (gnu packages perl)
@@ -38,7 +38,9 @@
   #:use-module (gnu packages system)
   #:use-module (gnu packages xml)
   #:use-module (gnu packages emacs)
-  #:use-module (gnu packages compression))
+  #:use-module (gnu packages compression)
+  #:use-module (gnu packages swig)
+  #:use-module (gnu packages tcl))
 
 (define-public bazaar
   (package
@@ -56,18 +58,17 @@
     (inputs
      ;; Note: 'tools/packaging/lp-upload-release' and 'tools/weavemerge.sh'
      ;; require Zsh.
-     `(("gettext" ,guix:gettext)))
+     `(("gettext" ,gnu-gettext)))
     (arguments
      `(#:tests? #f ; no test target
        #:python ,python-2)) ; Python 3 apparently not yet supported, see
                             ; https://answers.launchpad.net/bzr/+question/229048
     (home-page "https://gnu.org/software/bazaar")
-    (synopsis "Decentralized revision control system")
+    (synopsis "Version control system supporting both distributed and centralized workflows")
     (description
-     "GNU Bazaar is a distributed version control system, which supports both
-central version control and distributed version control.  Developers can
-organize their workspace in whichever way they want.  It is possible to work
-from a command line or use a GUI application.")
+     "GNU Bazaar is a version control system that allows you to record
+changes to project files over time. It supports both a distributed workflow
+as well as the classic centralized workflow.")
     (license gpl2+)))
 
 (define-public git
@@ -85,15 +86,32 @@ from a command line or use a GUI application.")
    (inputs
     `(("curl" ,curl)
       ("expat" ,expat)
-      ("gettext" ,guix:gettext)
+      ("gettext" ,gnu-gettext)
       ("openssl" ,openssl)
       ("perl" ,perl)
       ("python" ,python-2) ; CAVEAT: incompatible with python-3 according to INSTALL
-      ("zlib" ,zlib)))
+      ("zlib" ,zlib)
+
+      ;; For 'git-svn'.
+      ("subversion" ,subversion)
+
+      ;; For 'git gui', 'gitk', and 'git citool'.
+      ("tcl" ,tcl)
+      ("tk" ,tk)))
+   (outputs '("out"                               ; the core
+              "svn"                               ; git-svn
+              "gui"))                             ; gitk, git gui
    (arguments
     `(#:make-flags `("V=1") ; more verbose compilation
       #:test-target "test"
       #:tests? #f ; FIXME: Many tests are failing
+
+      ;; The explicit --with-tcltk forces the build system to hardcode the
+      ;; absolute file name to 'wish'.
+      #:configure-flags (list (string-append "--with-tcltk="
+                                             (assoc-ref %build-inputs "tk")
+                                             "/bin/wish8.6")) ; XXX
+
       #:phases
        (alist-replace
         'configure
@@ -104,13 +122,89 @@ from a command line or use a GUI application.")
                    (("/bin/sh") (which "sh"))
                    (("/usr/bin/perl") (which "perl"))
                    (("/usr/bin/python") (which "python"))))))
-         %standard-phases)))
+        (alist-cons-after
+         'install 'split
+         (lambda* (#:key inputs outputs #:allow-other-keys)
+           ;; Split the binaries to the various outputs.
+           (let* ((out      (assoc-ref outputs "out"))
+                  (svn      (assoc-ref outputs "svn"))
+                  (gui      (assoc-ref outputs "gui"))
+                  (gitk     (string-append out "/bin/gitk"))
+                  (gitk*    (string-append gui "/bin/gitk"))
+                  (git-gui  (string-append out "/libexec/git-core/git-gui"))
+                  (git-gui* (string-append gui "/libexec/git-core/git-gui"))
+                  (git-cit  (string-append out "/libexec/git-core/git-citool"))
+                  (git-cit* (string-append gui "/libexec/git-core/git-citool"))
+                  (git-svn  (string-append out "/libexec/git-core/git-svn"))
+                  (git-svn* (string-append svn "/libexec/git-core/git-svn")))
+             (mkdir-p (string-append gui "/bin"))
+             (mkdir-p (string-append gui "/libexec/git-core"))
+             (mkdir-p (string-append svn "/libexec/git-core"))
+
+             (for-each (lambda (old new)
+                         (copy-file old new)
+                         (delete-file old)
+                         (chmod new #o555))
+                       (list gitk git-gui git-cit git-svn)
+                       (list gitk* git-gui* git-cit* git-svn*))
+
+             ;; Tell 'git-svn' where Subversion is.
+             (wrap-program git-svn*
+                           `("PATH" ":" prefix
+                             (,(string-append (assoc-ref inputs "subversion")
+                                              "/bin")))
+                           `("PERL5LIB" ":" prefix
+                             (,(string-append (assoc-ref inputs "subversion")
+                                              "/lib/perl5/site_perl")))
+
+                           ;; XXX: The .so for SVN/Core.pm lacks a RUNPATH, so
+                           ;; help it find 'libsvn_client-1.so'.
+                           `("LD_LIBRARY_PATH" ":" prefix
+                             (,(string-append (assoc-ref inputs "subversion")
+                                              "/lib"))))
+
+             ;; Tell 'git' to look for core programs in the user's profile.
+             ;; This allows user to install other outputs of this package and
+             ;; have them transparently taken into account.  There's a
+             ;; 'GIT_EXEC_PATH' environment variable, but it's supposed to
+             ;; specify a single directory, not a search path.
+             (wrap-program (string-append out "/bin/git")
+                           `("PATH" ":" prefix
+                             ("$HOME/.guix-profile/libexec/git-core")))))
+         %standard-phases))))
    (synopsis "Distributed version control system")
    (description
     "Git is a free distributed version control system designed to handle
 everything from small to very large projects with speed and efficiency.")
    (license gpl2)
    (home-page "http://git-scm.com/")))
+
+(define-public mercurial
+  (package
+    (name "mercurial")
+    (version "2.7.1")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "http://mercurial.selenic.com/release/mercurial-"
+                                 version ".tar.gz"))
+             (sha256
+              (base32
+               "121m8f7vmipmdg00cnzdz2rjkgydh28mwfirqkrbs5fv089vywl4"))))
+    (build-system python-build-system)
+    (arguments
+     `(;; Restrict to Python 2, as Python 3 would require
+       ;; the argument --c2to3.
+       #:python ,python-2
+       ;; FIXME: Disabled tests because they require the nose unit
+       ;; testing framework: https://nose.readthedocs.org/en/latest/ .
+       #:tests? #f))
+    (home-page "http://mercurial.selenic.com")
+    (synopsis "Decentralized version control system")
+    (description
+     "Mercurial is a free, distributed source control management tool.
+It efficiently handles projects of any size
+and offers an easy and intuitive interface.")
+    (license gpl2+)))
 
 (define-public subversion
   (package
@@ -124,6 +218,30 @@ everything from small to very large projects with speed and efficiency.")
               (base32
                "11inl9n1riahfnbk1fax0dysm2swakzhzhpmm2zvga6fikcx90zw"))))
     (build-system gnu-build-system)
+    (arguments
+     '(#:phases (alist-cons-after
+                 'install 'instal-perl-bindings
+                 (lambda* (#:key outputs #:allow-other-keys)
+                   ;; Follow the instructions from
+                   ;; 'subversion/bindings/swig/INSTALL'.
+                   (let ((out (assoc-ref outputs "out")))
+                     (and (zero? (system* "make" "swig-pl-lib"))
+                          ;; FIXME: Test failures.
+                          ;; (zero? (system* "make" "check-swig-pl"))
+                          (zero? (system* "make" "install-swig-pl-lib"))
+
+                          ;; Set the right installation prefix.
+                          (with-directory-excursion
+                              "subversion/bindings/swig/perl/native"
+                            (and (zero?
+                                  (system* "perl" "Makefile.PL"
+                                           (string-append "PREFIX=" out)))
+                                 (zero?
+                                  (system* "make" "install")))))))
+                 %standard-phases)))
+    (native-inputs
+      ;; For the Perl bindings.
+      `(("swig" ,swig)))
     (inputs
       `(("apr" ,apr)
         ("apr-util" ,apr-util)
@@ -134,8 +252,8 @@ everything from small to very large projects with speed and efficiency.")
     (home-page "http://subversion.apache.org/")
     (synopsis "Subversion, a revision control system")
     (description
-     "Subversion exists to be universally recognized and adopted as an
-open-source, centralized version control system characterized by its
+     "Subversion exists to be universally recognized and adopted as a
+centralized version control system characterized by its
 reliability as a safe haven for valuable data; the simplicity of its model and
 usage; and its ability to support the needs of a wide variety of users and
 projects, from individuals to large-scale enterprise operations.")
@@ -144,23 +262,24 @@ projects, from individuals to large-scale enterprise operations.")
 (define-public rcs
   (package
     (name "rcs")
-    (version "5.9.0")
+    (version "5.9.2")
     (source (origin
              (method url-fetch)
              (uri (string-append "mirror://gnu/rcs/rcs-"
                                  version ".tar.xz"))
              (sha256
               (base32
-               "0w26vsx732dcmb5qfhlkkzvrk1sx6d74qibrn914n14j0ci90jcq"))))
+               "0wdmmplga9k05d9k7wjqv4zb6xvvzsli8hmn206pvangki1g66k5"))))
     (build-system gnu-build-system)
+    (native-inputs `(("ed" ,ed)))
     (home-page "http://www.gnu.org/software/rcs/")
     (synopsis "Per-file local revision control system")
     (description
-     "The GNU Revision Control System (RCS) manages multiple revisions of
-files. RCS automates the storing, retrieval, logging, identification, and
-merging of revisions.  RCS is useful for text that is revised frequently,
-including source code, programs, documentation, graphics, papers, and form
-letters.")
+     "RCS is the original Revision Control System.  It works on a
+file-by-file basis, in contrast to subsequent version control systems such as
+CVS, Subversion, and Git.  This can make it suitable for system
+administration files, for example, which are often inherently local to one
+machine.")
     (license gpl3+)))
 
 (define-public cvs
@@ -208,6 +327,10 @@ RCS, PRCS, and Aegis packages.")
     (home-page "http://www.gnu.org/software/vc-dwim/")
     (synopsis "Version-control-agnostic ChangeLog diff and commit tool")
     (description
-     "vc-dwim is a version-control-agnostic ChangeLog diff and commit
-tool. vc-chlog is a helper tool for writing GNU-style ChangeLog entries.")
+     "The vc-dwim package contains two tools, \"vc-dwim\" and \"vc-chlog\".
+vc-dwim is a tool that simplifies the task of maintaining a ChangeLog and
+using version control at the same time, for example by printing a reminder
+when a file change has been described in the ChangeLog but the file has not
+been added to the VC.  vc-chlog scans changed files and generates
+standards-compliant ChangeLog entries based on the changes that it detects.")
     (license gpl3+)))

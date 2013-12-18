@@ -65,6 +65,26 @@
    (string-append (%store-prefix)
                   "/foo/bar/283gqy39v3g9dxjy26rynl0zls82fmcg-guile-2.0.7")))
 
+(test-equal "store-path-package-name"
+  "guile-2.0.7"
+  (store-path-package-name
+   (string-append (%store-prefix)
+                  "/283gqy39v3g9dxjy26rynl0zls82fmcg-guile-2.0.7")))
+
+(test-equal "store-path-package-name #f"
+  #f
+  (store-path-package-name
+   "/foo/bar/283gqy39v3g9dxjy26rynl0zls82fmcg-guile-2.0.7"))
+
+(test-assert "direct-store-path?"
+  (and (direct-store-path?
+        (string-append (%store-prefix)
+                       "/283gqy39v3g9dxjy26rynl0zls82fmcg-guile-2.0.7"))
+       (not (direct-store-path?
+             (string-append
+              (%store-prefix)
+              "/283gqy39v3g9dxjy26rynl0zls82fmcg-guile-2.0.7/bin/guile")))))
+
 (test-skip (if %store 0 10))
 
 (test-assert "dead-paths"
@@ -140,6 +160,33 @@
          (equal? (valid-derivers %store o)
                  (list (derivation-file-name d))))))
 
+(test-assert "log-file, derivation"
+  (let* ((b (add-text-to-store %store "build" "echo $foo > $out" '()))
+         (s (add-to-store %store "bash" #t "sha256"
+                          (search-bootstrap-binary "bash"
+                                                   (%current-system))))
+         (d (derivation %store "the-thing"
+                        s `("-e" ,b)
+                        #:env-vars `(("foo" . ,(random-text)))
+                        #:inputs `((,b) (,s)))))
+    (and (build-derivations %store (list d))
+         (file-exists? (pk (log-file %store (derivation-file-name d)))))))
+
+(test-assert "log-file, output file name"
+  (let* ((b (add-text-to-store %store "build" "echo $foo > $out" '()))
+         (s (add-to-store %store "bash" #t "sha256"
+                          (search-bootstrap-binary "bash"
+                                                   (%current-system))))
+         (d (derivation %store "the-thing"
+                        s `("-e" ,b)
+                        #:env-vars `(("foo" . ,(random-text)))
+                        #:inputs `((,b) (,s))))
+         (o (derivation->output-path d)))
+    (and (build-derivations %store (list d))
+         (file-exists? (pk (log-file %store o)))
+         (string=? (log-file %store (derivation-file-name d))
+                   (log-file %store o)))))
+
 (test-assert "no substitutes"
   (let* ((s  (open-connection))
          (d1 (package-derivation s %bootstrap-guile (%current-system)))
@@ -200,12 +247,11 @@ Deriver: ~a~%"
   (let* ((s   (open-connection))
          (c   (random-text))                      ; contents of the output
          (d   (build-expression->derivation
-               s "substitute-me" (%current-system)
+               s "substitute-me"
                `(call-with-output-file %output
                   (lambda (p)
                     (exit 1)                      ; would actually fail
                     (display ,c p)))
-               '()
                #:guile-for-build
                (package-derivation s %bootstrap-guile (%current-system))))
          (o   (derivation->output-path d))
@@ -252,11 +298,10 @@ Deriver: ~a~%"
   (let* ((s   (open-connection))
          (t   (random-text))                      ; contents of the output
          (d   (build-expression->derivation
-               s "substitute-me-not" (%current-system)
+               s "substitute-me-not"
                `(call-with-output-file %output
                   (lambda (p)
                     (display ,t p)))
-               '()
                #:guile-for-build
                (package-derivation s %bootstrap-guile (%current-system))))
          (o   (derivation->output-path d))

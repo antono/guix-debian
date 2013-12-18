@@ -37,6 +37,13 @@
             origin-method
             origin-sha256
             origin-file-name
+            origin-patches
+            origin-patch-flags
+            origin-patch-inputs
+            origin-patch-guile
+            origin-snippet
+            origin-modules
+            origin-imported-modules
             base32
 
             <search-path-specification>
@@ -101,7 +108,22 @@
   (uri       origin-uri)                          ; string
   (method    origin-method)                       ; symbol
   (sha256    origin-sha256)                       ; bytevector
-  (file-name origin-file-name (default #f)))      ; optional file name
+  (file-name origin-file-name (default #f))       ; optional file name
+  (patches   origin-patches (default '()))        ; list of file names
+  (snippet   origin-snippet (default #f))         ; sexp or #f
+  (patch-flags  origin-patch-flags                ; list of strings
+                (default '("-p1")))
+
+  ;; Patching requires Guile, GNU Patch, and a few more.  These two fields are
+  ;; used to specify these dependencies when needed.
+  (patch-inputs origin-patch-inputs               ; input list or #f
+                (default #f))
+  (modules      origin-modules                    ; list of module names
+                (default '()))
+  (imported-modules origin-imported-modules       ; list of module names
+                    (default '()))
+  (patch-guile origin-patch-guile                 ; package or #f
+               (default #f)))
 
 (define-syntax base32
   (lambda (s)
@@ -202,24 +224,26 @@ corresponds to the arguments expected by `set-path-environment-variable'."
     (($ <location> file line column)
      (catch 'system
        (lambda ()
-         (call-with-input-file (search-path %load-path file)
-           (lambda (port)
-             (goto port line column)
-             (match (read port)
-               (('package inits ...)
-                (let ((field (assoc field inits)))
-                  (match field
-                    ((_ value)
-                     ;; Put the `or' here, and not in the first argument of
-                     ;; `and=>', to work around a compiler bug in 2.0.5.
-                     (or (and=> (source-properties value)
-                                source-properties->location)
-                         (and=> (source-properties field)
-                                source-properties->location)))
-                    (_
-                     #f))))
-               (_
-                #f)))))
+         ;; In general we want to keep relative file names for modules.
+         (with-fluids ((%file-port-name-canonicalization 'relative))
+           (call-with-input-file (search-path %load-path file)
+             (lambda (port)
+               (goto port line column)
+               (match (read port)
+                 (('package inits ...)
+                  (let ((field (assoc field inits)))
+                    (match field
+                      ((_ value)
+                       ;; Put the `or' here, and not in the first argument of
+                       ;; `and=>', to work around a compiler bug in 2.0.5.
+                       (or (and=> (source-properties value)
+                                  source-properties->location)
+                           (and=> (source-properties field)
+                                  source-properties->location)))
+                      (_
+                       #f))))
+                 (_
+                  #f))))))
        (lambda _
          #f)))
     (_ #f)))
@@ -243,14 +267,162 @@ corresponds to the arguments expected by `set-path-environment-variable'."
   "Return the full name of PACKAGE--i.e., `NAME-VERSION'."
   (string-append (package-name package) "-" (package-version package)))
 
+(define (%standard-patch-inputs)
+  (let ((ref (lambda (module var)
+               (module-ref (resolve-interface module) var))))
+    `(("tar"   ,(ref '(gnu packages base) 'tar))
+      ("xz"    ,(ref '(gnu packages compression) 'xz))
+      ("bzip2" ,(ref '(gnu packages compression) 'bzip2))
+      ("gzip"  ,(ref '(gnu packages compression) 'gzip))
+      ("lzip"  ,(ref '(gnu packages compression) 'lzip))
+      ("patch" ,(ref '(gnu packages base) 'patch)))))
+
+(define (default-guile)
+  "Return the default Guile package for SYSTEM."
+  (let ((distro (resolve-interface '(gnu packages base))))
+    (module-ref distro 'guile-final)))
+
+(define* (patch-and-repack store source patches
+                           #:key
+                           (inputs '())
+                           (snippet #f)
+                           (flags '("-p1"))
+                           (modules '())
+                           (imported-modules '())
+                           (guile-for-build (%guile-for-build))
+                           (system (%current-system)))
+  "Unpack SOURCE (a derivation or store path), apply all of PATCHES, and
+repack the tarball using the tools listed in INPUTS.  When SNIPPET is true,
+it must be an s-expression that will run from within the directory where
+SOURCE was unpacked, after all of PATCHES have been applied.  MODULES and
+IMPORTED-MODULES specify modules to use/import for use by SNIPPET."
+  (define source-file-name
+    ;; SOURCE is usually a derivation, but it could be a store file.
+    (if (derivation? source)
+        (derivation->output-path source)
+        source))
+
+  (define decompression-type
+    (cond ((string-suffix? "gz" source-file-name)  "gzip")
+          ((string-suffix? "bz2" source-file-name) "bzip2")
+          ((string-suffix? "lz" source-file-name)  "lzip")
+          (else "xz")))
+
+  (define original-file-name
+    ;; Remove the store prefix plus the slash, hash, and hyphen.
+    (let* ((sans (string-drop source-file-name
+                              (+ (string-length (%store-prefix)) 1)))
+           (dash (string-index sans #\-)))
+      (string-drop sans (+ 1 dash))))
+
+  (define patch-inputs
+    (map (lambda (number patch)
+           (list (string-append "patch" (number->string number))
+                 (add-to-store store (basename patch) #t
+                               "sha256" patch)))
+         (iota (length patches))
+
+         patches))
+
+  (define builder
+    `(begin
+       (use-modules (ice-9 ftw)
+                    (srfi srfi-1))
+
+       (let ((out     (assoc-ref %outputs "out"))
+             (xz      (assoc-ref %build-inputs "xz"))
+             (decomp  (assoc-ref %build-inputs ,decompression-type))
+             (source  (assoc-ref %build-inputs "source"))
+             (tar     (string-append (assoc-ref %build-inputs "tar")
+                                     "/bin/tar"))
+             (patch   (string-append (assoc-ref %build-inputs "patch")
+                                     "/bin/patch")))
+         (define (apply-patch input)
+           (let ((patch* (assoc-ref %build-inputs input)))
+             (format (current-error-port) "applying '~a'...~%" patch*)
+             (zero? (system* patch "--batch" ,@flags "--input" patch*))))
+
+         (setenv "PATH" (string-append xz "/bin" ":"
+                                       decomp "/bin"))
+         (and (zero? (system* tar "xvf" source))
+              (let ((directory (car (scandir "."
+                                             (lambda (name)
+                                               (not
+                                                (member name
+                                                        '("." ".."))))))))
+                (format (current-error-port)
+                        "source is under '~a'~%" directory)
+                (chdir directory)
+
+                (and (every apply-patch ',(map car patch-inputs))
+
+                     ,@(if snippet
+                           `((let ((module (make-fresh-user-module)))
+                               (module-use-interfaces! module
+                                                       (map resolve-interface
+                                                            ',modules))
+                               (module-define! module '%build-inputs
+                                               %build-inputs)
+                               (module-define! module '%outputs %outputs)
+                               ((@ (system base compile) compile)
+                                ',snippet
+                                #:to 'value
+                                #:opts %auto-compilation-options
+                                #:env module)))
+                           '())
+
+                     (begin (chdir "..") #t)
+                     (zero? (system* tar "cvfa" out directory))))))))
+
+
+  (let ((name   (string-append (file-sans-extension original-file-name)
+                               ".xz"))
+        (inputs (filter-map (match-lambda
+                             ((name (? package? p))
+                              (and (member name (cons decompression-type
+                                                      '("tar" "xz" "patch")))
+                                   (list name
+                                         (package-derivation store p
+                                                             system)))))
+                            (or inputs (%standard-patch-inputs)))))
+
+   (build-expression->derivation store name builder
+                                 #:inputs `(("source" ,source)
+                                            ,@inputs
+                                            ,@patch-inputs)
+                                 #:system system
+                                 #:modules imported-modules
+                                 #:guile-for-build guile-for-build)))
+
 (define* (package-source-derivation store source
                                     #:optional (system (%current-system)))
   "Return the derivation path for SOURCE, a package source, for SYSTEM."
   (match source
-    (($ <origin> uri method sha256 name)
+    (($ <origin> uri method sha256 name () #f)
+     ;; No patches, no snippet: this is a fixed-output derivation.
      (method store uri 'sha256 sha256 name
              #:system system))
-    ((and (? string?) (? store-path?) file)
+    (($ <origin> uri method sha256 name (patches ...) snippet
+        (flags ...) inputs (modules ...) (imported-modules ...)
+        guile-for-build)
+     ;; Patches and/or a snippet.
+     (let ((source (method store uri 'sha256 sha256 name
+                           #:system system))
+           (guile  (match (or guile-for-build (%guile-for-build)
+                              (default-guile))
+                     ((? package? p)
+                      (package-derivation store p system))
+                     ((? derivation? drv)
+                      drv))))
+       (patch-and-repack store source patches
+                         #:inputs inputs
+                         #:snippet snippet
+                         #:flags flags
+                         #:system system
+                         #:modules modules
+                         #:imported-modules modules
+                         #:guile-for-build guile)))
+    ((and (? string?) (? direct-store-path?) file)
      file)
     ((? string? file)
      (add-to-store store (basename file) #t "sha256" file))))

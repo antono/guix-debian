@@ -27,27 +27,23 @@
 (define-public freeipmi
   (package
     (name "freeipmi")
-    (version "1.2.8")
+    (version "1.3.3")
     (source (origin
              (method url-fetch)
              (uri (string-append "mirror://gnu/freeipmi/freeipmi-"
                                  version ".tar.gz"))
              (sha256
               (base32
-               "0aqbjlqv8nh5nnfx5icyvcvws87xnwqjqsfszjx0jqb539snrc58"))))
+               "0pmgr66k4cx0gdwzfby6643m15bb4q2yx2g5r2jr3qidrfyxhi3j"))))
     (build-system gnu-build-system)
     (inputs
      `(("readline" ,readline) ("libgcrypt" ,libgcrypt)))
     (home-page "http://www.gnu.org/software/freeipmi/")
     (synopsis "Platform management, including sensor and power monitoring")
     (description
-     "GNU FreeIPMI provides in-band and out-of-band IPMI software based on the
-IPMI v1.5/2.0 specification.  The IPMI specification defines a set of
-interfaces for platform management and is implemented by a number vendors for
-system management.  The features of IPMI that most users will be interested in
-are sensor monitoring, system event monitoring, power control, and
-serial-over-LAN (SOL).  The FreeIPMI tools and libraries listed below should
-provide users with the ability to access and utilize these and many other
-features.  A number of useful features for large HPC or cluster environments
-have also been implemented into FreeIPMI.")
+     "GNU FreeIPMI is a collection of in-band and out-of-band IPMI software
+in accordance with the IPMI v1.5/2.0 specification.  These programs provide a
+set of interfaces for platform management.  Common functionality includes
+sensor monitoring, system event monitoring, power control and
+serial-over-LAN.")
     (license gpl3+)))

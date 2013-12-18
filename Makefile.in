@@ -36,6 +36,7 @@
 # GNU Guix --- Functional package management for GNU
 # Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
 # Copyright © 2013 Andreas Enge <andreas@enge.fr>
+# Copyright © 2013 Mark H Weaver <mhw@netris.org>
 #
 # This file is part of GNU Guix.
 #
@@ -177,6 +178,7 @@ DIST_COMMON = $(srcdir)/gnu-system.am $(srcdir)/doc.am \
 	$(top_srcdir)/build-aux/mdate-sh $(srcdir)/doc/version.texi \
 	$(srcdir)/doc/stamp-vti $(top_srcdir)/build-aux/texinfo.tex \
 	$(dist_bootstrap_i686_linux_DATA) \
+	$(dist_bootstrap_mips64el_linux_DATA) \
 	$(dist_bootstrap_x86_64_linux_DATA) $(dist_infoimage_DATA) \
 	$(dist_patch_DATA) $(nobase_dist_guilemodule_DATA) \
 	$(am__noinst_HEADERS_DIST) $(top_srcdir)/build-aux/test-driver \
@@ -285,10 +287,12 @@ am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(libexecdir)" \
 	"$(DESTDIR)$(sbindir)" "$(DESTDIR)$(bindir)" \
 	"$(DESTDIR)$(pkglibexecdir)" "$(DESTDIR)$(infodir)" \
 	"$(DESTDIR)$(bootstrap_i686_linuxdir)" \
+	"$(DESTDIR)$(bootstrap_mips64el_linuxdir)" \
 	"$(DESTDIR)$(bootstrap_x86_64_linuxdir)" \
 	"$(DESTDIR)$(infoimagedir)" "$(DESTDIR)$(patchdir)" \
 	"$(DESTDIR)$(guilemoduledir)" "$(DESTDIR)$(guilemoduledir)" \
 	"$(DESTDIR)$(bootstrap_i686_linuxdir)" \
+	"$(DESTDIR)$(bootstrap_mips64el_linuxdir)" \
 	"$(DESTDIR)$(bootstrap_x86_64_linuxdir)"
 PROGRAMS = $(bin_PROGRAMS) $(libexec_PROGRAMS) $(sbin_PROGRAMS)
 am__guix_daemon_SOURCES_DIST = nix/nix-daemon/nix-daemon.cc \
@@ -437,10 +441,12 @@ am__can_run_installinfo = \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
 DATA = $(dist_bootstrap_i686_linux_DATA) \
+	$(dist_bootstrap_mips64el_linux_DATA) \
 	$(dist_bootstrap_x86_64_linux_DATA) $(dist_infoimage_DATA) \
 	$(dist_patch_DATA) $(nobase_dist_guilemodule_DATA) \
 	$(nobase_nodist_guilemodule_DATA) \
 	$(nodist_bootstrap_i686_linux_DATA) \
+	$(nodist_bootstrap_mips64el_linux_DATA) \
 	$(nodist_bootstrap_x86_64_linux_DATA)
 am__noinst_HEADERS_DIST = nix/boost/weak_ptr.hpp \
 	nix/boost/throw_exception.hpp nix/boost/checked_delete.hpp \
@@ -868,11 +874,14 @@ nodist_noinst_SCRIPTS = \
 
 GNU_SYSTEM_MODULES = \
   gnu/packages.scm				\
+  gnu/packages/acct.scm				\
   gnu/packages/acl.scm				\
   gnu/packages/algebra.scm			\
+  gnu/packages/apl.scm				\
   gnu/packages/apr.scm				\
   gnu/packages/aspell.scm			\
   gnu/packages/attr.scm				\
+  gnu/packages/autogen.scm			\
   gnu/packages/autotools.scm			\
   gnu/packages/avahi.scm			\
   gnu/packages/base.scm				\
@@ -886,6 +895,7 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/check.scm			\
   gnu/packages/cmake.scm			\
   gnu/packages/compression.scm			\
+  gnu/packages/complexity.scm			\
   gnu/packages/cpio.scm				\
   gnu/packages/cppi.scm				\
   gnu/packages/cross-base.scm			\
@@ -913,12 +923,15 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/gettext.scm			\
   gnu/packages/ghostscript.scm			\
   gnu/packages/gkrellm.scm			\
+  gnu/packages/gl.scm				\
   gnu/packages/glib.scm				\
   gnu/packages/global.scm			\
   gnu/packages/gnome.scm			\
   gnu/packages/gnunet.scm			\
   gnu/packages/gnupg.scm			\
   gnu/packages/gnutls.scm			\
+  gnu/packages/gnuzilla.scm			\
+  gnu/packages/gnu-pw-mgr.scm			\
   gnu/packages/gperf.scm			\
   gnu/packages/gprolog.scm			\
   gnu/packages/graphviz.scm			\
@@ -929,6 +942,7 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/gstreamer.scm			\
   gnu/packages/gtk.scm				\
   gnu/packages/guile.scm			\
+  gnu/packages/guile-wm.scm			\
   gnu/packages/gv.scm				\
   gnu/packages/help2man.scm			\
   gnu/packages/hugs.scm				\
@@ -937,9 +951,11 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/imagemagick.scm			\
   gnu/packages/indent.scm			\
   gnu/packages/irssi.scm			\
+  gnu/packages/kde.scm				\
   gnu/packages/ld-wrapper.scm			\
   gnu/packages/less.scm				\
   gnu/packages/lesstif.scm			\
+  gnu/packages/libcanberra.scm			\
   gnu/packages/libdaemon.scm			\
   gnu/packages/libevent.scm			\
   gnu/packages/libffi.scm			\
@@ -967,6 +983,7 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/mit-krb5.scm			\
   gnu/packages/mp3.scm				\
   gnu/packages/multiprecision.scm		\
+  gnu/packages/mtools.scm			\
   gnu/packages/mysql.scm			\
   gnu/packages/nano.scm				\
   gnu/packages/ncurses.scm			\
@@ -979,18 +996,23 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/openldap.scm			\
   gnu/packages/openssl.scm			\
   gnu/packages/package-management.scm		\
+  gnu/packages/parallel.scm			\
   gnu/packages/parted.scm			\
   gnu/packages/patchelf.scm			\
   gnu/packages/pcre.scm				\
   gnu/packages/pdf.scm				\
+  gnu/packages/pem.scm				\
   gnu/packages/perl.scm				\
   gnu/packages/pkg-config.scm			\
   gnu/packages/plotutils.scm			\
   gnu/packages/popt.scm				\
   gnu/packages/pth.scm				\
+  gnu/packages/pulseaudio.scm			\
   gnu/packages/python.scm			\
   gnu/packages/qemu.scm				\
+  gnu/packages/qt.scm				\
   gnu/packages/ratpoison.scm			\
+  gnu/packages/rdf.scm				\
   gnu/packages/readline.scm			\
   gnu/packages/recutils.scm			\
   gnu/packages/rsync.scm			\
@@ -998,10 +1020,15 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/samba.scm			\
   gnu/packages/scheme.scm			\
   gnu/packages/screen.scm			\
+  gnu/packages/sdl.scm				\
+  gnu/packages/serveez.scm			\
   gnu/packages/shishi.scm			\
+  gnu/packages/skribilo.scm			\
+  gnu/packages/slim.scm				\
   gnu/packages/smalltalk.scm			\
   gnu/packages/sqlite.scm			\
   gnu/packages/ssh.scm				\
+  gnu/packages/swig.scm				\
   gnu/packages/system.scm			\
   gnu/packages/tcl.scm				\
   gnu/packages/tcsh.scm				\
@@ -1013,10 +1040,12 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/unrtf.scm			\
   gnu/packages/valgrind.scm			\
   gnu/packages/version-control.scm		\
+  gnu/packages/video.scm			\
   gnu/packages/vim.scm				\
   gnu/packages/vpn.scm				\
   gnu/packages/w3m.scm				\
   gnu/packages/wdiff.scm			\
+  gnu/packages/web.scm                          \
   gnu/packages/wget.scm				\
   gnu/packages/which.scm			\
   gnu/packages/wordnet.scm			\
@@ -1028,6 +1057,7 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/zile.scm				\
   gnu/packages/zip.scm				\
 						\
+  gnu/system.scm				\
   gnu/system/dmd.scm				\
   gnu/system/grub.scm				\
   gnu/system/linux.scm				\
@@ -1036,59 +1066,81 @@ GNU_SYSTEM_MODULES = \
 
 patchdir = $(guilemoduledir)/gnu/packages/patches
 dist_patch_DATA = \
+  gnu/packages/patches/alsa-lib-mips-atomic-fix.patch		\
   gnu/packages/patches/apr-skip-getservbyname-test.patch	\
   gnu/packages/patches/automake-skip-amhello-tests.patch	\
   gnu/packages/patches/avahi-localstatedir.patch		\
   gnu/packages/patches/bigloo-gc-shebangs.patch			\
   gnu/packages/patches/binutils-ld-new-dtags.patch		\
+  gnu/packages/patches/binutils-loongson-madd-fix.patch		\
+  gnu/packages/patches/binutils-loongson-workaround.patch	\
   gnu/packages/patches/cdparanoia-fpic.patch			\
   gnu/packages/patches/cmake-fix-tests.patch			\
   gnu/packages/patches/cpio-gets-undeclared.patch		\
   gnu/packages/patches/dbus-localstatedir.patch			\
   gnu/packages/patches/diffutils-gets-undeclared.patch		\
+  gnu/packages/patches/dmd-getpw.patch				\
   gnu/packages/patches/emacs-configure-sh.patch			\
+  gnu/packages/patches/ffmpeg-check.patch			\
   gnu/packages/patches/findutils-absolute-paths.patch		\
   gnu/packages/patches/flac-fix-memcmp-not-declared.patch	\
   gnu/packages/patches/flex-bison-tests.patch			\
   gnu/packages/patches/gawk-shell.patch				\
   gnu/packages/patches/gcc-cross-environment-variables.patch	\
+  gnu/packages/patches/gd-mips64-deplibs-fix.patch		\
+  gnu/packages/patches/gdb-loongson-madd-fix.patch		\
   gnu/packages/patches/glib-tests-desktop.patch			\
   gnu/packages/patches/glib-tests-homedir.patch			\
+  gnu/packages/patches/glib-tests-newnet.patch			\
   gnu/packages/patches/glib-tests-prlimit.patch			\
   gnu/packages/patches/glibc-bootstrap-system.patch		\
   gnu/packages/patches/glibc-ldd-x86_64.patch			\
-  gnu/packages/patches/glibc-no-ld-so-cache.patch		\
+  gnu/packages/patches/glibc-make-4.0.patch			\
   gnu/packages/patches/grub-gets-undeclared.patch		\
+  gnu/packages/patches/gstreamer-0.10-bison3.patch		\
+  gnu/packages/patches/gstreamer-0.10-silly-test.patch		\
   gnu/packages/patches/guile-1.8-cpp-4.5.patch			\
   gnu/packages/patches/guile-default-utf8.patch			\
   gnu/packages/patches/guile-linux-syscalls.patch		\
   gnu/packages/patches/guile-relocatable.patch			\
   gnu/packages/patches/hop-bigloo-4.0b.patch			\
   gnu/packages/patches/libevent-dns-tests.patch			\
+  gnu/packages/patches/libffi-mips-n32-fix.patch		\
+  gnu/packages/patches/liboop-mips64-deplibs-fix.patch		\
+  gnu/packages/patches/libmad-mips-newgcc.patch			\
+  gnu/packages/patches/libtheora-config-guess.patch		\
   gnu/packages/patches/libtool-skip-tests.patch			\
+  gnu/packages/patches/libtool-skip-tests-for-mips.patch	\
+  gnu/packages/patches/luit-posix.patch				\
   gnu/packages/patches/m4-gets-undeclared.patch			\
   gnu/packages/patches/m4-readlink-EINVAL.patch			\
   gnu/packages/patches/make-impure-dirs.patch			\
   gnu/packages/patches/mcron-install.patch			\
+  gnu/packages/patches/mit-krb5-init-fix.patch			\
   gnu/packages/patches/perl-no-sys-dirs.patch			\
   gnu/packages/patches/plotutils-libpng-jmpbuf.patch		\
   gnu/packages/patches/procps-make-3.82.patch			\
+  gnu/packages/patches/pspp-tests.patch				\
+  gnu/packages/patches/pulseaudio-test-timeouts.patch		\
   gnu/packages/patches/python-fix-dbm.patch			\
+  gnu/packages/patches/qemu-make-4.0.patch			\
   gnu/packages/patches/qemu-multiple-smb-shares.patch		\
+  gnu/packages/patches/qt4-tests.patch				\
   gnu/packages/patches/readline-link-ncurses.patch		\
   gnu/packages/patches/ripperx-libm.patch			\
   gnu/packages/patches/scheme48-tests.patch			\
-  gnu/packages/patches/tar-gets-undeclared.patch		\
   gnu/packages/patches/tcsh-fix-autotest.patch			\
   gnu/packages/patches/teckit-cstdio.patch			\
   gnu/packages/patches/valgrind-glibc.patch			\
   gnu/packages/patches/vpnc-script.patch			\
   gnu/packages/patches/w3m-fix-compile.patch			\
+  gnu/packages/patches/xmodmap-asprintf.patch			\
   gnu/packages/patches/xpdf-constchar.patch
 
 bootstrapdir = $(guilemoduledir)/gnu/packages/bootstrap
 bootstrap_x86_64_linuxdir = $(bootstrapdir)/x86_64-linux
 bootstrap_i686_linuxdir = $(bootstrapdir)/i686-linux
+bootstrap_mips64el_linuxdir = $(bootstrapdir)/mips64el-linux
 dist_bootstrap_x86_64_linux_DATA = \
   gnu/packages/bootstrap/x86_64-linux/bash	\
   gnu/packages/bootstrap/x86_64-linux/mkdir	\
@@ -1101,18 +1153,28 @@ dist_bootstrap_i686_linux_DATA = \
   gnu/packages/bootstrap/i686-linux/tar		\
   gnu/packages/bootstrap/i686-linux/xz
 
+dist_bootstrap_mips64el_linux_DATA = \
+  gnu/packages/bootstrap/mips64el-linux/bash	\
+  gnu/packages/bootstrap/mips64el-linux/mkdir	\
+  gnu/packages/bootstrap/mips64el-linux/tar	\
+  gnu/packages/bootstrap/mips64el-linux/xz
+
 
 # Big bootstrap binaries are not included in the tarball.  Instead, they
 # are downloaded.
 nodist_bootstrap_x86_64_linux_DATA = \
-  gnu/packages/bootstrap/x86_64-linux/guile-2.0.7.tar.xz
+  gnu/packages/bootstrap/x86_64-linux/guile-2.0.9.tar.xz
 
 nodist_bootstrap_i686_linux_DATA = \
-  gnu/packages/bootstrap/i686-linux/guile-2.0.7.tar.xz
+  gnu/packages/bootstrap/i686-linux/guile-2.0.9.tar.xz
+
+nodist_bootstrap_mips64el_linux_DATA = \
+  gnu/packages/bootstrap/mips64el-linux/guile-2.0.9.tar.xz
 
 DISTCLEANFILES = \
   $(nodist_bootstrap_x86_64_linux_DATA)		\
-  $(nodist_bootstrap_i686_linux_DATA)
+  $(nodist_bootstrap_i686_linux_DATA)		\
+  $(nodist_bootstrap_mips64el_linux_DATA)
 
 
 # Method to download a file from an external source.
@@ -1122,23 +1184,16 @@ DOWNLOAD_FILE = \
            "$(top_srcdir)/build-aux/download.scm"
 
 MODULES = \
-  guix/scripts/build.scm			\
-  guix/scripts/download.scm			\
-  guix/scripts/import.scm			\
-  guix/scripts/package.scm			\
-  guix/scripts/gc.scm				\
-  guix/scripts/hash.scm				\
-  guix/scripts/pull.scm				\
-  guix/scripts/substitute-binary.scm		\
-  guix/scripts/refresh.scm			\
   guix/base32.scm				\
   guix/records.scm				\
   guix/hash.scm					\
   guix/utils.scm				\
+  guix/download.scm				\
+  guix/monads.scm				\
+  guix/profiles.scm				\
   guix/serialization.scm			\
   guix/nar.scm					\
   guix/derivations.scm				\
-  guix/download.scm				\
   guix/gnu-maintenance.scm			\
   guix/licenses.scm				\
   guix/build-system.scm				\
@@ -1164,6 +1219,15 @@ MODULES = \
   guix/build/rpath.scm				\
   guix/packages.scm				\
   guix/snix.scm					\
+  guix/scripts/download.scm			\
+  guix/scripts/build.scm			\
+  guix/scripts/import.scm			\
+  guix/scripts/package.scm			\
+  guix/scripts/gc.scm				\
+  guix/scripts/hash.scm				\
+  guix/scripts/pull.scm				\
+  guix/scripts/substitute-binary.scm		\
+  guix/scripts/refresh.scm			\
   guix.scm					\
   $(GNU_SYSTEM_MODULES)
 
@@ -1183,8 +1247,10 @@ SCM_TESTS = \
   tests/packages.scm				\
   tests/snix.scm				\
   tests/store.scm				\
+  tests/monads.scm				\
   tests/nar.scm					\
-  tests/union.scm
+  tests/union.scm				\
+  tests/profiles.scm
 
 SH_TESTS = tests/guix-build.sh tests/guix-download.sh tests/guix-gc.sh \
 	tests/guix-hash.sh tests/guix-package.sh $(am__append_3)
@@ -1199,11 +1265,12 @@ AM_SH_LOG_FLAGS = -x -e
 EXTRA_DIST = HACKING ROADMAP TODO .dir-locals.el \
 	build-aux/hydra/gnu-system.scm build-aux/hydra/guix.scm \
 	build-aux/check-available-binaries.scm build-aux/download.scm \
-	build-aux/list-packages.scm build-aux/sync-synopses.scm \
+	build-aux/list-packages.scm build-aux/sync-descriptions.scm \
 	srfi/srfi-37.scm.in srfi/srfi-64.scm srfi/srfi-64.upstream.scm \
 	tests/test.drv build-aux/config.rpath bootstrap release.nix \
 	$(TESTS) doc/fdl-1.3.texi doc/images/bootstrap-graph.dot \
-	doc/images/bootstrap-graph.eps $(am__append_5)
+	doc/images/bootstrap-graph.eps doc/images/bootstrap-graph.pdf \
+	$(am__append_5)
 CLEANFILES = $(GOBJECTS) $(SCM_TESTS:tests/%.scm=%.log) \
 	$(am__append_4)
 AM_V_GUILEC = $(AM_V_GUILEC_$(V))
@@ -2341,6 +2408,27 @@ uninstall-dist_bootstrap_i686_linuxDATA:
 	@list='$(dist_bootstrap_i686_linux_DATA)'; test -n "$(bootstrap_i686_linuxdir)" || list=; \
 	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
 	dir='$(DESTDIR)$(bootstrap_i686_linuxdir)'; $(am__uninstall_files_from_dir)
+install-dist_bootstrap_mips64el_linuxDATA: $(dist_bootstrap_mips64el_linux_DATA)
+	@$(NORMAL_INSTALL)
+	@list='$(dist_bootstrap_mips64el_linux_DATA)'; test -n "$(bootstrap_mips64el_linuxdir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(bootstrap_mips64el_linuxdir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(bootstrap_mips64el_linuxdir)" || exit 1; \
+	fi; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(bootstrap_mips64el_linuxdir)'"; \
+	  $(INSTALL_DATA) $$files "$(DESTDIR)$(bootstrap_mips64el_linuxdir)" || exit $$?; \
+	done
+
+uninstall-dist_bootstrap_mips64el_linuxDATA:
+	@$(NORMAL_UNINSTALL)
+	@list='$(dist_bootstrap_mips64el_linux_DATA)'; test -n "$(bootstrap_mips64el_linuxdir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	dir='$(DESTDIR)$(bootstrap_mips64el_linuxdir)'; $(am__uninstall_files_from_dir)
 install-dist_bootstrap_x86_64_linuxDATA: $(dist_bootstrap_x86_64_linux_DATA)
 	@$(NORMAL_INSTALL)
 	@list='$(dist_bootstrap_x86_64_linux_DATA)'; test -n "$(bootstrap_x86_64_linuxdir)" || list=; \
@@ -2473,6 +2561,27 @@ uninstall-nodist_bootstrap_i686_linuxDATA:
 	@list='$(nodist_bootstrap_i686_linux_DATA)'; test -n "$(bootstrap_i686_linuxdir)" || list=; \
 	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
 	dir='$(DESTDIR)$(bootstrap_i686_linuxdir)'; $(am__uninstall_files_from_dir)
+install-nodist_bootstrap_mips64el_linuxDATA: $(nodist_bootstrap_mips64el_linux_DATA)
+	@$(NORMAL_INSTALL)
+	@list='$(nodist_bootstrap_mips64el_linux_DATA)'; test -n "$(bootstrap_mips64el_linuxdir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(bootstrap_mips64el_linuxdir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(bootstrap_mips64el_linuxdir)" || exit 1; \
+	fi; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(bootstrap_mips64el_linuxdir)'"; \
+	  $(INSTALL_DATA) $$files "$(DESTDIR)$(bootstrap_mips64el_linuxdir)" || exit $$?; \
+	done
+
+uninstall-nodist_bootstrap_mips64el_linuxDATA:
+	@$(NORMAL_UNINSTALL)
+	@list='$(nodist_bootstrap_mips64el_linux_DATA)'; test -n "$(bootstrap_mips64el_linuxdir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	dir='$(DESTDIR)$(bootstrap_mips64el_linuxdir)'; $(am__uninstall_files_from_dir)
 install-nodist_bootstrap_x86_64_linuxDATA: $(nodist_bootstrap_x86_64_linux_DATA)
 	@$(NORMAL_INSTALL)
 	@list='$(nodist_bootstrap_x86_64_linux_DATA)'; test -n "$(bootstrap_x86_64_linuxdir)" || list=; \
@@ -2970,7 +3079,7 @@ all-am: Makefile $(INFO_DEPS) $(LIBRARIES) $(PROGRAMS) $(SCRIPTS) \
 		$(DATA) $(HEADERS)
 installdirs: installdirs-recursive
 installdirs-am:
-	for dir in "$(DESTDIR)$(bindir)" "$(DESTDIR)$(libexecdir)" "$(DESTDIR)$(sbindir)" "$(DESTDIR)$(bindir)" "$(DESTDIR)$(pkglibexecdir)" "$(DESTDIR)$(infodir)" "$(DESTDIR)$(bootstrap_i686_linuxdir)" "$(DESTDIR)$(bootstrap_x86_64_linuxdir)" "$(DESTDIR)$(infoimagedir)" "$(DESTDIR)$(patchdir)" "$(DESTDIR)$(guilemoduledir)" "$(DESTDIR)$(guilemoduledir)" "$(DESTDIR)$(bootstrap_i686_linuxdir)" "$(DESTDIR)$(bootstrap_x86_64_linuxdir)"; do \
+	for dir in "$(DESTDIR)$(bindir)" "$(DESTDIR)$(libexecdir)" "$(DESTDIR)$(sbindir)" "$(DESTDIR)$(bindir)" "$(DESTDIR)$(pkglibexecdir)" "$(DESTDIR)$(infodir)" "$(DESTDIR)$(bootstrap_i686_linuxdir)" "$(DESTDIR)$(bootstrap_mips64el_linuxdir)" "$(DESTDIR)$(bootstrap_x86_64_linuxdir)" "$(DESTDIR)$(infoimagedir)" "$(DESTDIR)$(patchdir)" "$(DESTDIR)$(guilemoduledir)" "$(DESTDIR)$(guilemoduledir)" "$(DESTDIR)$(bootstrap_i686_linuxdir)" "$(DESTDIR)$(bootstrap_mips64el_linuxdir)" "$(DESTDIR)$(bootstrap_x86_64_linuxdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: $(BUILT_SOURCES)
@@ -3050,11 +3159,13 @@ info: info-recursive
 info-am: $(INFO_DEPS) info-local
 
 install-data-am: install-dist_bootstrap_i686_linuxDATA \
+	install-dist_bootstrap_mips64el_linuxDATA \
 	install-dist_bootstrap_x86_64_linuxDATA \
 	install-dist_infoimageDATA install-dist_patchDATA \
 	install-info-am install-nobase_dist_guilemoduleDATA \
 	install-nobase_nodist_guilemoduleDATA \
 	install-nodist_bootstrap_i686_linuxDATA \
+	install-nodist_bootstrap_mips64el_linuxDATA \
 	install-nodist_bootstrap_x86_64_linuxDATA
 	@$(NORMAL_INSTALL)
 	$(MAKE) $(AM_MAKEFLAGS) install-data-hook
@@ -3200,6 +3311,7 @@ ps-am: $(PSS) ps-local
 
 uninstall-am: uninstall-binPROGRAMS uninstall-binSCRIPTS \
 	uninstall-dist_bootstrap_i686_linuxDATA \
+	uninstall-dist_bootstrap_mips64el_linuxDATA \
 	uninstall-dist_bootstrap_x86_64_linuxDATA \
 	uninstall-dist_infoimageDATA uninstall-dist_patchDATA \
 	uninstall-dvi-am uninstall-html-am uninstall-info-am \
@@ -3207,6 +3319,7 @@ uninstall-am: uninstall-binPROGRAMS uninstall-binSCRIPTS \
 	uninstall-nobase_dist_guilemoduleDATA \
 	uninstall-nobase_nodist_guilemoduleDATA \
 	uninstall-nodist_bootstrap_i686_linuxDATA \
+	uninstall-nodist_bootstrap_mips64el_linuxDATA \
 	uninstall-nodist_bootstrap_x86_64_linuxDATA \
 	uninstall-nodist_pkglibexecSCRIPTS uninstall-pdf-am \
 	uninstall-ps-am uninstall-sbinPROGRAMS
@@ -3227,6 +3340,7 @@ uninstall-am: uninstall-binPROGRAMS uninstall-binSCRIPTS \
 	install-binPROGRAMS install-binSCRIPTS install-data \
 	install-data-am install-data-hook \
 	install-dist_bootstrap_i686_linuxDATA \
+	install-dist_bootstrap_mips64el_linuxDATA \
 	install-dist_bootstrap_x86_64_linuxDATA \
 	install-dist_infoimageDATA install-dist_patchDATA install-dvi \
 	install-dvi-am install-exec install-exec-am install-html \
@@ -3235,6 +3349,7 @@ uninstall-am: uninstall-binPROGRAMS uninstall-binSCRIPTS \
 	install-nobase_dist_guilemoduleDATA \
 	install-nobase_nodist_guilemoduleDATA \
 	install-nodist_bootstrap_i686_linuxDATA \
+	install-nodist_bootstrap_mips64el_linuxDATA \
 	install-nodist_bootstrap_x86_64_linuxDATA \
 	install-nodist_pkglibexecSCRIPTS install-pdf install-pdf-am \
 	install-ps install-ps-am install-sbinPROGRAMS install-strip \
@@ -3245,6 +3360,7 @@ uninstall-am: uninstall-binPROGRAMS uninstall-binSCRIPTS \
 	mostlyclean-vti pdf pdf-am pdf-local ps ps-am ps-local recheck \
 	tags tags-am uninstall uninstall-am uninstall-binPROGRAMS \
 	uninstall-binSCRIPTS uninstall-dist_bootstrap_i686_linuxDATA \
+	uninstall-dist_bootstrap_mips64el_linuxDATA \
 	uninstall-dist_bootstrap_x86_64_linuxDATA \
 	uninstall-dist_infoimageDATA uninstall-dist_patchDATA \
 	uninstall-dvi-am uninstall-html-am uninstall-info-am \
@@ -3252,6 +3368,7 @@ uninstall-am: uninstall-binPROGRAMS uninstall-binSCRIPTS \
 	uninstall-nobase_dist_guilemoduleDATA \
 	uninstall-nobase_nodist_guilemoduleDATA \
 	uninstall-nodist_bootstrap_i686_linuxDATA \
+	uninstall-nodist_bootstrap_mips64el_linuxDATA \
 	uninstall-nodist_bootstrap_x86_64_linuxDATA \
 	uninstall-nodist_pkglibexecSCRIPTS uninstall-pdf-am \
 	uninstall-ps-am uninstall-sbinPROGRAMS
@@ -3262,20 +3379,28 @@ uninstall-am: uninstall-binPROGRAMS uninstall-binSCRIPTS \
 install-data-hook:
 	chmod +x $(DESTDIR)$(bootstrapdir)/*/{bash,mkdir,tar,xz}
 
-gnu/packages/bootstrap/x86_64-linux/guile-2.0.7.tar.xz:
+gnu/packages/bootstrap/x86_64-linux/guile-2.0.9.tar.xz:
 	$(MKDIR_P) `dirname "$@"`
-	$(DOWNLOAD_FILE) "$@" "bc43210dcd146d242bef4d354b0aeac12c4ef3118c07502d17ffa8d49e15aa2c"
-gnu/packages/bootstrap/i686-linux/guile-2.0.7.tar.xz:
+	$(DOWNLOAD_FILE) "$@" "037b103522a2d0d7d69c7ffd8de683dfe5bb4b59c1fafd70b4ffd397fd2f57f0"
+gnu/packages/bootstrap/i686-linux/guile-2.0.9.tar.xz:
 	$(MKDIR_P) `dirname "$@"`
-	$(DOWNLOAD_FILE) "$@" "f9a7c6f4c556eaafa2a69bcf07d4ffbb6682ea831d4c9da9ba095aca3ccd217c"
+	$(DOWNLOAD_FILE) "$@" "b757cd46bf13ecac83fb8e955fb50096ac2d17bb610ca8eb816f29302a00a846"
+gnu/packages/bootstrap/mips64el-linux/guile-2.0.9.tar.xz:
+	$(MKDIR_P) `dirname "$@"`
+	$(DOWNLOAD_FILE) "$@" "994680f0001346864aa2c2cc5110f380ee7518dcd701c614291682b8e948f73b"
 
 # Because of the autoload hack in (guix build download), we must build it
 # first to avoid errors on systems where (gnutls) is unavailable.
 guix/scripts/download.go: guix/build/download.go
+guix/download.go: guix/build/download.go
 
 @INSTALL_SRFI_37_TRUE@srfi/srfi-37.scm: srfi/srfi-37.scm.in
 @INSTALL_SRFI_37_TRUE@	$(MKDIR_P) srfi
 @INSTALL_SRFI_37_TRUE@	cp "$<" "$@"
+
+# Handy way to remove the .go files without removing all the rest.
+clean-go:
+	-$(RM) -f $(GOBJECTS)
 
 # Make sure `tests/guix-gc.sh' runs last, after all the others.  Otherwise it
 # could end up removing files from the store while they are being used by
@@ -3311,9 +3436,9 @@ $(guix_install_go_files): install-nobase_dist_guilemoduleDATA
 # We cannot add new dependencies to `doc/guix.pdf' & co. (info "(automake)
 # Extending").  Using the `-local' rules is imperfect, because they may be
 # triggered after the main rule.  Oh, well.
-pdf-local: doc/images/bootstrap-graph.pdf
-info-local: doc/images/bootstrap-graph.png
-ps-local: doc/images/bootstrap-graph.eps
+pdf-local: $(top_srcdir)/doc/images/bootstrap-graph.pdf
+info-local: $(top_srcdir)/doc/images/bootstrap-graph.png
+ps-local: $(top_srcdir)/doc/images/bootstrap-graph.eps
 
 @BUILD_DAEMON_TRUE@nix/libstore/schema.sql.hh: nix/libstore/schema.sql
 @BUILD_DAEMON_TRUE@	$(GUILE) --no-auto-compile -c				\
@@ -3330,12 +3455,12 @@ ps-local: doc/images/bootstrap-graph.eps
 @BUILD_DAEMON_TRUE@	 fi
 @BUILD_DAEMON_TRUE@	-rm -rf "$(GUIX_TEST_ROOT)"
 
-dist-hook: sync-synopses gen-ChangeLog assert-no-store-file-names
+dist-hook: sync-descriptions gen-ChangeLog assert-no-store-file-names
 distcheck-hook: assert-binaries-available
 
-sync-synopses:
+sync-descriptions:
 	-$(top_builddir)/pre-inst-env $(GUILE)		\
-	   $(top_srcdir)/build-aux/sync-synopses.scm
+	   $(top_srcdir)/build-aux/sync-descriptions.scm
 
 gen-ChangeLog:
 	if test -d .git; then				\
@@ -3359,7 +3484,7 @@ assert-binaries-available:
 	$(top_builddir)/pre-inst-env "$(GUILE)"				\
 	  "$(top_srcdir)/build-aux/check-available-binaries.scm"
 
-.PHONY: sync-synopses gen-ChangeLog
+.PHONY: sync-descriptions gen-ChangeLog clean-go
 .PHONY: assert-no-store-file-names assert-binaries-available
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.

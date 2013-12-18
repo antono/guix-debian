@@ -25,12 +25,13 @@
   #:use-module (gnu packages)
   #:use-module (gnu packages acl)
   #:use-module (gnu packages compression)
-  #:use-module ((gnu packages gettext) #:renamer (symbol-prefix-proc 'gnu:))
+  #:use-module (gnu packages gettext)
   #:use-module (gnu packages gtk)
-  #:use-module (gnu packages readline)
-  #:use-module (gnu packages ncurses)
   #:use-module (gnu packages help2man)
+  #:use-module (gnu packages ncurses)
+  #:use-module (gnu packages patchelf)
   #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages readline)
   #:use-module (gnu packages which))
 
 (define-public libcddb
@@ -84,22 +85,26 @@ caching facility provided by the library.")
     (home-page "http://www.gnu.org/software/libcdio/")
     (synopsis "CD Input and Control library")
     (description
-     "GNU libcdio is a library for OS-idependent CD-ROM and CD image access.
-It includes a library for working with ISO-9660 filesystems (libiso9660), as
-well as utility programs such as an audio CD player and an extractor.")
+     "The GNU Compact Disc Input and Control Library (libcdio) is a library
+for CD-ROM and CD image file access.  It allows the developer to add CD
+access to an application without having to worry about the OS- and
+device-dependent properties of CD-ROM or the specific details of CD image
+formats.  It includes pycdio, a Python interface to libcdio, and
+libcdio-paranoia, a library providing jitter-free and error-free audio
+extraction from CDs.")
     (license gpl3+)))
 
 (define-public xorriso
   (package
     (name "xorriso")
-    (version "1.3.0")
+    (version "1.3.2")
     (source (origin
              (method url-fetch)
              (uri (string-append "mirror://gnu/xorriso/xorriso-"
                                  version ".tar.gz"))
              (sha256
               (base32
-               "1gvyf1ppq764hsk8iyffip7h1dnz2b9k2cchf7himnns03aadavn"))))
+               "1z04580nkkziy2flbxjjx0q6vp9p7vcp7yp0agx2aqz3l1vjcwhf"))))
     (build-system gnu-build-system)
     (inputs
      `(("acl" ,acl)
@@ -110,12 +115,12 @@ well as utility programs such as an audio CD player and an extractor.")
     (home-page "http://www.gnu.org/software/xorriso/")
     (synopsis "Create, manipulate, burn ISO-9660 filesystems")
     (description
-     "GNU xorriso copies file objects from POSIX compliant filesystems into
-Rock Ridge enhanced ISO 9660 filesystems and allows session-wise manipulation
-of such filesystems.  It can load the management information of existing ISO
-images and it writes the session results to optical media or to filesystem
-objects.  Vice versa xorriso is able to copy file objects out of ISO 9660
-filesystems.")
+     "GNU Xorriso is a tool for copying files to and from ISO 9660 Rock
+Ridge, a.k.a. Compact Disc File System, filesystems and it allows
+session-wise manipulation of them.  It features a formatter and burner for
+CD, DVD and BD.  It can operate on existing ISO images or it can create new
+ones.  xorriso can then be used to copy files directly into or out of ISO
+files.")
     (license gpl3+)))
 
 (define-public cdparanoia
@@ -128,13 +133,31 @@ filesystems.")
                                  version ".src.tgz"))
              (sha256
               (base32
-               "1pv4zrajm46za0f6lv162iqffih57a8ly4pc69f7y0gfyigb8p80"))))
+               "1pv4zrajm46za0f6lv162iqffih57a8ly4pc69f7y0gfyigb8p80"))
+             (patches (list (search-patch "cdparanoia-fpic.patch")))))
     (build-system gnu-build-system)
     (inputs
-     `(("patch/fpic" ,(search-patch "cdparanoia-fpic.patch"))))
+     `(("patchelf" ,patchelf)))
     (arguments
      `(#:tests? #f ; there is no check target
-       #:patches (list (assoc-ref %build-inputs "patch/fpic"))))
+       #:modules ((guix build gnu-build-system)
+                  (guix build utils)
+                  (guix build rpath)
+                  (srfi srfi-26))
+       #:imported-modules ((guix build gnu-build-system)
+                           (guix build utils)
+                           (guix build rpath))
+       #:phases
+        (alist-cons-after
+         'strip 'add-lib-to-runpath
+         (lambda* (#:key outputs #:allow-other-keys)
+           (let* ((out (assoc-ref outputs "out"))
+                  (lib (string-append out "/lib")))
+             ;; Add LIB to the RUNPATH of all the executables.
+             (with-directory-excursion out
+               (for-each (cut augment-rpath <> lib)
+                         (find-files "bin" ".*")))))
+         %standard-phases)))
     (home-page "http://www.xiph.org/paranoia/")
     (synopsis "audio CD reading utility which includes extra data verification features")
     (description "Cdparanoia retrieves audio tracks from CDDA capable CDROM
@@ -159,8 +182,8 @@ reconstruction capability.")
                "0pm039a78h7m9vvjmmjfkl05ii6qdmfhvbypxjbc7j5w82y66is4"))))
     (build-system gnu-build-system)
     (inputs
-     `(("gettext" ,gnu:gettext)
-       ("gtk+" ,gtk+)
+     `(("gettext" ,gnu-gettext)
+       ("gtk+" ,gtk+-2)
        ("pkg-config" ,pkg-config)
        ("which" ,which)))
     (arguments

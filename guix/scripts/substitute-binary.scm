@@ -123,7 +123,8 @@ again."
               (lambda ()
                 body ...)
               (lambda args
-                ;; The SIGALRM triggers EINTR, because of the bug at
+                ;; Before Guile v2.0.9-39-gfe51c7b, the SIGALRM triggers EINTR
+                ;; because of the bug at
                 ;; <http://lists.gnu.org/archive/html/guile-devel/2013-06/msg00050.html>.
                 ;; When that happens, try again.  Note: SA_RESTART cannot be
                 ;; used because of <http://bugs.gnu.org/14640>.
@@ -162,10 +163,17 @@ provide."
            (warning (_ "while fetching ~a: server is unresponsive~%")
                     (uri->string uri))
            (warning (_ "try `--no-substitutes' if the problem persists~%"))
-           (when port
-             (close-port port)))
+
+           ;; Before Guile v2.0.9-39-gfe51c7b, EINTR was reported to the user,
+           ;; and thus PORT had to be closed and re-opened.  This is not the
+           ;; case afterward.
+           (unless (or (guile-version>? "2.0.9")
+                       (version>? (version) "2.0.9.39"))
+             (when port
+               (close-port port))))
          (begin
-           (set! port (open-socket-for-uri uri #:buffered? buffered?))
+           (when (or (not port) (port-closed? port))
+             (set! port (open-socket-for-uri uri #:buffered? buffered?)))
            (http-fetch uri #:text? #f #:port port)))))))
 
 (define-record-type <cache>
@@ -289,6 +297,12 @@ reading PORT."
   "Return #t if DATE is obsolete compared to NOW + TTL seconds."
   (time>? (subtract-duration now (make-time time-duration 0 ttl))
           (make-time time-monotonic 0 date)))
+
+(define %lookup-threads
+  ;; Number of threads spawned to perform lookup operations.  This means we
+  ;; can have this many simultaneous HTTP GET requests to the server, which
+  ;; limits the impact of connection latency.
+  20)
 
 (define (lookup-narinfo cache path)
   "Check locally if we have valid info about PATH, otherwise go to CACHE and
@@ -473,6 +487,16 @@ Internal tool to substitute a pre-built binary to a local build.\n"))
 ;;; Entry point.
 ;;;
 
+(define n-par-map*
+  ;; We want the ability to run many threads in parallel, regardless of the
+  ;; number of cores.  However, Guile 2.0.5 has a bug whereby 'n-par-map' ends
+  ;; up consuming a lot of memory, possibly leading to death.  Thus, resort to
+  ;; 'par-map' on 2.0.5.
+  (if (guile-version>? "2.0.5")
+      n-par-map
+      (lambda (n proc lst)
+        (par-map proc lst))))
+
 (define (guix-substitute-binary . args)
   "Implement the build daemon's substituter protocol."
   (mkdir-p %narinfo-cache-directory)
@@ -489,8 +513,9 @@ Internal tool to substitute a pre-built binary to a local build.\n"))
                    ;; Return the subset of PATHS available in CACHE.
                    (let ((substitutable
                           (if cache
-                              (par-map (cut lookup-narinfo cache <>)
-                                       paths)
+                              (n-par-map* %lookup-threads
+                                          (cut lookup-narinfo cache <>)
+                                          paths)
                               '())))
                      (for-each (lambda (narinfo)
                                  (when narinfo
@@ -501,8 +526,9 @@ Internal tool to substitute a pre-built binary to a local build.\n"))
                    ;; Reply info about PATHS if it's in CACHE.
                    (let ((substitutable
                           (if cache
-                              (par-map (cut lookup-narinfo cache <>)
-                                       paths)
+                              (n-par-map* %lookup-threads
+                                          (cut lookup-narinfo cache <>)
+                                          paths)
                               '())))
                      (for-each (lambda (narinfo)
                                  (format #t "~a\n~a\n~a\n"

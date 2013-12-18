@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -22,12 +22,15 @@
   #:use-module (guix download)
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages m4)
-  #:use-module (gnu packages perl))
+  #:use-module (gnu packages perl)
+  #:use-module (gnu packages flex)
+  #:use-module (srfi srfi-1)
+  #:export (bison))
 
-(define-public bison
+(define bison
   (package
     (name "bison")
-    (version "2.7.1")
+    (version "3.0.2")
     (source
      (origin
       (method url-fetch)
@@ -35,22 +38,16 @@
                           version ".tar.xz"))
       (sha256
        (base32
-        "1yx7isx67sdmyijvihgyra1f59fwdz7sqriginvavfj5yb5ss2dl"))))
+        "0g4gjan477lac18m51kv4xzcsp6wjfsfwvd2dxymcl6vid9fihx2"))))
     (build-system gnu-build-system)
-    (inputs `(("perl" ,perl)))
+    (native-inputs `(("perl" ,perl)))
+    (inputs `(("flex" ,flex)))
     (propagated-inputs `(("m4" ,m4)))
     (home-page "http://www.gnu.org/software/bison/")
     (synopsis "Parser generator")
     (description
-     "Bison is a general-purpose parser generator that converts an
-annotated context-free grammar into an LALR(1) or GLR parser for
-that grammar.  Once you are proficient with Bison, you can use
-it to develop a wide range of language parsers, from those used
-in simple desk calculators to complex programming languages.
-
-Bison is upward compatible with Yacc: all properly-written Yacc
-grammars ought to work with Bison with no change.  Anyone
-familiar with Yacc should be able to use Bison with little
-trouble.  You need to be fluent in C or C++ programming in order
-to use Bison.")
+     "GNU Bison is a general-purpose parser generator.  It can build a
+deterministic or generalized LR parser from an annotated, context-free
+grammar.  It is versatile enough to have many applications, from parsers for
+simple tools through complex programming languages.")
     (license gpl3+)))

@@ -20,6 +20,7 @@
 (define-module (test-packages)
   #:use-module (guix store)
   #:use-module (guix utils)
+  #:use-module (guix hash)
   #:use-module (guix derivations)
   #:use-module (guix packages)
   #:use-module (guix build-system)
@@ -80,6 +81,12 @@
                    (list version `(version ,version))))
          (not (package-field-location %bootstrap-guile 'does-not-exist)))))
 
+;; Make sure we don't change the file name to an absolute file name.
+(test-equal "package-field-location, relative file name"
+  (location-file (package-location %bootstrap-guile))
+  (with-fluids ((%file-port-name-canonicalization 'absolute))
+    (location-file (package-field-location %bootstrap-guile 'version))))
+
 (test-assert "package-transitive-inputs"
   (let* ((a (dummy-package "a"))
          (b (dummy-package "b"
@@ -120,6 +127,76 @@
          (source  (package-source-derivation %store
                                              (package-source package))))
     (string=? file source)))
+
+(test-assert "package-source-derivation, indirect store path"
+  (let* ((dir     (add-to-store %store "guix-build" #t "sha256"
+                                (dirname (search-path %load-path
+                                                      "guix/build/utils.scm"))))
+         (package (package (inherit (dummy-package "p"))
+                    (source (string-append dir "/utils.scm"))))
+         (source  (package-source-derivation %store
+                                             (package-source package))))
+    (and (direct-store-path? source)
+         (string-suffix? "utils.scm" source))))
+
+(test-equal "package-source-derivation, snippet"
+  "OK"
+  (let* ((file   (search-bootstrap-binary "guile-2.0.9.tar.xz"
+                                          (%current-system)))
+         (sha256 (call-with-input-file file port-sha256))
+         (fetch  (lambda* (store url hash-algo hash
+                           #:optional name #:key system)
+                   (pk 'fetch url hash-algo hash name system)
+                   (add-to-store store (basename url) #f "sha256" url)))
+         (source (bootstrap-origin
+                  (origin
+                    (method fetch)
+                    (uri file)
+                    (sha256 sha256)
+                    (patch-inputs
+                     `(("tar" ,%bootstrap-coreutils&co)
+                       ("xz" ,%bootstrap-coreutils&co)
+                       ("patch" ,%bootstrap-coreutils&co)))
+                    (patch-guile %bootstrap-guile)
+                    (modules '((guix build utils)))
+                    (imported-modules modules)
+                    (snippet '(begin
+                                ;; We end up in 'bin', because it's the first
+                                ;; directory, alphabetically.  Not a very good
+                                ;; example but hey.
+                                (chmod "." #o777)
+                                (symlink "guile" "guile-rocks")
+                                (copy-recursively "../share/guile/2.0/scripts"
+                                                  "scripts")
+
+                                ;; These variables must exist.
+                                (pk %build-inputs %outputs))))))
+         (package (package (inherit (dummy-package "with-snippet"))
+                    (source source)
+                    (build-system trivial-build-system)
+                    (inputs
+                     `(("tar" ,(search-bootstrap-binary "tar"
+                                                        (%current-system)))
+                       ("xz"  ,(search-bootstrap-binary "xz"
+                                                        (%current-system)))))
+                    (arguments
+                     `(#:guile ,%bootstrap-guile
+                       #:builder
+                       (let ((tar    (assoc-ref %build-inputs "tar"))
+                             (xz     (assoc-ref %build-inputs "xz"))
+                             (source (assoc-ref %build-inputs "source")))
+                         (and (zero? (system* tar "xvf" source
+                                              "--use-compress-program" xz))
+                              (string=? "guile" (readlink "bin/guile-rocks"))
+                              (file-exists? "bin/scripts/compile.scm")
+                              (let ((out (assoc-ref %outputs "out")))
+                                (call-with-output-file out
+                                  (lambda (p)
+                                    (display "OK" p))))))))))
+         (drv    (package-derivation %store package))
+         (out    (derivation->output-path drv)))
+    (and (build-derivations %store (list (pk 'snippet-drv drv)))
+         (call-with-input-file out get-string-all))))
 
 (test-assert "return value"
   (let ((drv (package-derivation %store (dummy-package "p"))))

@@ -22,8 +22,7 @@
   #:use-module (guix download)
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages check)
-  #:use-module ((gnu packages gettext)
-                #:renamer (symbol-prefix-proc 'guix:))
+  #:use-module (gnu packages gettext)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages readline))
 
@@ -54,17 +53,12 @@
     (inputs
      ;; XXX: add 'lvm2'.
      `(("check" ,check)
-       ("gettext" ,guix:gettext)
+       ("gettext" ,gnu-gettext)
        ("readline" ,readline)
        ("util-linux" ,util-linux)))
     (home-page "http://www.gnu.org/software/parted/")
     (synopsis "Disk partition editor")
     (description
-     "GNU Parted is an industrial-strength package for creating, destroying,
-resizing, checking and copying partitions, and the file systems on them.  This
-is useful for creating space for new operating systems, reorganising disk
-usage, copying data on hard disks and disk imaging.
-
-It contains a library, libparted, and a command-line frontend, parted, which
-also serves as a sample implementation and script backend.")
+     "GNU Parted is a package for creating and manipulating disk partition
+tables.  It includes a library and command-line utility.")
     (license gpl3+)))

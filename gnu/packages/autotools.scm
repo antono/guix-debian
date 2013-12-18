@@ -52,13 +52,11 @@
      "http://www.gnu.org/software/autoconf/")
     (synopsis "Create source code configuration scripts")
     (description
-     "GNU Autoconf is an extensible package of M4 macros that produce
-shell scripts to automatically configure software source code
-packages.  These scripts can adapt the packages to many kinds of
-UNIX-like systems without manual user intervention.  Autoconf
-creates a configuration script for a package from a template
-file that lists the operating system features that the package
-can use, in the form of M4 macro calls.")
+     "Autoconf offers the developer a robust set of M4 macros which expand
+into shell code to test the features of Unix-like systems and to adapt
+automatically their software package to these systems.  The resulting shell
+scripts are self-contained and portable, freeing the user from needing to
+know anything about Autoconf or M4.")
     (license gpl3+))) ; some files are under GPLv2+
 
 (define-public autoconf-wrapper
@@ -141,20 +139,19 @@ exec ~a --no-auto-compile \"$0\" \"$@\"
                                  version ".tar.xz"))
              (sha256
               (base32
-               "0nc0zqq8j336kamizzd86wb19vhbwywv5avcjh3cyx230xfqy671"))))
+               "0nc0zqq8j336kamizzd86wb19vhbwywv5avcjh3cyx230xfqy671"))
+             (patches
+              (list (search-patch "automake-skip-amhello-tests.patch")))))
     (build-system gnu-build-system)
     (inputs
      `(("autoconf" ,autoconf-wrapper)
-       ("perl" ,perl)
-       ("patch/skip-amhello"
-        ,(search-patch "automake-skip-amhello-tests.patch"))))
+       ("perl" ,perl)))
     (native-search-paths
      (list (search-path-specification
             (variable "ACLOCAL_PATH")
             (directories '("share/aclocal")))))
     (arguments
-     '(#:patches (list (assoc-ref %build-inputs "patch/skip-amhello"))
-       #:modules ((guix build gnu-build-system)
+     '(#:modules ((guix build gnu-build-system)
                   (guix build utils)
                   (srfi srfi-1)
                   (srfi srfi-26)
@@ -203,9 +200,10 @@ exec ~a --no-auto-compile \"$0\" \"$@\"
     (home-page "http://www.gnu.org/software/automake/")
     (synopsis "Making GNU standards-compliant Makefiles")
     (description
-     "GNU Automake is a tool for automatically generating
-`Makefile.in' files compliant with the GNU Coding
-Standards.  Automake requires the use of Autoconf.")
+     "Automake the part of the GNU build system for producing
+standards-compliant Makefiles.  Build requirements are entered in an
+intuitive format and then Automake works with Autoconf to produce a robust
+Makefile, simplifying the entire process for the developer.")
     (license gpl2+)))                      ; some files are under GPLv3+
 
 (define-public libtool
@@ -218,7 +216,10 @@ Standards.  Automake requires the use of Autoconf.")
                                  version ".tar.gz"))
              (sha256
               (base32
-               "0649qfpzkswgcj9vqkkr9rn4nlcx80faxpyqscy2k1x9c94f93dk"))))
+               "0649qfpzkswgcj9vqkkr9rn4nlcx80faxpyqscy2k1x9c94f93dk"))
+             (patches
+              (list (search-patch "libtool-skip-tests.patch")
+                    (search-patch "libtool-skip-tests-for-mips.patch")))))
     (build-system gnu-build-system)
     (native-inputs `(("m4" ,m4)
                      ("perl" ,perl)))
@@ -230,40 +231,34 @@ Standards.  Automake requires the use of Autoconf.")
                "out"))                       ; libltdl.so, ltdl.h, etc.
 
     (arguments
-     `(#:patches (list (assoc-ref %build-inputs "patch/skip-tests"))
-       ,@(if (%current-target-system)
-             '()                        ; no `check' phase when cross-building
-             '(#:phases (alist-cons-before
-                         'check 'pre-check
-                         (lambda* (#:key inputs #:allow-other-keys)
-                           ;; Run the test suite in parallel, if possible.
-                           (let ((ncores
-                                  (cond
-                                   ((getenv "NIX_BUILD_CORES")
-                                    =>
-                                    (lambda (n)
-                                      (if (zero? (string->number n))
-                                          (number->string (current-processor-count))
-                                          n)))
-                                   (else "1"))))
-                             (setenv "TESTSUITEFLAGS"
-                                     (string-append "-j" ncores)))
+     (if (%current-target-system)
+         '()                            ; no `check' phase when cross-building
+         '(#:phases (alist-cons-before
+                     'check 'pre-check
+                     (lambda* (#:key inputs #:allow-other-keys)
+                       ;; Run the test suite in parallel, if possible.
+                       (let ((ncores
+                              (cond
+                               ((getenv "NIX_BUILD_CORES")
+                                =>
+                                (lambda (n)
+                                  (if (zero? (string->number n))
+                                      (number->string (current-processor-count))
+                                      n)))
+                               (else "1"))))
+                         (setenv "TESTSUITEFLAGS"
+                                 (string-append "-j" ncores)))
 
-                           ;; Path references to /bin/sh.
-                           (let ((bash (assoc-ref inputs "bash")))
-                             (substitute* "tests/testsuite"
-                               (("/bin/sh")
-                                (string-append bash "/bin/bash")))))
-                         %standard-phases)))))
-    (inputs `(("patch/skip-tests"
-               ,(search-patch "libtool-skip-tests.patch"))))
+                       ;; Path references to /bin/sh.
+                       (let ((bash (assoc-ref inputs "bash")))
+                         (substitute* "tests/testsuite"
+                           (("/bin/sh")
+                            (string-append bash "/bin/bash")))))
+                     %standard-phases))))
     (synopsis "Generic shared library support tools")
     (description
-     "GNU libtool is a generic library support script.  Libtool hides the
-complexity of using shared libraries behind a consistent, portable interface.
-
-To use libtool, add the new generic library building commands to your
-Makefile, Makefile.in, or Makefile.am.  See the documentation for
-details.")
+     "GNU Libtool helps in the creation and use of shared libraries, by
+presenting a single consistent, portable interface that hides the usual
+complexity of working with shared libraries across platforms.")
     (license gpl3+)
     (home-page "http://www.gnu.org/software/libtool/")))

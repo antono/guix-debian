@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -27,39 +27,25 @@
   (package
     (name "idutils")
     (version "4.6")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://gnu/idutils/idutils-"
-                          version ".tar.xz"))
-      (sha256
-       (base32
-        "1hmai3422iaqnp34kkzxdnywl7n7pvlxp11vrw66ybxn9wxg90c1"))))
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "mirror://gnu/idutils/idutils-"
+                                 version ".tar.xz"))
+             (sha256
+              (base32
+               "1hmai3422iaqnp34kkzxdnywl7n7pvlxp11vrw66ybxn9wxg90c1"))
+             (patches (list
+                       (search-patch "diffutils-gets-undeclared.patch")))))
     (build-system gnu-build-system)
     (inputs `(;; TODO: Add Emacs as an input for byte-compilation.
               ;; ("emacs" ,emacs)
-              ("patch/gets"
-               ,(search-patch "diffutils-gets-undeclared.patch"))))
-    (arguments `(#:patches (list (assoc-ref %build-inputs "patch/gets"))))
+              ))
     (home-page "http://www.gnu.org/software/idutils/")
     (synopsis "Identifier database utilities")
     (description
-     "An \"ID database\" is a binary file containing a list of file
-names, a list of tokens, and a sparse matrix indicating which
-tokens appear in which files.
-
-With this database and some tools to query it, many
-text-searching tasks become simpler and faster.  For example,
-you can list all files that reference a particular `\\#include'
-file throughout a huge source hierarchy, search for all the
-memos containing references to a project, or automatically
-invoke an editor on all files containing references to some
-function or variable.  Anyone with a large software project to
-maintain, or a large set of text files to organize, can benefit
-from the ID utilities.
-
-Although the name `ID' is short for `identifier', the ID
-utilities handle more than just identifiers; they also treat
-other kinds of tokens, most notably numeric constants, and the
-contents of certain character strings.")
+     "The GNU idutils package includes tools to create an index of textual
+tokens used in a list of file names and then to query that index.  Thus, it
+allows the user to, for example, find all the uses of a particular function
+in a large programming project.  In addition to handling textual tokens, it
+can also handle numeric constants and the contents of character strings.")
     (license gpl3+)))

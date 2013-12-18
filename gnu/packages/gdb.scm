@@ -17,6 +17,7 @@
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (gnu packages gdb)
+  #:use-module (gnu packages)
   #:use-module (gnu packages ncurses)
   #:use-module (gnu packages readline)
   #:use-module (gnu packages dejagnu)
@@ -32,20 +33,22 @@
 (define-public gdb
   (package
     (name "gdb")
-    (version "7.6")
+    (version "7.6.2")
     (source (origin
              (method url-fetch)
              (uri (string-append "mirror://gnu/gdb/gdb-"
                                  version ".tar.bz2"))
              (sha256
               (base32
-               "06yzggy97qka6fs1vdz4q0d2fgrpm3iaj7dzvf1ww377bvryh454"))))
+               "1s6hjqmq7xz10hqx45dgrpfh5mla578shn3zxgnrsv66w4n0wsig"))
+             (patches (list (search-patch "gdb-loongson-madd-fix.patch")))))
     (build-system gnu-build-system)
     (arguments
      '(#:phases (alist-cons-after
                  'configure 'post-configure
                  (lambda _
-                   (patch-makefile-SHELL "gdb/gdbserver/Makefile.in"))
+                   (for-each patch-makefile-SHELL
+                             (find-files "." "Makefile\\.in")))
                  %standard-phases)))
     (inputs
      `(("expat" ,expat)
@@ -59,7 +62,9 @@
     (home-page "http://www.gnu.org/software/gdb/")
     (synopsis "The GNU debugger")
     (description
-     "GDB, the GNU Project debugger, allows you to see what is going
-on `inside' another program while it executes -- or what another
-program was doing at the moment it crashed.")
+     "GDB is the GNU debugger.  With it, you can monitor what a program is
+doing while it runs or what it was doing just before a crash.  It allows you
+to specify the runtime conditions, to define breakpoints, and to change how
+the program is running to try to fix bugs.  It can be used to debug programs
+written in C, C++, Ada, Objective-C, Pascal and more.")
     (license gpl3+)))

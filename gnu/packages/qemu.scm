@@ -36,20 +36,22 @@
   #:use-module (gnu packages linux)
   #:use-module (gnu packages samba)
   #:use-module (gnu packages xorg)
+  #:use-module (gnu packages sdl)
   #:use-module (gnu packages perl))
 
-(define-public qemu
-  ;; Since QEMU 1.3, it incorporates KVM support formerly found in QEMU-KVM.
+(define-public qemu-headless
+  ;; This is QEMU without GUI support.
   (package
-    (name "qemu")
-    (version "1.5.1")
+    (name "qemu-headless")
+    (version "1.6.1")
     (source (origin
              (method url-fetch)
              (uri (string-append "http://wiki.qemu-project.org/download/qemu-"
                                  version ".tar.bz2"))
              (sha256
               (base32
-               "1s7316pgizpayr472la8p8a4vhv7ymmzd5qlbkmq6y9q5zpa25ac"))))
+               "152jc18mjs543k8ggbcwgra8d0zw81z0lcc1r0iq4iqhm926ywzw"))
+             (patches (list (search-patch "qemu-make-4.0.patch")))))
     (build-system gnu-build-system)
     (arguments
      '(#:phases (alist-replace
@@ -91,8 +93,7 @@
                   %standard-phases))))
 
     (inputs                                       ; TODO: Add optional inputs.
-     `(;; ("mesa" ,mesa)
-       ;; ("libaio" ,libaio)
+     `(;; ("libaio" ,libaio)
        ("glib" ,glib)
        ("python" ,python-2) ; incompatible with Python 3 according to error message
        ("ncurses" ,ncurses)
@@ -104,7 +105,6 @@
        ;; ("pciutils" ,pciutils)
        ("pkg-config" ,pkg-config)
        ("alsa-lib" ,alsa-lib)
-       ;; ("SDL" ,SDL)
        ("zlib" ,zlib)
        ("attr" ,attr)
        ("samba" ,samba)))                         ; an optional dependency
@@ -112,7 +112,7 @@
                      ("perl" ,perl)))
 
     (home-page "http://www.qemu-project.org")
-    (synopsis "Machine emulator and virtualizer")
+    (synopsis "Machine emulator and virtualizer (without GUI)")
     (description
      "QEMU is a generic machine emulator and virtualizer.
 
@@ -132,11 +132,18 @@ server and embedded PowerPC, and S390 guests.")
 (define-public qemu/smb-shares
   ;; A patched QEMU where `-net smb' yields two shares instead of one: one for
   ;; the store, and another one for exchanges with the host.
-  (package (inherit qemu)
+  (package (inherit qemu-headless)
     (name "qemu-with-multiple-smb-shares")
-    (inputs `(,@(package-inputs qemu)
-              ("patch/smb-shares"
-               ,(search-patch "qemu-multiple-smb-shares.patch"))))
-    (arguments
-     `(#:patches (list (assoc-ref %build-inputs "patch/smb-shares"))
-       ,@(package-arguments qemu)))))
+    (source (origin (inherit (package-source qemu-headless))
+              (patches
+               (cons (search-patch "qemu-multiple-smb-shares.patch")
+                     (origin-patches (package-source qemu-headless))))))))
+
+(define-public qemu
+  ;; QEMU with GUI support.
+  (package (inherit qemu-headless)
+    (name "qemu")
+    (synopsis "Machine emulator and virtualizer")
+    (inputs `(("sdl" ,sdl)
+              ("mesa" ,mesa)
+              ,@(package-inputs qemu-headless)))))

@@ -48,14 +48,14 @@
                                  version ".tar.xz"))
              (sha256
               (base32
-               "1385qzs3bsa52s5rcncbrkxlydkw0ajzrvfxgv8rws5fx512kakh"))))
+               "1385qzs3bsa52s5rcncbrkxlydkw0ajzrvfxgv8rws5fx512kakh"))
+             (patches (list (search-patch "emacs-configure-sh.patch")))))
     (build-system gnu-build-system)
     (arguments
      '(#:configure-flags
        (list (string-append "--with-crt-dir=" (assoc-ref %build-inputs "libc")
                             "/lib")
              "--with-gif=no")                     ; XXX: add libungif
-       #:patches (list (assoc-ref %build-inputs "patch/epaths"))
        #:phases (alist-cons-before
                  'configure 'fix-/bin/pwd
                  (lambda _
@@ -72,7 +72,7 @@
 
        ;; TODO: Add the optional dependencies.
        ("xlibs" ,libx11)
-       ("gtk+" ,gtk+)
+       ("gtk+" ,gtk+-2)
        ("libXft" ,libxft)
        ("libtiff" ,libtiff)
        ;; ("libungif" ,libungif)
@@ -85,27 +85,18 @@
 
        ("libXpm" ,libxpm)
        ("libxml2" ,libxml2)
-       ("dbus" ,dbus)
-
-       ("patch/epaths" ,(search-patch "emacs-configure-sh.patch"))
-       ))
+       ("dbus" ,dbus)))
     (home-page "http://www.gnu.org/software/emacs/")
     (synopsis "The extensible, customizable, self-documenting text editor")
     (description
-     "GNU Emacs is an extensible, customizable text editor—and more.  At its
-core is an interpreter for Emacs Lisp, a dialect of the Lisp
-programming language with extensions to support text editing.
-
-The features of GNU Emacs include: content-sensitive editing modes,
-including syntax coloring, for a wide variety of file types including
-plain text, source code, and HTML; complete built-in documentation,
-including a tutorial for new users; full Unicode support for nearly all
-human languages and their scripts; highly customizable, using Emacs
-Lisp code or a graphical interface; a large number of extensions that
-add other functionality, including a project planner, mail and news
-reader, debugger interface, calendar, and more.  Many of these
-extensions are distributed with GNU Emacs; others are available
-separately.")
+     "GNU Emacs is an extensible and highly customizable text editor.  It is
+based on an Emacs Lisp interpreter with extensions for text editing.  Emacs
+has been extended in essentially all areas of computing, giving rise to a
+vast array of packages supporting, e.g., email, IRC and XMPP messaging,
+spreadsheets, remote server editing, and much more.  Emacs includes extensive
+documentation on all aspects of the system, from basic editing to writing
+large Lisp programs.  It has full Unicode support for nearly all human
+languages.")
     (license gpl3+)))
 
 

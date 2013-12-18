@@ -27,7 +27,7 @@
 (define-public cmake
   (package
     (name "cmake")
-    (version "2.8.10.2")
+    (version "2.8.12")
     (source (origin
              (method url-fetch)
              (uri (string-append
@@ -36,12 +36,11 @@
                     (string-index version #\. (+ 1 (string-index version #\.))))
                    "/cmake-" version ".tar.gz"))
              (sha256
-              (base32 "1c8fj6i2x9sb39wc9av2ighj415mw33cxfrlfpafcvm0knrlylnf"))))
+              (base32 "11q21vyrr6c6smyjy81k2k07zmn96ggjia9im9cxwvj0n88bm1fq"))
+             (patches (list (search-patch "cmake-fix-tests.patch")))))
     (build-system gnu-build-system)
     (arguments
      '(#:test-target "test"
-       #:patches (list (assoc-ref %build-inputs "fix-tests"))
-       #:patch-flags '("-p0")
        #:phases (alist-replace
                  'configure
                  (lambda* (#:key outputs #:allow-other-keys)
@@ -66,10 +65,9 @@
                              (string-append "--prefix=" out)))))
                  %standard-phases)))
     (inputs
-     `(("file" ,file)
-       ("fix-tests" ,(search-patch "cmake-fix-tests.patch"))))
+     `(("file" ,file)))
     (home-page "http://www.cmake.org/")
-    (synopsis "A cross-platform, open-source build system")
+    (synopsis "Cross-platform build system")
     (description
      "CMake is a family of tools designed to build, test and package software.
 CMake is used to control the software compilation process using simple platform

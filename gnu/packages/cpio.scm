@@ -27,31 +27,21 @@
   (package
     (name "cpio")
     (version "2.11")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://gnu/cpio/cpio-"
-                          version ".tar.bz2"))
-      (sha256
-       (base32
-        "1gavgpzqwgkpagjxw72xgxz52y1ifgz0ckqh8g7cckz7jvyhp0mv"))))
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "mirror://gnu/cpio/cpio-"
+                                 version ".tar.bz2"))
+             (sha256
+              (base32
+               "1gavgpzqwgkpagjxw72xgxz52y1ifgz0ckqh8g7cckz7jvyhp0mv"))
+             (patches (list (search-patch "cpio-gets-undeclared.patch")))))
     (build-system gnu-build-system)
-    (arguments
-     `(#:patches (list (assoc-ref %build-inputs
-                                  "patch/gets"))))
-    (inputs
-     `(("patch/gets" ,(search-patch "cpio-gets-undeclared.patch"))))
     (home-page "https://www.gnu.org/software/cpio/")
     (synopsis "Manage cpio and tar file archives")
     (description
-     "GNU Cpio copies files into or out of a cpio or tar archive. The
-archive can be another file on the disk, a magnetic tape, or a pipe.
-
-GNU Cpio supports the following archive formats: binary, old ASCII, new
-ASCII, crc, HPUX binary, HPUX old ASCII, old tar, and POSIX.1 tar. The
-tar format is provided for compatability with the tar program. By
-default, cpio creates binary format archives, for compatibility with
-older cpio programs. When extracting from archives, cpio automatically
-recognizes which kind of archive it is reading and can read archives
-created on machines with a different byte-order.")
+     "GNU cpio copies files into or out of cpio or tar archives. Indeed,
+many formats are supported, including legacy formats.  The format is
+determined automatically by the program and is handled appropriately. 
+Furthermore, the location of the archive is not important.  It can be another
+file on the drive, a tape, or data on a pipe.")
     (license gpl3+)))
