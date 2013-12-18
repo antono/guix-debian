@@ -15,3 +15,4 @@ export DH_VERBOSE=1
 override_dh_auto_test:
 override_dh_autotools-dev_updateconfig:
 override_dh_autotools-dev_restoreconfig:
+override_dh_strip:
