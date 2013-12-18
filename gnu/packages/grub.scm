@@ -24,7 +24,7 @@
   #:use-module (gnu packages)
   #:use-module (gnu packages flex)
   #:use-module (gnu packages bison)
-  #:use-module ((gnu packages gettext) #:renamer (symbol-prefix-proc 'gnu:))
+  #:use-module (gnu packages gettext)
   #:use-module (gnu packages fontutils)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages qemu)
@@ -38,7 +38,7 @@
   ;; <https://bugs.launchpad.net/bugs/947597> and fixed at
   ;; <http://bzr.savannah.gnu.org/lh/grub/trunk/grub/revision/4828>.
   ;; Work around it by using an older QEMU.
-  (package (inherit qemu)
+  (package (inherit qemu-headless)
     (version "1.3.1")
     (source (origin
              (method url-fetch)
@@ -67,11 +67,11 @@
                                  version ".tar.xz"))
              (sha256
               (base32
-               "0n64hpmsccvicagvr0c6v0kgp2yw0kgnd3jvsyd26cnwgs7c6kkq"))))
+               "0n64hpmsccvicagvr0c6v0kgp2yw0kgnd3jvsyd26cnwgs7c6kkq"))
+             (patches (list (search-patch "grub-gets-undeclared.patch")))))
     (build-system gnu-build-system)
     (arguments
-     '(#:patches (list (assoc-ref %build-inputs "patch/gets"))
-       #:configure-flags '("--disable-werror")
+     '(#:configure-flags '("--disable-werror")
        #:phases (alist-cons-before
                  'patch-source-shebangs 'patch-stuff
                  (lambda _
@@ -84,12 +84,10 @@
                  %standard-phases)))
     (inputs
      `(;; ("lvm2" ,lvm2)
-       ("gettext" ,gnu:gettext)
+       ("gettext" ,gnu-gettext)
        ("freetype" ,freetype)
        ;; ("libusb" ,libusb)
-       ("ncurses" ,ncurses)
-
-       ("patch/gets" ,(search-patch "grub-gets-undeclared.patch"))))
+       ("ncurses" ,ncurses)))
     (native-inputs
      `(("bison" ,bison)
        ("flex" ,flex)
@@ -99,14 +97,12 @@
        ("qemu" ,qemu-for-tests)
        ("xorriso" ,xorriso)))
     (home-page "http://www.gnu.org/software/grub/")
-    (synopsis "GRand unified boot loader")
+    (synopsis "GRand Unified Boot loader")
     (description
-     "GNU GRUB is a Multiboot boot loader. It was derived from GRUB, GRand
-Unified Bootloader, which was originally designed and implemented by Erich
-Stefan Boleyn.
-
-Briefly, the boot loader is the first software program that runs when a
-computer starts.  It is responsible for loading and transferring control to
-the operating system kernel software (such as the Hurd or the Linux).  The
-kernel, in turn, initializes the rest of the operating system (e.g., GNU).")
+     "GRUB is a multiboot bootloader.  It is used for initially loading the
+kernel of an operating system and then transferring control to it. The kernel
+then goes on to load the rest of the operating system. As a multiboot boot
+loader, GRUB handles the presence of multiple operating systems installed on
+the same computer; upon booting the computer, the user is presented with a
+menu to select one of the installed operating systems.")
     (license gpl3+)))

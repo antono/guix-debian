@@ -1,5 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
+;;; Copyright © 2013 Nikita Karetnikov <nikita@karetnikov.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -22,54 +23,45 @@
                 #:renamer (symbol-prefix-proc 'license:))
   #:use-module (guix packages)
   #:use-module (guix download)
+  #:use-module (guix build-system cmake)
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages compression)
-  #:use-module ((gnu packages gettext)
-                #:renamer (symbol-prefix-proc 'gnu:))
+  #:use-module (gnu packages fontutils)
+  #:use-module (gnu packages gettext)
+  #:use-module (gnu packages gcc)
+  #:use-module (gnu packages gtk)
+  #:use-module (gnu packages multiprecision)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages python)
   #:use-module (gnu packages readline)
   #:use-module (gnu packages xml))
 
 (define-public units
   (package
    (name "units")
-   (version "2.01")
+   (version "2.02")
    (source (origin
             (method url-fetch)
             (uri (string-append "mirror://gnu/units/units-" version
                                 ".tar.gz"))
             (sha256 (base32
-                     "1wl8kaxgk4l5jgc1f71mx1rwa6ib84krjmzyzn2f987z1g3i52qk"))))
+                     "16jfji9g1zc99agd5dcinajinhcxr4dgq2lrbc9md69ir5qgld1b"))))
    (build-system gnu-build-system)
    (synopsis "Conversion between thousands of scales")
    (description
-    "GNU Units converts quantities expressed in various systems of
-measurement to their equivalents in other systems of measurement.  Like
-many similar programs, it can handle multiplicative scale changes.  It can
-also handle nonlinear conversions such as Fahrenheit to Celsius or wire
-gauge, and it can convert from and to sums of units, such as converting
-between meters and feet plus inches.
-
-Beyond simple unit conversions, GNU Units can be used as a general-purpose
-scientific calculator that keeps track of units in its calculations.  You
-can form arbitrary complex mathematical expressions of dimensions including
-sums, products, quotients, powers, and even roots of dimensions.  Thus you
-can ensure accuracy and dimensional consistency when working with long
-expressions that involve many different units that may combine in complex
-ways.
-
-The units are defined in an external data file.  You can use the extensive
-data file that comes with this program, or you can provide your own data
-file to suit your needs.  You can also use your own data file to supplement
-the standard data file.")
+    "GNU Units converts between measured quantities between units of
+measure.  It can handle scale changes through adaptive usage of standard
+scale prefixes (micro-, kilo-, etc.).  It can also handle nonlinear
+conversions such as Fahrenheit to Celsius.  Its interpreter is powerful
+enough to be used effectively as a scientific calculator.")
    (license license:gpl3+)
    (home-page "http://www.gnu.org/software/units/")))
 
 (define-public gsl
   (package
     (name "gsl")
-    (version "1.15")
+    (version "1.16")
     (source
      (origin
       (method url-fetch)
@@ -77,10 +69,11 @@ the standard data file.")
                           version ".tar.gz"))
       (sha256
        (base32
-        "18qf6jzz1r3mzb5qynywv4xx3z9g61hgkbpkdrhbgqh2g7jhgfc5"))))
+        "0lrgipi0z6559jqh82yx8n4xgnxkhzj46v96dl77hahdp58jzg3k"))))
     (build-system gnu-build-system)
     (arguments
-     `(#:phases
+     `(#:parallel-tests? #f
+       #:phases
         (alist-replace
          'configure
          (lambda* (#:key target system outputs #:allow-other-keys #:rest args)
@@ -95,14 +88,38 @@ the standard data file.")
     (home-page "http://www.gnu.org/software/gsl/")
     (synopsis "Numerical library for C and C++")
     (description
-     "The GNU Scientific Library (GSL) is a numerical library for C
-and C++ programmers.  It is free software under the GNU General
-Public License.
+     "The GNU Scientific Library is a library for numerical analysis in C
+and C++.  It includes a wide range of mathematical routines, with over 1000
+functions in total.  Subject areas covered by the library include:
+differential equations, linear algebra, Fast Fourier Transforms and random
+numbers.")
+    (license license:gpl3+)))
 
-The library provides a wide range of mathematical routines such
-as random number generators, special functions and least-squares
-fitting.  There are over 1000 functions in total with an
-extensive test suite.")
+(define-public glpk
+  (package
+    (name "glpk")
+    (version "4.52.1")
+    (source
+     (origin
+      (method url-fetch)
+      (uri (string-append "mirror://gnu/glpk/glpk-"
+                          version ".tar.gz"))
+      (sha256
+       (base32
+        "0nz9ngmx23c8gbjr8l8ygnfaanxj2mwbl8awpg630bgrkxdnhc9j"))))
+    (build-system gnu-build-system)
+    (inputs
+     `(("gmp" ,gmp)))
+    (arguments
+     `(#:configure-flags '("--with-gmp")))
+    (home-page "http://www.gnu.org/software/glpk/")
+    (synopsis "GNU Linear Programming Kit, supporting the MathProg language")
+    (description
+     "GLPK is a C library for solving large-scale linear programming (LP),
+mixed integer programming (MIP), and other related problems.  It supports the
+GNU MathProg modeling language, a subset of the AMPL language, and features a
+translator for the language.  In addition to the C library, a stand-alone
+LP/MIP solver is included in the package.")
     (license license:gpl3+)))
 
 (define-public pspp
@@ -116,31 +133,73 @@ extensive test suite.")
                           version ".tar.gz"))
       (sha256
        (base32
-        "0qhxsdbwxd3cn1shc13wxvx2lg32lp4z6sz24kv3jz7p5xfi8j7x"))))
+        "0qhxsdbwxd3cn1shc13wxvx2lg32lp4z6sz24kv3jz7p5xfi8j7x"))
+      (patches (list (search-patch "pspp-tests.patch")))))
     (build-system gnu-build-system)
     (inputs
-     `(("gettext" ,gnu:gettext)
+     `(("cairo" ,cairo)
+       ("fontconfig" ,fontconfig)
+       ("gettext" ,gnu-gettext)
        ("gsl" ,gsl)
        ("libxml2" ,libxml2)
+       ("pango" ,pango)
        ("readline" ,readline)
+       ("gtk" ,gtk+-2)
+       ("gtksourceview" ,gtksourceview)
        ("zlib" ,zlib)))
     (native-inputs
      `(("perl" ,perl)
        ("pkg-config" ,pkg-config)))
-    (arguments
-     `(#:configure-flags
-       `("--without-cairo" ; FIXME: tests currently fail for lack of font
-         "--without-gui"))) ; FIXME: package missing dependencies
     (home-page "http://www.gnu.org/software/pspp/")
     (synopsis "Statistical analysis")
     (description
-     "PSPP is a program for statistical analysis of sampled data.  It is a
-free replacement for the proprietary program SPSS, and appears very similar
-to it.
-
-PSPP can perform descriptive statistics, T-tests, anova, linear and logistic
-regression, cluster analysis, factor analysis, non-parametric tests and
-more.  Its backend is designed to perform its analyses as fast as possible,
-regardless of the size of the input data.  You can use PSPP with its
-graphical interface or the more traditional syntax commands.")
+     "GNU PSPP is a statistical analysis program.  It can perform
+descriptive statistics, T-tests, linear regression and non-parametric tests. 
+It features both a graphical interface as well as command-line input. PSPP is
+designed to interoperate with Gnumeric, LibreOffice and OpenOffice.  Data can
+be imported from spreadsheets, text files and database sources and it can be
+output in text, PostScript, PDF or HTML.")
     (license license:gpl3+)))
+
+(define-public lapack
+  (package
+    (name "lapack")
+    (version "3.4.2")
+    (source
+     (origin
+      (method url-fetch)
+      (uri (string-append "http://www.netlib.org/lapack/lapack-"
+                          version ".tgz"))
+      (sha256
+       (base32
+        "1w7sf8888m7fi2kyx1fzgbm22193l8c2d53m8q1ibhvfy6m5v9k0"))
+      (snippet
+       ;; Remove non-free files.
+       ;; See <http://icl.cs.utk.edu/lapack-forum/archives/lapack/msg01383.html>.
+       '(for-each (lambda (file)
+                    (format #t "removing '~a'~%" file)
+                    (delete-file file))
+                  '("lapacke/example/example_DGESV_rowmajor.c"
+                    "lapacke/example/example_ZGESV_rowmajor.c"
+                    "DOCS/psfig.tex")))))
+    (build-system cmake-build-system)
+    (home-page "http://www.netlib.org/lapack/")
+    (inputs `(("fortran" ,gfortran-4.8)
+              ("python" ,python-2)))
+    (arguments
+     `(#:modules ((guix build cmake-build-system)
+                  (guix build utils)
+                  (srfi srfi-1))
+       #:phases (alist-cons-before
+                 'check 'patch-python
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   (let ((python (assoc-ref inputs "python")))
+                     (substitute* "lapack_testing.py"
+                       (("/usr/bin/env python") python))))
+                 %standard-phases)))
+    (synopsis "Library for numerical linear algebra")
+    (description
+     "LAPACK is a Fortran 90 library for solving the most commonly occurring
+problems in numerical linear algebra.")
+    (license (license:bsd-style "file://LICENSE"
+                                "See LICENSE in the distribution."))))

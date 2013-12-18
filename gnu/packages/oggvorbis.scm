@@ -1,6 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2013 Nikita Karetnikov <nikita@karetnikov.org>
+;;; Copyright © 2013 David Thompson <dthompson2@worcester.edu>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -26,13 +27,22 @@
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
   #:use-module (gnu packages linux)
+  #:use-module (gnu packages pulseaudio)
   #:use-module ((guix licenses)
                 #:renamer (symbol-prefix-proc 'license:))
   #:use-module (guix packages)
   #:use-module (guix download)
-  #:use-module (guix build-system gnu))
+  #:use-module (guix build-system gnu)
+  #:export (libogg
+            libvorbis
+            libtheora
+            speex
+            ao
+            flac
+            libkate
+            vorbis-tools))
 
-(define-public libogg
+(define libogg
   (package
    (name "libogg")
    (version "1.3.0")
@@ -55,7 +65,7 @@ periodic timestamps for seeking.")
                                "See COPYING in the distribution."))
    (home-page "http://xiph.org/ogg/")))
 
-(define-public libvorbis
+(define libvorbis
   (package
    (name "libvorbis")
    (version "1.3.3")
@@ -67,7 +77,7 @@ periodic timestamps for seeking.")
              (base32
               "1gby6hapz9njx4l9g0pndyk4q83z5fgrgc30mfwfgx7bllspsk43"))))
    (build-system gnu-build-system)
-   (inputs `(("libogg" ,libogg)))
+   (propagated-inputs `(("libogg" ,libogg)))
    (arguments `(#:configure-flags '("LDFLAGS=-lm")))
    (synopsis "libvorbis, a library implementing the vorbis audio format")
    (description
@@ -80,7 +90,31 @@ polyphonic) audio and music at fixed and variable bitrates from 16 to
                                "See COPYING in the distribution."))
    (home-page "http://xiph.org/vorbis/")))
 
-(define-public speex
+(define libtheora
+  (package
+    (name "libtheora")
+    (version "1.1.1")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "http://downloads.xiph.org/releases/theora/libtheora-"
+                                 version ".tar.xz"))
+             (sha256
+              (base32
+               "0q8wark9ribij57dciym5vdikg2464p8q2mgqvfb78ksjh4s8vgk"))
+             (patches (list (search-patch "libtheora-config-guess.patch")))))
+    (build-system gnu-build-system)
+    (inputs `(("libvorbis" ,libvorbis)))
+    ;; The .pc files refer to libogg.
+    (propagated-inputs `(("libogg" ,libogg)))
+    (synopsis "Library implementing the Theora video format")
+    (description
+     "The libtheora library implements the ogg theora video format,
+a fully open, non-proprietary, patent-and-royalty-free, general-purpose
+compressed video format.")
+    (license license:bsd-3)
+    (home-page "http://xiph.org/theora/")))
+
+(define speex
   (package
     (name "speex")
     (version "1.2rc1")
@@ -97,15 +131,15 @@ polyphonic) audio and music at fixed and variable bitrates from 16 to
     (home-page "https://gnu.org/software/speex")
     (synopsis "Library for patent-free audio compression format")
     (description
-     "GNU Speex is a patent-free voice codec.  It is designed to
-compress voice at bitrates in the 2--45 kbps range.  Possible
-applications include VoIP, internet audio streaming, archiving of speech
-data (e.g., voice mail), and audio books.")
+     "GNU Speex is a patent-free audio compression codec specially designed
+for speech.  It is well-adapted to internet applications, such as VoIP.  It
+features compression of different bands in the same bitstream, intensity
+stereo encoding, and voice activity detection.")
     ;; 'src/getopt.c' is under LGPLv2+
     (license (license:bsd-style "file://COPYING"
                                 "See COPYING in the distribution."))))
 
-(define-public ao
+(define ao
   (package
     (name "ao")
     (version "1.1.0")
@@ -119,8 +153,12 @@ data (e.g., voice mail), and audio books.")
         "1m0v2y6bhr4iwsgdkc7b3y0qgpvpv1ifbxsy8n8ahsvjn6wmppi9"))))
     (build-system gnu-build-system)
     ;; FIXME: Add further backends, see the summary printed after configure.
+    ;; XXX: Should back-ends be pushed to different outputs?  For instance,
+    ;; "out" would include only the ALSA back-end, while "pulse" would
+    ;; contains 'lib/ao/plugins-4/libpulse.*'.
     (inputs `(("pkg-config" ,pkg-config)
-              ("alsa-lib" ,alsa-lib)))
+              ("alsa-lib" ,alsa-lib)
+              ("pulseaudio" ,pulseaudio)))
     (synopsis "Cross platform audio library")
     (description
      "Libao is a cross-platform audio library that allows programs to
@@ -146,7 +184,7 @@ OpenBSD's sndio.")
     (license license:gpl2+)
     (home-page "http://www.xiph.org/ao/")))
 
-(define-public flac
+(define flac
   (package
    (name "flac")
    (version "1.2.1")
@@ -156,16 +194,14 @@ OpenBSD's sndio.")
                                 version ".tar.gz"))
             (sha256
              (base32
-              "1pry5lgzfg57pga1zbazzdd55fkgk3v5qy4axvrbny5lrr5s8dcn"))))
+              "1pry5lgzfg57pga1zbazzdd55fkgk3v5qy4axvrbny5lrr5s8dcn"))
+            (patches
+             (list (search-patch "flac-fix-memcmp-not-declared.patch")))))
    (build-system gnu-build-system)
    (arguments
-    `(#:parallel-tests? #f
-      #:patches (list (assoc-ref %build-inputs
-                                 "patch/memcmp"))))
+    `(#:parallel-tests? #f))
    ;; FIXME: configure also looks for xmms, input could be added once it exists
-   (inputs `(("libogg" ,libogg)
-             ("patch/memcmp"
-                 ,(search-patch "flac-fix-memcmp-not-declared.patch"))))
+   (inputs `(("libogg" ,libogg)))
    (synopsis "flac free lossless audio codec")
    (description
 "FLAC stands for Free Lossless Audio Codec, an audio format that is lossless,
@@ -174,7 +210,7 @@ meaning that audio is compressed in FLAC without any loss in quality.")
                                "See COPYING in the distribution.")) ; and LGPL and GPL
    (home-page "http://xiph.org/flac/")))
 
-(define-public libkate
+(define libkate
   (package
    (name "libkate")
    (version "0.4.1")
@@ -209,7 +245,7 @@ Kate stream.")
    (license license:bsd-3)
    (home-page "http://code.google.com/p/libkate/")))
 
-(define-public vorbis-tools
+(define vorbis-tools
   (package
    (name "vorbis-tools")
    (version "1.4.0")

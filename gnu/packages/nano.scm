@@ -18,8 +18,7 @@
 
 (define-module (gnu packages nano)
   #:use-module (guix licenses)
-  #:use-module ((gnu packages gettext)
-                #:renamer (symbol-prefix-proc 'guix:))
+  #:use-module (gnu packages gettext)
   #:use-module (gnu packages ncurses)
   #:use-module (guix packages)
   #:use-module (guix download)
@@ -39,13 +38,12 @@
         "1s3b21h5p7r8xafw0gahswj16ai6k2vnjhmd15b491hl0x494c7z"))))
     (build-system gnu-build-system)
     (inputs
-     `(("gettext" ,guix:gettext)
+     `(("gettext" ,gnu-gettext)
        ("ncurses" ,ncurses)))
     (home-page "http://www.nano-editor.org/")
     (synopsis "Small, user-friendly console text editor")
     (description
-     "GNU nano is designed to be a free replacement for the Pico text
-editor, part of the Pine email suite from The University of
-Washington. It aims to emulate Pico as closely as possible and perhaps
-include extra functionality.")
+     "GNU Nano is a small and simple text editor.  In addition to basic
+editing, it supports interactive search and replace, go to line and column
+number, auto-indentation and more.")
     (license gpl3+))) ; some files are under GPLv2+

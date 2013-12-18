@@ -70,10 +70,13 @@
   "Return a cross-compiler for TARGET, where TARGET is a GNU triplet.  Use
 XBINUTILS as the associated cross-Binutils.  If LIBC is false, then build a
 GCC that does not target a libc; otherwise, target that libc."
-  (package (inherit gcc-4.7)
+  (package (inherit gcc-4.8)
     (name (string-append "gcc-cross-"
                          (if libc "" "sans-libc-")
                          target))
+    (source (origin (inherit (package-source gcc-4.8))
+              (patches
+               (list (search-patch "gcc-cross-environment-variables.patch")))))
     (arguments
      `(#:implicit-inputs? #f
        #:modules ((guix build gnu-build-system)
@@ -81,9 +84,8 @@ GCC that does not target a libc; otherwise, target that libc."
                   (ice-9 regex)
                   (srfi srfi-1)
                   (srfi srfi-26))
-       #:patches (list (assoc-ref %build-inputs "patch/cross-env-vars"))
 
-       ,@(substitute-keyword-arguments (package-arguments gcc-4.7)
+       ,@(substitute-keyword-arguments (package-arguments gcc-4.8)
            ((#:configure-flags flags)
             `(append (list ,(string-append "--target=" target)
                            ,@(gcc-configure-flags-for-triplet target)
@@ -99,6 +101,7 @@ GCC that does not target a libc; otherwise, target that libc."
                                    "--enable-languages=c"
 
                                    "--disable-threads" ; libgcc, would need libc
+                                   "--disable-libatomic"
                                    "--disable-libmudflap"
                                    "--disable-libgomp"
                                    "--disable-libssp"
@@ -177,17 +180,14 @@ GCC that does not target a libc; otherwise, target that libc."
             #f))))
 
     (native-inputs
-     `(("patch/cross-env-vars"
-        ,(search-patch "gcc-cross-environment-variables.patch"))
-
-       ("binutils-cross" ,xbinutils)
+     `(("binutils-cross" ,xbinutils)
 
        ;; Call it differently so that the builder can check whether the "libc"
        ;; input is #f.
        ("libc-native" ,@(assoc-ref %final-inputs "libc"))
 
        ;; Remaining inputs.
-       ,@(let ((inputs (append (package-inputs gcc-4.7)
+       ,@(let ((inputs (append (package-inputs gcc-4.8)
                                (alist-delete "libc" %final-inputs))))
            (if libc
                `(("libc" ,libc)

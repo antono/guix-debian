@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.68)
-AC_INIT([GNU Guix], [0.4], [bug-guix@gnu.org], [guix],
+AC_INIT([GNU Guix], [0.5], [bug-guix@gnu.org], [guix],
   [http://www.gnu.org/software/guix/])
 AC_CONFIG_AUX_DIR([build-aux])
 
@@ -40,6 +40,10 @@ AC_ARG_ENABLE([daemon],
 # to shell variables.
 guix_localstatedir="`eval echo $localstatedir | sed -e "s|NONE|/usr/local|g"`"
 AC_SUBST([guix_localstatedir])
+
+dnl We require the pkg.m4 set of macros from pkg-config.
+dnl Make sure it's available.
+m4_pattern_forbid([PKG_CHECK_MODULES])
 
 PKG_CHECK_MODULES([GUILE], [guile-2.0 >= 2.0.5])
 AC_PATH_PROG([GUILE], [guile])

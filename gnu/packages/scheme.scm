@@ -35,7 +35,6 @@
   #:use-module (gnu packages gtk)
   #:use-module (gnu packages libffi)
   #:use-module (gnu packages libjpeg)
-  #:use-module ((gnu packages gtk) #:select (cairo pango))
   #:use-module (ice-9 match))
 
 (define-public mit-scheme
@@ -109,11 +108,9 @@
     (home-page "http://www.gnu.org/software/mit-scheme/")
     (synopsis "Scheme implementation with integrated editor and debugger")
     (description
-     "MIT/GNU Scheme is an implementation of the Scheme programming
-language, providing an interpreter, compiler, source-code debugger,
-integrated Emacs-like editor, and a large runtime library.  MIT/GNU
-Scheme is best suited to programming large applications with a rapid
-development cycle.")
+     "GNU/MIT Scheme is an implementation of the Scheme programming
+language.  It provides an interpreter, a compiler and a debugger.  It also
+features an integrated Emacs-like editor and a large runtime library.")
     (license gpl2+)))
 
 (define-public bigloo
@@ -126,11 +123,11 @@ development cycle.")
                                  version ".tar.gz"))
              (sha256
               (base32
-               "1fck2h48f0bvh8fl437cagmp0syfxy9lqacy1zwsis20fc76jvzi"))))
+               "1fck2h48f0bvh8fl437cagmp0syfxy9lqacy1zwsis20fc76jvzi"))
+             (patches (list (search-patch "bigloo-gc-shebangs.patch")))))
     (build-system gnu-build-system)
     (arguments
-     `(#:patches (list (assoc-ref %build-inputs "patch/shebangs"))
-       #:test-target "test"
+     `(#:test-target "test"
        #:phases (alist-replace
                  'configure
                  (lambda* (#:key outputs #:allow-other-keys)
@@ -179,7 +176,6 @@ development cycle.")
                   %standard-phases))))
     (inputs
      `(("emacs" ,emacs)
-       ("patch/shebangs" ,(search-patch "bigloo-gc-shebangs.patch"))
 
        ;; Optional APIs for which Bigloo has bindings.
        ("avahi" ,avahi)
@@ -212,7 +208,8 @@ between Scheme and C# programs.")
                                  version ".tar.gz"))
              (sha256
               (base32
-               "1v2r4ga58kk1sx0frn8qa8ccmjpic9csqzpk499wc95y9c4b1wy3"))))
+               "1v2r4ga58kk1sx0frn8qa8ccmjpic9csqzpk499wc95y9c4b1wy3"))
+             (patches (list (search-patch "hop-bigloo-4.0b.patch")))))
     (build-system gnu-build-system)
     (arguments
      '(#:phases
@@ -252,7 +249,6 @@ between Scheme and C# programs.")
                                         "\\.so$")))))
          %standard-phases))
        #:tests? #f                                ; no test suite
-       #:patches (list (assoc-ref %build-inputs "patch/bigloo-4.0b"))
        #:modules ((guix build gnu-build-system)
                   (guix build utils)
                   (ice-9 popen)
@@ -261,10 +257,7 @@ between Scheme and C# programs.")
                   (srfi srfi-1))))
     (inputs `(("bigloo" ,bigloo)
               ("which" ,which)
-              ("patchelf" ,patchelf)
-
-              ("patch/bigloo-4.0b"
-               ,(search-patch "hop-bigloo-4.0b.patch"))))
+              ("patchelf" ,patchelf)))
     (home-page "http://hop.inria.fr/")
     (synopsis "A multi-tier programming language for the Web 2.0")
     (description
@@ -325,10 +318,9 @@ language standard, and includes many enhancements and extensions.")
                                  "/scheme48-" version ".tgz"))
              (sha256
               (base32
-               "0rw2lz5xgld0klvld292ds6hvfk5l12vskzgf1hhwjdpa38r3fnw"))))
+               "0rw2lz5xgld0klvld292ds6hvfk5l12vskzgf1hhwjdpa38r3fnw"))
+             (patches (list (search-patch "scheme48-tests.patch")))))
     (build-system gnu-build-system)
-    (arguments `(#:patches (list (assoc-ref %build-inputs "patch/tests"))))
-    (inputs `(("patch/tests" ,(search-patch "scheme48-tests.patch"))))
     (home-page "http://s48.org/")
     (synopsis "Scheme implementation using a bytecode interpreter")
     (description
@@ -403,7 +395,7 @@ implementation techniques and as an expository tool.")
               ("pango" ,pango)
               ("libjpeg" ,libjpeg-8)
               ("gdk-pixbuf" ,gdk-pixbuf)
-              ("gtk" ,gtk+)))
+              ("gtk" ,gtk+-2)))
     (home-page "http://racket-lang.org")
     (synopsis "Implementation of Scheme and related languages")
     (description

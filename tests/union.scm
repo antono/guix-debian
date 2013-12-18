@@ -104,8 +104,8 @@
                                   (map cdr %build-inputs))))
          (drv
           (build-expression->derivation %store "union-test"
-                                        (%current-system)
-                                        builder inputs
+                                        builder
+                                        #:inputs inputs
                                         #:modules '((guix build union)))))
     (and (build-derivations %store (list (pk 'drv drv)))
          (with-directory-excursion (derivation->output-path drv)
@@ -116,10 +116,10 @@
                 (directory-exists? "lib/gcc")
                 (file-exists? "include/unistd.h")
 
-                ;; The 'include' sub-directory is only found in
-                ;; glibc-bootstrap, so it should be unified in a
+                ;; The 'include/c++' sub-directory is only found in
+                ;; gcc-bootstrap, so it should be unified in a
                 ;; straightforward way, without traversing it.
-                (eq? 'symlink (stat:type (lstat "include")))
+                (eq? 'symlink (stat:type (lstat "include/c++")))
 
                 ;; Conversely, several inputs have a 'bin' sub-directory, so
                 ;; unifying it requires traversing them all, and creating a

@@ -58,9 +58,8 @@ prepended to the name."
   (let* ((build-system (package-build-system p))
          (rewrite-if-package
           (lambda (content)
-            ;; CONTENT may be a string (e.g., for patches), in which case it
-            ;; is returned, or a package, which is rewritten with the new
-            ;; PYTHON and NEW-PREFIX.
+            ;; CONTENT may be a file name, in which case it is returned, or a
+            ;; package, which is rewritten with the new PYTHON and NEW-PREFIX.
             (if (package? content)
                 (package-with-explicit-python content python
                                               old-prefix new-prefix)
@@ -97,6 +96,7 @@ prepended to the name."
                        #:key
                        (python (default-python))
                        (tests? #t)
+                       (test-target "test")
                        (configure-flags ''())
                        (phases '(@ (guix build python-build-system)
                                    %standard-phases))
@@ -125,7 +125,7 @@ provides a 'setup.py' file as its build system."
                                    source)
                      #:configure-flags ,configure-flags
                      #:system ,system
-                     #:test-target "test"
+                     #:test-target ,test-target
                      #:tests? ,tests?
                      #:phases ,phases
                      #:outputs %outputs
@@ -146,8 +146,8 @@ provides a 'setup.py' file as its build system."
          (package-derivation store guile system)))))
 
   (let ((python (package-derivation store python system)))
-    (build-expression->derivation store name system
-                                  builder
+    (build-expression->derivation store name builder
+                                  #:inputs
                                   `(,@(if source
                                           `(("source" ,source))
                                           '())
@@ -158,6 +158,7 @@ provides a 'setup.py' file as its build system."
                                     ;; 'gnu-build-system'.
                                     ,@(standard-inputs system))
 
+                                  #:system system
                                   #:modules imported-modules
                                   #:outputs outputs
                                   #:guile-for-build guile-for-build)))

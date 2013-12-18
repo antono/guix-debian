@@ -35,9 +35,16 @@
 ;;
 ;; Code:
 
+(define (default-perl)
+  "Return the default Perl package."
+
+  ;; Do not use `@' to avoid introducing circular dependencies.
+  (let ((module (resolve-interface '(gnu packages perl))))
+    (module-ref module 'perl)))
+
 (define* (perl-build store name source inputs
                      #:key
-                     (perl (@ (gnu packages perl) perl))
+                     (perl (default-perl))
                      (search-paths '())
                      (tests? #t)
                      (make-maker-flags ''())
@@ -50,7 +57,6 @@
                                          (guix build gnu-build-system)
                                          (guix build utils)))
                      (modules '((guix build perl-build-system)
-                                (guix build gnu-build-system)
                                 (guix build utils))))
   "Build SOURCE using PERL, and with INPUTS.  This assumes that SOURCE
 provides a `Makefile.PL' file as its build system."
@@ -69,6 +75,7 @@ provides a `Makefile.PL' file as its build system."
                                          (append perl-search-paths
                                                  search-paths))
                    #:make-maker-flags ,make-maker-flags
+                   #:phases ,phases
                    #:system ,system
                    #:test-target "test"
                    #:tests? ,tests?
@@ -87,8 +94,9 @@ provides a `Makefile.PL' file as its build system."
          (package-derivation store guile system)))))
 
   (let ((perl (package-derivation store perl system)))
-    (build-expression->derivation store name system
-                                  builder
+    (build-expression->derivation store name builder
+                                  #:system system
+                                  #:inputs
                                   `(,@(if source
                                           `(("source" ,source))
                                           '())

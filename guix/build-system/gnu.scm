@@ -187,7 +187,7 @@ runs `make distcheck' and whose result is one or more source tarballs."
          `(("autoconf" ,(ref '(gnu packages autotools) 'autoconf))
            ("automake" ,(ref '(gnu packages autotools) 'automake))
            ("libtool"  ,(ref '(gnu packages autotools) 'libtool) "bin")
-           ("gettext"  ,(ref '(gnu packages gettext) 'gettext))
+           ("gettext"  ,(ref '(gnu packages gettext) 'gnu-gettext))
            ("texinfo"  ,(ref '(gnu packages texinfo) 'texinfo))))))))
 
 
@@ -252,7 +252,6 @@ System: GCC, GNU Make, Bash, Coreutils, etc."
                     (search-paths '())
                     (configure-flags ''())
                     (make-flags ''())
-                    (patches ''()) (patch-flags ''("--batch" "-p1"))
                     (out-of-source? #f)
                     (tests? #t)
                     (test-target "check")
@@ -300,8 +299,6 @@ which could lead to gratuitous input divergence."
                   #:search-paths ',(map search-path-specification->sexp
                                         (append implicit-search-paths
                                                 search-paths))
-                  #:patches ,patches
-                  #:patch-flags ,patch-flags
                   #:phases ,phases
                   #:configure-flags ,configure-flags
                   #:make-flags ,make-flags
@@ -326,8 +323,9 @@ which could lead to gratuitous input divergence."
               (guile  (module-ref distro 'guile-final)))
          (package-derivation store guile system)))))
 
-  (build-expression->derivation store name system
-                                builder
+  (build-expression->derivation store name builder
+                                #:system system
+                                #:inputs
                                 `(,@(if source
                                         `(("source" ,source))
                                         '())
@@ -390,7 +388,6 @@ inputs."
 
                           (configure-flags ''())
                           (make-flags ''())
-                          (patches ''()) (patch-flags ''("--batch" "-p1"))
                           (out-of-source? #f)
                           (tests? #f)             ; nothing can be done
                           (test-target "check")
@@ -473,8 +470,6 @@ platform."
                                              search-path-specification->sexp
                                              (append implicit-host-search-paths
                                                      native-search-paths))
-                    #:patches ,patches
-                    #:patch-flags ,patch-flags
                     #:phases ,phases
                     #:configure-flags ,configure-flags
                     #:make-flags ,make-flags
@@ -499,8 +494,9 @@ platform."
               (guile  (module-ref distro 'guile-final)))
          (package-derivation store guile system)))))
 
-  (build-expression->derivation store name system
-                                builder
+  (build-expression->derivation store name builder
+                                #:system system
+                                #:inputs
                                 `(,@(if source
                                         `(("source" ,source))
                                         '())

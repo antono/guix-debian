@@ -33,7 +33,8 @@
                                 version ".tar.bz2"))
             (sha256
              (base32
-              "0w0da1chh12mczxa5lnwzjk9czi3dq6gnnndbpa6w4rj76b1yklf"))))
+              "0w0da1chh12mczxa5lnwzjk9czi3dq6gnnndbpa6w4rj76b1yklf"))
+            (patches (list (search-patch "m4-readlink-EINVAL.patch")))))
    (build-system gnu-build-system)
    (arguments
     ;; XXX: Disable tests on those platforms with know issues.
@@ -41,8 +42,6 @@
                              '("x86_64-darwin"
                                "i686-cygwin"
                                "i686-sunos")))
-      #:patches (list (assoc-ref %build-inputs
-                                 "patch/readlink-EINVAL"))
       #:phases (alist-cons-before
                 'check 'pre-check
                 (lambda* (#:key inputs #:allow-other-keys)
@@ -55,22 +54,12 @@
                       (("/bin/sh")
                        (format #f "~a/bin/bash" bash)))))
                 %standard-phases)))
-   (inputs `(("patch/readlink-EINVAL"
-              ,(search-patch "m4-readlink-EINVAL.patch"))))
    (synopsis "Macro processor")
    (description
-    "GNU M4 is an implementation of the traditional Unix macro processor.  It
-is mostly SVR4 compatible although it has some extensions (for example,
-handling more than 9 positional parameters to macros).  GNU M4 also has
-built-in functions for including files, running shell commands, doing
-arithmetic, etc.
-
-GNU M4 is a macro processor in the sense that it copies its input to the
-output expanding macros as it goes.  Macros are either builtin or
-user-defined and can take any number of arguments.  Besides just doing macro
-expansion, m4 has builtin functions for including named files, running UNIX
-commands, doing integer arithmetic, manipulating text in various ways,
-recursion etc...  m4 can be used either as a front-end to a compiler or as a
-macro processor in its own right.")
+    "GNU M4 is an implementation of the M4 macro language, which features
+some extensions over other implementations, some of which are required by GNU
+Autoconf.  It is used as a macro processor, which means it processes text,
+expanding macros as it encounters them.  It also has some built-in functions,
+for example to run shell commands or to do arithmetic.")
    (license gpl3+)
    (home-page "http://www.gnu.org/software/m4/")))

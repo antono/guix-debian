@@ -1,5 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
+;;; Copyright © 2013 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -26,30 +27,35 @@
   #:use-module (gnu packages fontutils)
   #:use-module (gnu packages ghostscript)
   #:use-module (gnu packages glib)
+  #:use-module (gnu packages gnome)
   #:use-module (gnu packages icu4c)
   #:use-module (gnu packages libjpeg)
   #:use-module (gnu packages libpng)
   #:use-module (gnu packages libtiff)
   #:use-module (gnu packages pdf)
+  #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
+  #:use-module (gnu packages guile)
+  #:use-module (gnu packages xml)
   #:use-module (gnu packages xorg))
 
 (define-public atk
   (package
    (name "atk")
-   (version "2.8.0")
+   (version "2.10.0")
    (source (origin
             (method url-fetch)
-            (uri (string-append "mirror://gnome/sources/atk/2.8/atk-"
+            (uri (string-append "mirror://gnome/sources/" name "/"
+                                (string-take version 4) "/" name "-"
                                 version ".tar.xz"))
             (sha256
              (base32
-              "1x3dd3hg9l1j9dq70xwph13vxdp6a9wbfcnryryf1wr6c8bij9dj"))))
+              "1c2hbg66wfvibsz2ia0ri48yr62751fn950i97c53j3b0fjifsb3"))))
    (build-system gnu-build-system)
    (inputs `(("glib" ,glib)
              ("pkg-config" ,pkg-config)))
-   (synopsis "GNOME accessability toolkit")
+   (synopsis "GNOME accessibility toolkit")
    (description
     "ATK provides the set of accessibility interfaces that are implemented
 by other toolkits and applications. Using the ATK interfaces, accessibility
@@ -110,14 +116,14 @@ affine transformation (scale, rotation, shear, etc.)")
 (define-public harfbuzz
   (package
    (name "harfbuzz")
-   (version "0.9.21")
+   (version "0.9.22")
    (source (origin
             (method url-fetch)
             (uri (string-append "http://www.freedesktop.org/software/harfbuzz/release/harfbuzz-"
                                 version ".tar.bz2"))
             (sha256
              (base32
-              "1s6sffgf6ndy12fyln2bdnkn3cb1qfkch0rakdgkgwlq7n46zlx0"))))
+              "1nkimwadri6v2kzrmz8y0crmy59gw0kg4i4f6cc786bngs0815lq"))))
    (build-system gnu-build-system)
    (inputs
     `(("cairo" ,cairo)
@@ -157,6 +163,60 @@ used throughout the world.")
    (license license:lgpl2.0+)
    (home-page "https://developer.gnome.org/pango/")))
 
+
+(define-public gtksourceview
+  (package
+    (name "gtksourceview")
+    (version "2.10.5") ; This is the last version which builds against gtk+2
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://gnome/sources/gtksourceview/"
+                                  (string-take version 4) "/gtksourceview-"
+                                  version ".tar.bz2"))
+              (sha256
+               (base32
+                "07hrabhpl6n8ajz10s0d960jdwndxs87szxyn428mpxi8cvpg1f5"))))
+    (build-system gnu-build-system)
+    (inputs
+     `(("intltool" ,intltool)
+       ("pkg-config" ,pkg-config)
+       ("gtk" ,gtk+-2)
+       ("libxml2" ,libxml2)
+
+       ;; These two are needed only to allow the tests to run successfully.
+       ("xorg-server" ,xorg-server)
+       ("shared-mime-info" ,shared-mime-info)))
+    (arguments
+     `(#:phases
+       ;; Unfortunately, some of the tests in "make check" are highly dependent
+       ;; on the environment therefore, some black magic is required.
+       (alist-cons-before
+        'check 'start-xserver
+        (lambda* (#:key inputs #:allow-other-keys)
+          (let ((xorg-server (assoc-ref inputs "xorg-server"))
+                (mime (assoc-ref inputs "shared-mime-info")))
+
+            ;; There must be a running X server and make check doesn't start one.
+            ;; Therefore we must do it.
+            (system (format #f "~a/bin/Xvfb :1 &" xorg-server))
+            (setenv "DISPLAY" ":1")
+
+            ;; The .lang files must be found in $XDG_DATA_HOME/gtksourceview-2.0
+            (system "ln -s gtksourceview gtksourceview-2.0")
+            (setenv "XDG_DATA_HOME" (getcwd))
+
+            ;; Finally, the mimetypes must be available.
+            (setenv "XDG_DATA_DIRS" (string-append mime "/share/")) ))
+        %standard-phases)))
+    (synopsis "Widget that extends the standard GTK+ 2.x 'GtkTextView' widget")
+    (description
+     "GtkSourceView is a portable C library that extends the standard GTK+
+framework for multiline text editing with support for configurable syntax
+highlighting, unlimited undo/redo, search and replace, a completion framework,
+printing and other features typical of a source code editor.")
+    (license license:lgpl2.0+)
+    (home-page "https://developer.gnome.org/gtksourceview/")))
+
 (define-public gdk-pixbuf
   (package
    (name "gdk-pixbuf")
@@ -182,24 +242,84 @@ in the GNOME project.")
    (license license:lgpl2.0+)
    (home-page "https://developer.gnome.org/gdk-pixbuf/")))
 
-(define-public gtk+
+(define-public at-spi2-core
   (package
-   (name "gtk+")
-   (version "2.24.20")
+   (name "at-spi2-core")
+   (version "2.10.0")
    (source (origin
             (method url-fetch)
-            (uri (string-append "mirror://gnome/sources/gtk+/2.24/gtk+-"
+            (uri (string-append "mirror://gnome/sources/" name "/"
+                                (string-take version 4) "/" name "-"
                                 version ".tar.xz"))
             (sha256
              (base32
-              "18qdvb7nxi25hfnpmcy01p3majw9jnx83ikm263dk9rrjazvqrnc"))))
+              "1ns44yibdgcwzwri7sr075hfs5rh5lgxkh71247a0822az3mahcn"))))
+   (build-system gnu-build-system)
+   (inputs `(("dbus" ,dbus)
+             ("glib" ,glib)
+             ("intltool" ,intltool)
+             ("libxi" ,libxi)
+             ("libxtst" ,libxtst)
+             ("pkg-config" ,pkg-config)))
+   (arguments
+    `(#:tests? #f)) ; FIXME: dbind/dbtest fails; one should disable tests in
+                    ; a more fine-grained way.
+   (synopsis "Assistive Technology Service Provider Interface, core components")
+   (description
+    "The Assistive Technology Service Provider Interface, core components,
+is part of the GNOME accessibility project.")
+   (license license:lgpl2.0+)
+   (home-page "https://projects.gnome.org/accessibility/")))
+
+(define-public at-spi2-atk
+  (package
+   (name "at-spi2-atk")
+   (version "2.10.0")
+   (source (origin
+            (method url-fetch)
+            (uri (string-append "mirror://gnome/sources/" name "/"
+                                (string-take version 4) "/" name "-"
+                                version ".tar.xz"))
+            (sha256
+             (base32
+              "150sqc21difazqd53llwfdaqnwfy73bic9hia41xpfy9kcpzz9yy"))))
+   (build-system gnu-build-system)
+   (inputs `(("atk" ,atk)
+             ("at-spi2-core" ,at-spi2-core)
+             ("dbus" ,dbus)
+             ("glib" ,glib)
+             ("pkg-config" ,pkg-config)))
+   (arguments
+    `(#:tests? #f)) ; FIXME: droute/droute-test fails; one should disable
+                    ; tests in a more fine-grained way.
+   (synopsis "Assistive Technology Service Provider Interface, ATK bindings")
+   (description
+    "The Assistive Technology Service Provider Interface
+is part of the GNOME accessibility project.")
+   (license license:lgpl2.0+)
+   (home-page "https://projects.gnome.org/accessibility/")))
+
+(define-public gtk+-2
+  (package
+   (name "gtk+")
+   (version "2.24.21")
+   (source (origin
+            (method url-fetch)
+            (uri (string-append "mirror://gnome/sources/" name "/"
+                                (string-take version 4) "/" name "-"
+                                version ".tar.xz"))
+            (sha256
+             (base32
+              "1qyw73pr9ryqhir2h1kbx3vm70km4dg2fxrgkrdlpv0rvlb94bih"))))
    (build-system gnu-build-system)
    (propagated-inputs
     `(("atk" ,atk)
       ("gdk-pixbuf" ,gdk-pixbuf)
       ("pango" ,pango)))
    (inputs
-    `(("pkg-config" ,pkg-config)))
+    `(("perl" ,perl)
+      ("pkg-config" ,pkg-config)
+      ("python-wrapper" ,python-wrapper)))
    (arguments
     `(#:phases
       (alist-replace
@@ -219,3 +339,211 @@ suitable for projects ranging from small one-off tools to complete
 application suites.")
    (license license:lgpl2.0+)
    (home-page "http://www.gtk.org/")))
+
+(define-public gtk+
+  (package (inherit gtk+-2)
+   (version "3.10.1")
+   (source (origin
+            (method url-fetch)
+            (uri (string-append "mirror://gnome/sources/gtk+/"
+                                (string-take version 4) "/gtk+-"
+                                version ".tar.xz"))
+            (sha256
+             (base32
+              "1f3a7r3z7i9xh5imlfpfcgyydzkj2fnd0v6ylvqxij0yzfbnhbn1"))))
+   (propagated-inputs
+    `(("at-spi2-atk" ,at-spi2-atk)
+      ("atk" ,atk)
+      ("gdk-pixbuf" ,gdk-pixbuf)
+      ("libxi" ,libxi)
+      ("libxinerama" ,libxinerama)
+      ("pango" ,pango)))
+   (inputs
+    `(("libxml2" ,libxml2)
+      ("perl" ,perl)
+      ("pkg-config" ,pkg-config)
+      ("python-wrapper" ,python-wrapper)
+      ("xorg-server" ,xorg-server)))
+   (arguments
+    `(#:phases
+      (alist-replace
+       'configure
+       (lambda* (#:key #:allow-other-keys #:rest args)
+         (let ((configure (assoc-ref %standard-phases 'configure)))
+           ;; Disable most tests, failing in the chroot with the message:
+           ;; D-Bus library appears to be incorrectly set up; failed to read
+           ;; machine uuid: Failed to open "/etc/machine-id": No such file or
+           ;; directory.
+           ;; See the manual page for dbus-uuidgen to correct this issue.
+           (substitute* "testsuite/Makefile.in"
+            (("SUBDIRS = gdk gtk a11y css reftests") "SUBDIRS = gdk"))
+           (apply configure args)))
+       %standard-phases)))))
+
+;;;
+;;; Guile bindings.
+;;;
+
+(define-public guile-cairo
+  (package
+    (name "guile-cairo")
+    (version "1.4.1")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append
+                   "http://download.gna.org/guile-cairo/guile-cairo-"
+                   version
+                   ".tar.gz"))
+             (sha256
+              (base32
+               "1f5nd9n46n6cwfl1byjml02q3y2hgn7nkx98km1czgwarxl7ws3x"))))
+    (build-system gnu-build-system)
+    (arguments
+     '(#:phases (alist-cons-before
+                 'configure 'set-module-directory
+                 (lambda* (#:key outputs #:allow-other-keys)
+                   ;; Install modules under $out/share/guile/site/2.0.
+                   (let ((out (assoc-ref outputs "out")))
+                     (substitute* "Makefile.in"
+                       (("scmdir = ([[:graph:]]+).*" _ value)
+                        (string-append "scmdir = " value "/2.0\n")))
+                     (substitute* "cairo/Makefile.in"
+                       (("moduledir = ([[:graph:]]+).*" _ value)
+                        (string-append "moduledir = "
+                                       "$(prefix)/share/guile/site/2.0/cairo\n'")))))
+                 (alist-cons-after
+                  'install 'install-missing-file
+                  (lambda* (#:key outputs #:allow-other-keys)
+                    ;; By default 'vector-types.scm' is not installed, so do
+                    ;; it here.
+                    (let ((out (assoc-ref outputs "out")))
+                      (copy-file "cairo/vector-types.scm"
+                                 (string-append out "/share/guile/site/2.0"
+                                                "/cairo/vector-types.scm"))))
+                  %standard-phases))))
+    (inputs
+     `(("guile-lib" ,guile-lib)
+       ("expat" ,expat)
+       ("cairo" ,cairo)
+       ("pkg-config" ,pkg-config)
+       ("guile" ,guile-2.0)))
+    (home-page "http://www.nongnu.org/guile-cairo/")
+    (synopsis "Cairo bindings for GNU Guile")
+    (description
+     "Guile-Cairo wraps the Cairo graphics library for Guile Scheme.
+Guile-Cairo is complete, wrapping almost all of the Cairo API.  It is API
+stable, providing a firm base on which to do graphics work.  Finally, and
+importantly, it is pleasant to use.  You get a powerful and well-maintained
+graphics library with all of the benefits of Scheme: memory management,
+exceptions, macros, and a dynamic programming environment.")
+    (license license:lgpl3+)))
+
+
+;;;
+;;; C++ bindings.
+;;;
+
+(define-public cairomm
+  (package
+    (name "cairomm")
+    (version "1.10.0")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "http://cairographics.org/releases/cairomm-"
+                                 version ".tar.gz"))
+             (sha256
+              (base32
+               "13rrp96px95m6xnvmsaqb0wcqsnizg3bz334k0yhlyxf7v29d386"))))
+    (build-system gnu-build-system)
+    (arguments
+     ;; The examples lack -lcairo.
+     '(#:make-flags '("LDFLAGS=-lcairo")))
+    (inputs `(("pkg-config" ,pkg-config)))
+    (propagated-inputs
+     `(("libsigc++" ,libsigc++)
+       ("freetype" ,freetype)
+       ("fontconfig" ,fontconfig)
+       ("cairo" ,cairo)))
+    (home-page "http://cairographics.org/")
+    (synopsis "C++ bindings to the Cairo 2D graphics library")
+    (description
+     "Cairomm provides a C++ programming interface to the Cairo 2D graphics
+library.")
+    (license license:lgpl2.0+)))
+
+(define-public pangomm
+  (package
+    (name "pangomm")
+    (version "2.34.0")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "mirror://gnome/sources/pangomm/2.34/pangomm-"
+                                 version ".tar.xz"))
+             (sha256
+              (base32
+               "0hcyvv7c5zmivprdam6cp111i6hn2y5jsxzk00m6j9pncbzvp0hf"))))
+    (build-system gnu-build-system)
+    (inputs `(("pkg-config" ,pkg-config)))
+    (propagated-inputs
+     `(("cairo" ,cairo)
+       ("cairomm" ,cairomm)
+       ("glibmm" ,glibmm)
+       ("pango" ,pango)))
+    (home-page "http://www.pango.org/")
+    (synopsis "C++ interface to the Pango text rendering library")
+    (description
+     "Pangomm provides a C++ programming interface to the Pango text rendering
+library.")
+    (license license:lgpl2.1+)))
+
+(define-public atkmm
+  (package
+    (name "atkmm")
+    (version "2.22.7")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "mirror://gnome/sources/atkmm/2.22/atkmm-"
+                                 version ".tar.xz"))
+             (sha256
+              (base32
+               "06zrf2ymml2dzp53sss0d4ch4dk9v09jm8rglnrmwk4v81mq9gxz"))))
+    (build-system gnu-build-system)
+    (inputs `(("pkg-config" ,pkg-config)))
+    (propagated-inputs
+     `(("glibmm" ,glibmm) ("atk" ,atk)))
+    (home-page "http://www.gtkmm.org")
+    (synopsis "C++ interface to the ATK accessibility library")
+    (description
+     "ATKmm provides a C++ programming interface to the ATK accessibility
+toolkit.")
+    (license license:lgpl2.1+)))
+
+(define-public gtkmm
+  (package
+    (name "gtkmm")
+    (version "3.9.16")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "mirror://gnome/sources/gtkmm/3.9/gtkmm-"
+                                 version ".tar.xz"))
+             (sha256
+              (base32
+               "0yf8wwv4w02p70nrxsbs0nhm0w4gkn2wggdjygd8vif062anf1rs"))))
+    (build-system gnu-build-system)
+    (inputs `(("pkg-config" ,pkg-config)))
+    (propagated-inputs
+     `(("pangomm" ,pangomm)
+       ("cairomm" ,cairomm)
+       ("atkmm" ,atkmm)
+       ("gtk+" ,gtk+)
+       ("glibmm" ,glibmm)))
+    (home-page "http://gtkmm.org/")
+    (synopsis
+     "C++ interface to the GTK+ graphical user interface library")
+    (description
+     "gtkmm is the official C++ interface for the popular GUI library GTK+.
+Highlights include typesafe callbacks, and a comprehensive set of widgets that
+are easily extensible via inheritance.  You can create user interfaces either
+in code or with the Glade User Interface designer, using libglademm.  There's
+extensive documentation, including API reference and a tutorial.")
+    (license license:lgpl2.1+)))

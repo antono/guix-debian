@@ -27,6 +27,7 @@
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix build-system gnu)
+  #:use-module (guix utils)
   #:use-module (ice-9 regex))
 
 (define %gcc-infrastructure
@@ -72,6 +73,9 @@ where the OS part is overloaded to denote a specific ABI---into GCC
                      "--enable-languages=c,c++"
                      "--disable-multilib"
 
+                     ;; No pre-compiled libstdc++ headers, to save space.
+                     "--disable-libstdcxx-pch"
+
                      "--with-local-prefix=/no-gcc-local-prefix"
 
                      ,(let ((libc (assoc-ref %build-inputs "libc")))
@@ -114,7 +118,9 @@ where the OS part is overloaded to denote a specific ABI---into GCC
          #:strip-binaries? ,stripped?
          #:configure-flags ,(configure-flags)
          #:make-flags
-         (let ((libc (assoc-ref %build-inputs "libc")))
+         (let* ((libc        (assoc-ref %build-inputs "libc"))
+                (libc-native (or (assoc-ref %build-inputs "libc-native")
+                                 libc)))
            `(,@(if libc
                    (list (string-append "LDFLAGS_FOR_TARGET="
                                         "-B" libc "/lib "
@@ -122,6 +128,12 @@ where the OS part is overloaded to denote a specific ABI---into GCC
                                         "-Wl," libc
                                         ,(glibc-dynamic-linker)))
                    '())
+
+             ;; Native programs like 'genhooks' also need that right.
+             ,(string-append "LDFLAGS="
+                              "-Wl,-rpath=" libc-native "/lib "
+                             "-Wl,-dynamic-linker "
+                             "-Wl," libc-native ,(glibc-dynamic-linker))
              ,(string-append "BOOT_CFLAGS=-O2 "
                              ,(if stripped? "-g0" "-g"))))
 
@@ -147,18 +159,21 @@ where the OS part is overloaded to denote a specific ABI---into GCC
                 ;; Tell where to find libstdc++, libc, and `?crt*.o', except
                 ;; `crt{begin,end}.o', which come with GCC.
                 (substitute* (find-files "gcc/config"
-                                         "^(gnu-user(64)?|linux-elf)\\.h$")
-                  (("#define LIB_SPEC (.*)$" _ suffix)
-                   ;; Note that with this "lib" spec, we may still add a
-                   ;; RUNPATH to GCC even when `libgcc_s' is not NEEDED.
-                   ;; There's not much that can be done to avoid it, though.
-                   (format #f "#define LIB_SPEC \"-L~a/lib %{!static:-rpath=~a/lib \
-%{!static-libgcc:-rpath=~a/lib64 -rpath=~a/lib}} \" ~a"
+                                         "^gnu-user.*\\.h$")
+                  (("#define GNU_USER_TARGET_LIB_SPEC (.*)$" _ suffix)
+                   ;; Help libgcc_s.so be found (see also below.)  Always use
+                   ;; '-lgcc_s' so that libgcc_s.so is always found by those
+                   ;; programs that use 'pthread_cancel' (glibc dlopens
+                   ;; libgcc_s.so when pthread_cancel support is needed, but
+                   ;; having it in the application's RUNPATH isn't enough; see
+                   ;; <http://sourceware.org/ml/libc-help/2013-11/msg00023.html>.)
+                   (format #f "#define GNU_USER_TARGET_LIB_SPEC \
+\"-L~a/lib %{!static:-rpath=~a/lib %{!static-libgcc:-rpath=~a/lib64 -rpath=~a/lib -lgcc_s}} \" ~a"
                            libc libc out out suffix))
-                  (("#define STARTFILE_SPEC.*$" line)
+                  (("#define GNU_USER_TARGET_STARTFILE_SPEC.*$" line)
                    (format #f "#define STANDARD_STARTFILE_PREFIX_1 \"~a/lib\"
 #define STANDARD_STARTFILE_PREFIX_2 \"\"
-~a~%"
+~a"
                            libc line))))
 
               ;; Don't retain a dependency on the build-time sed.
@@ -194,25 +209,51 @@ where the OS part is overloaded to denote a specific ABI---into GCC
       (properties `((gcc-libc . ,(assoc-ref inputs "libc"))))
       (synopsis "GNU Compiler Collection")
       (description
-       "The GNU Compiler Collection includes compiler front ends for C, C++,
-Objective-C, Fortran, OpenMP for C/C++/Fortran, Java, and Ada, as well as
-libraries for these languages (libstdc++, libgcj, libgomp,...).
-
-GCC development is a part of the GNU Project, aiming to improve the compiler
-used in the GNU system including the GNU/Linux variant.")
+       "GCC is the GNU Compiler Collection.  It provides compiler front-ends
+for several languages, including C, C++, Objective-C, Fortran, Java, Ada, and
+Go.  It also includes runtime support libraries for these languages.")
       (license gpl3+)
       (home-page "http://gcc.gnu.org/"))))
 
 (define-public gcc-4.8
   (package (inherit gcc-4.7)
-    (version "4.8.1")
+    (version "4.8.2")
     (source (origin
              (method url-fetch)
              (uri (string-append "mirror://gnu/gcc/gcc-"
                                  version "/gcc-" version ".tar.bz2"))
              (sha256
               (base32
-               "04sqn0ds17ys8l6zn7vyyvjz1a7hsk4zb0381vlw9wnr7az48nsl"))))))
+               "1j6dwgby4g3p3lz7zkss32ghr45zpdidrg8xvazvn91lqxv25p09"))))))
+
+(define (custom-gcc gcc name languages)
+  "Return a custom version of GCC that supports LANGUAGES."
+  (package (inherit gcc)
+    (name name)
+    (arguments
+     (substitute-keyword-arguments `(#:modules ((guix build gnu-build-system)
+                                                (guix build utils)
+                                                (ice-9 regex)
+                                                (srfi srfi-1)
+                                                (srfi srfi-26))
+                                               ,@(package-arguments gcc))
+       ((#:configure-flags flags)
+        `(cons (string-append "--enable-languages="
+                              ,(string-join languages ","))
+               (remove (cut string-match "--enable-languages.*" <>)
+                       ,flags)))))))
+
+(define-public gfortran-4.8
+  (custom-gcc gcc-4.8 "gfortran" '("fortran")))
+
+(define-public gccgo-4.8
+  (custom-gcc gcc-4.8 "gccgo" '("go")))
+
+(define-public gcc-objc-4.8
+  (custom-gcc gcc-4.8 "gcc-objc" '("objc")))
+
+(define-public gcc-objc++-4.8
+  (custom-gcc gcc-4.8 "gcc-objc++" '("obj-c++")))
 
 (define-public isl
   (package

@@ -35,28 +35,20 @@
                                  version ".tar.gz"))
              (sha256
               (base32
-               "1arkyizn5wbgvbh53aziv3s6lmd3wm9lqzkhxb3hijlp1y124hjg"))))
+               "1arkyizn5wbgvbh53aziv3s6lmd3wm9lqzkhxb3hijlp1y124hjg"))
+             (patches (list (search-patch "plotutils-libpng-jmpbuf.patch")))))
     (build-system gnu-build-system)
-    (arguments '(#:patches (list (assoc-ref %build-inputs "patch/jmpbuf"))))
     (inputs `(("libpng" ,libpng)
               ("libx11" ,libx11)
               ("libxt" ,libxt)
-              ("libxaw" ,libxaw)
-              ("patch/jmpbuf"
-               ,(search-patch "plotutils-libpng-jmpbuf.patch"))))
+              ("libxaw" ,libxaw)))
     (home-page
      "http://www.gnu.org/software/plotutils/")
     (synopsis "Plotting utilities and library")
     (description
-     "The GNU plotutils package contains software for both programmers and
-technical users.  Its centerpiece is libplot, a powerful C/C++ function
-library for exporting 2-D vector graphics in many file formats, both vector
-and raster.  It can also do vector graphics animations.
-
-libplot is device-independent in the sense that its API (application
-programming interface) does not depend on the type of graphics file to be
-exported.
-
-Besides libplot, the package contains command-line programs for plotting
-scientific data.  Many of them use libplot to export graphics.")
+     "GNU Plotutils is a package for plotting and working with 2D graphics. 
+It includes a library, \"libplot\", for C and C++ for exporting 2D vector
+graphics in many file formats.  It also has support for 2D vector graphics
+animations.  The package also contains command-line programs for plotting
+scientific data.")
     (license gpl2+)))

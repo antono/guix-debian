@@ -28,6 +28,7 @@
   #:use-module (gnu packages ncurses)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages guile)
+  #:use-module (gnu packages gettext)
   #:use-module ((gnu packages base)
                 #:select (tar))
   #:use-module ((gnu packages compression)
@@ -37,27 +38,26 @@
 (define-public dmd
   (package
     (name "dmd")
-    (version "-0.4")
+    (version "0.1")
     (source (origin
              (method url-fetch)
              (uri (string-append "ftp://alpha.gnu.org/gnu/dmd/dmd-"
                                  version ".tar.gz"))
              (sha256
               (base32
-               "094ja3xvk9ljghhxmy39if67cfjd1hy6m4svnp399n0wpxvaryvy"))))
+               "07mddw0p62fcphwjzgb6rfa0pjz5sy6jzbha0sm2vc3rqf459jxg"))
+             (patches (list (search-patch "dmd-getpw.patch")))))
     (build-system gnu-build-system)
     (arguments
      '(#:configure-flags '("--localstatedir=/var")))
-    (inputs `(("pkg-config" ,pkg-config)
-              ("guile" ,guile-2.0)))
+    (native-inputs `(("pkg-config" ,pkg-config)))
+    (inputs `(("guile" ,guile-2.0)))
     (synopsis "Daemon managing daemons")
-    (description "'DMD' is a \"Daemon managing Daemons\" (or
-\"Daemons-managing Daemon\"?)---i.e. a service manager that provides a
-replacement for the service-managing capabilities of SysV-init (or any other
-init) with a both powerful and beautiful dependency-based system with a
-convenient interface.  It is intended for use on GNU/Hurd, but it is supposed
-to work on every POSIX-like system where Guile is available.  In particular,
-it has been tested on GNU/Linux.")
+    (description
+     "GNU DMD is a daemon-managing daemon, meaning that it manages the
+execution of system services, replacing similar functionality found in
+typical init systems.  It provides dependency-handling through a convenient
+interface and is based on GNU Guile.")
     (license gpl3+)
     (home-page "http://www.gnu.org/software/dmd/")))
 
@@ -76,6 +76,7 @@ it has been tested on GNU/Linux.")
         "1b4hfqv23l87cb37fxwzfk2sgspkyxpr3ig2hsd23hr6mm982j7z"))))
    (build-system cmake-build-system)
    (arguments '(#:tests? #f)) ; There are no tests.
+   (native-inputs `(("gettext" ,gnu-gettext)))
    (home-page "http://projects.gw-computing.net/projects/dfc")
    (synopsis "Display file system space usage using graphs and colors")
    (description
@@ -120,52 +121,35 @@ application (for console or X terminals) and requires ncurses.")
     (home-page "http://www.gnu.org/software/pies/")
     (synopsis "Program invocation and execution supervisor")
     (description
-     "The name Pies (pronounced \"p-yes\") stands for Program Invocation
-and Execution Supervisor.  This utility starts and controls execution of
-external programs, called components.  Each component is a stand-alone
-program, which is executed in the foreground.  Upon startup, pies reads
-the list of components from its configuration file, starts them, and
-remains in the background, controlling their execution.  If any of the
-components terminates, the default action of Pies is to restart it.
-However, it can also be programmed to perform a variety of another
-actions such as, e.g., sending mail notifications to the system
-administrator, invoking another external program, etc.
-
-Pies can be used for a wide variety of tasks.  Its most obious use is to
-put in backgound a program which normally cannot detach itself from the
-controlling terminal, such as, e.g., minicom.  It can launch and control
-components of some complex system, such as Jabberd or MeTA1 (and it
-offers much more control over them than the native utilities).  Finally,
-it can replace the inetd utility!")
+     "GNU pies is a program that supervises the invocation and execution of
+other programs.  It reads the list of programs to be started from its
+configuration file, executes them, and then monitors their status,
+re-executing them as necessary.")
     (license gpl3+)))
 
 (define-public inetutils
   (package
     (name "inetutils")
     (version "1.9.1")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://gnu/inetutils/inetutils-"
-                          version ".tar.gz"))
-      (sha256
-       (base32
-        "0azzg6njgq79byl6960kb0wihfhhzf49snslhxgvi30ribgfpa82"))))
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "mirror://gnu/inetutils/inetutils-"
+                                 version ".tar.gz"))
+             (sha256
+              (base32
+               "0azzg6njgq79byl6960kb0wihfhhzf49snslhxgvi30ribgfpa82"))
+             (patches
+              (list (search-patch "diffutils-gets-undeclared.patch")))))
     (build-system gnu-build-system)
-    (arguments `(#:patches (list (assoc-ref %build-inputs "patch/gets"))
-
-                 ;; FIXME: `tftp.sh' relies on `netstat' from utils-linux,
+    (arguments `(;; FIXME: `tftp.sh' relies on `netstat' from utils-linux,
                  ;; which is currently missing.
                  #:tests? #f))
-    (inputs `(("patch/gets" ,(search-patch "diffutils-gets-undeclared.patch"))
-              ("ncurses" ,ncurses)))
+    (inputs `(("ncurses" ,ncurses)))
     (home-page "http://www.gnu.org/software/inetutils/")
     (synopsis "Basic networking utilities")
     (description
-     "The GNU network utilities suite provides the following tools:
-ftp(d), hostname, ifconfig, inetd, logger, ping, rcp, rexec(d),
-rlogin(d), rsh(d), syslogd, talk(d), telnet(d), tftp(d), traceroute,
-uucpd, and whois.")
+     "Inetutils is a collection of common network programs, such as an ftp
+client and server, a telnet client and server, and an rsh client and server.")
     (license gpl3+)))
 
 (define-public shadow
@@ -314,3 +298,48 @@ files, which contain information about the IANA-assigned port, protocol, and
 ONC RPC numbers")
     (home-page "http://packages.debian.org/sid/netbase")
     (license gpl2)))
+
+(define-public netcat
+  (package
+    (name "netcat")
+    (version "0.7.1")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "mirror://sourceforge/netcat/netcat-"
+                                 version ".tar.bz2"))
+             (sha256
+              (base32
+               "1frjcdkhkpzk0f84hx6hmw5l0ynpmji8vcbaxg8h5k2svyxz0nmm"))))
+    (build-system gnu-build-system)
+    (home-page "http://netcat.sourceforge.net")
+    (synopsis "Read and write data over TCP/IP")
+    (description
+     "Netcat is a featured networking utility which reads and writes data
+across network connections, using the TCP/IP protocol.  It is designed to be a
+reliable \"back-end\" tool that can be used directly or easily driven by other
+programs and scripts. At the same time, it is a feature-rich network debugging
+and exploration tool, since it can create almost any kind of connection you
+would need and has several interesting built-in capabilities.")
+    (license gpl2+)))
+
+(define-public alive
+  (package
+    (name "alive")
+    (version "2.0.2")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "mirror://gnu/alive/alive-"
+                                 version ".tar.xz"))
+             (sha256
+              (base32
+               "1vrzg51ai68x9yld7vbgl58sxaw5qpx8rbakwcxn4cqq6vpxj38j"))))
+    (build-system gnu-build-system)
+    (arguments '(#:configure-flags '("alive_cv_nice_ping=yes")))
+    (inputs `(("guile" ,guile-2.0)
+              ("inetutils" ,inetutils)))
+    (home-page "http://www.gnu.org/software/alive/")
+    (synopsis "Autologin and keep-alive daemon")
+    (description
+     "GNU Alive sends periodic pings to a server, generally to keep a
+connection alive.")
+    (license gpl3+)))

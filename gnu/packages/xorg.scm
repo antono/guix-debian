@@ -22,12 +22,12 @@
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix build-system gnu)
+  #:use-module (gnu packages)
   #:use-module (gnu packages bison)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages flex)
   #:use-module (gnu packages fontutils)
-  #:use-module ((gnu packages gettext)
-                #:renamer (symbol-prefix-proc 'gnu:))
+  #:use-module (gnu packages gettext)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages gnupg)
   #:use-module (gnu packages gperf)
@@ -73,7 +73,7 @@ following the mouse.")
 (define-public pixman
   (package
     (name "pixman")
-    (version "0.28.2")
+    (version "0.32.4")
     (source
       (origin
         (method url-fetch)
@@ -83,7 +83,7 @@ following the mouse.")
                ".tar.gz"))
         (sha256
           (base32
-            "0mcvxd5gx3w1wzgph91l2vaiic91jmx7s01hi2igphyvd80ckyia"))))
+           "113ycngcssbrps217dyajq96hm9xghsfch82h14yffla1r1fviw0"))))
     (build-system gnu-build-system)
     (inputs
       `(("libpng" ,libpng)
@@ -1303,7 +1303,7 @@ tracking.")
             "0dd737ch4q9gr151wff1m3q2j7wf3pip4y81601xdrsh8wipxnx6"))))
     (build-system gnu-build-system)
     (inputs
-      `(("gettext" ,gnu:gettext)
+      `(("gettext" ,gnu-gettext)
         ("libxt" ,libxt)
         ("xproto" ,xproto)
         ("libxext" ,libxext)
@@ -1406,7 +1406,10 @@ tracking.")
                ".tar.bz2"))
         (sha256
           (base32
-            "0dn694mk56x6hdk6y9ylx4f128h5jcin278gnw2gb807rf3ygc1h"))))
+            "0dn694mk56x6hdk6y9ylx4f128h5jcin278gnw2gb807rf3ygc1h"))
+        ;; See https://bugs.freedesktop.org/show_bug.cgi?id=47792;
+        ;; should become obsolete with the next release.
+        (patches (list (search-patch "luit-posix.patch")))))
     (build-system gnu-build-system)
     (inputs
       `(("libfontenc" ,libfontenc)
@@ -3236,7 +3239,7 @@ tracking.")
             "1nmb7ma8rqryicc5xqrn2hm5pwp5lkf7nj28bwbf63mz2r0mk892"))))
     (build-system gnu-build-system)
     (inputs
-      `(("gettext" ,gnu:gettext)
+      `(("gettext" ,gnu-gettext)
         ("intltool" ,intltool)
         ("libx11" ,libx11)
         ("pkg-config" ,pkg-config)
@@ -3333,7 +3336,8 @@ tracking.")
                ".tar.bz2"))
         (sha256
           (base32
-            "1dg47lay4vhrl9mfq3cfc6741a0m2n8wd4ljagd21ix3qklys8pg"))))
+            "1dg47lay4vhrl9mfq3cfc6741a0m2n8wd4ljagd21ix3qklys8pg"))
+        (patches (list (search-patch "xmodmap-asprintf.patch")))))
     (build-system gnu-build-system)
     (inputs
       `(("xproto" ,xproto)
@@ -4071,11 +4075,11 @@ tracking.")
             "029ihw4jq8mng8rx7a3jdvq64jm1zdkqidca93zmxv4jf9yn5qzj"))))
     (build-system gnu-build-system)
     (propagated-inputs
-      `(("libxext" ,libxext)))
+      `(("inputproto" ,inputproto)
+        ("libx11" ,libx11)
+        ("libxext" ,libxext)))
     (inputs
       `(("xproto" ,xproto)
-        ("libx11" ,libx11)
-        ("inputproto" ,inputproto)
         ("pkg-config" ,pkg-config)))
     (home-page "http://www.x.org/wiki/")
     (synopsis "xorg implementation of the X Window System")
@@ -4180,7 +4184,8 @@ tracking.")
       (origin
         (method url-fetch)
         (uri (string-append
-               "ftp://ftp.freedesktop.org/pub/mesa/" version
+               "ftp://ftp.freedesktop.org/pub/mesa/older-versions/8.x/"
+               version
                "/MesaLib-" version
                ".tar.bz2"))
         (sha256
@@ -4249,6 +4254,8 @@ emulation to complete hardware acceleration for modern GPUs.")
         ("libxslt" ,libxslt)
         ("pkg-config" ,pkg-config)
         ("python" ,python-wrapper)))
+    (arguments
+     `(#:configure-flags '("--enable-xkb")))
     (home-page "http://www.x.org/wiki/")
     (synopsis "xorg implementation of the X Window System")
     (description "X.org provides an implementation of the X Window System")
@@ -4458,6 +4465,161 @@ emulation to complete hardware acceleration for modern GPUs.")
     (home-page "http://www.x.org/wiki/")
     (synopsis "xorg implementation of the X Window System")
     (description "X.org provides an implementation of the X Window System")
+    (license license:x11)))
+
+
+(define-public xcb-util
+  (package
+    (name "xcb-util")
+    (version "0.3.9")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "http://xcb.freedesktop.org/dist/" name "-"
+                                 version ".tar.bz2"))
+             (sha256
+              (base32
+               "1i0qbhqkcdlbbsj7ifkyjsffl61whj24d3zlg5pxf3xj1af2a4f6"))))
+    (build-system gnu-build-system)
+    (propagated-inputs
+     `(("libxcb" ,libxcb)))
+    (inputs
+     `(("pkg-config" ,pkg-config)))
+    (home-page "http://cgit.freedesktop.org/xcb/util/")
+    (synopsis "Core XCB utility functions")
+    (description "The XCB util module provides a number of libraries which
+    sit on top of libxcb, the core X protocol library, and some of the
+    extension libraries.  These experimental libraries provide convenience
+functions and interfaces which make the raw X protocol more usable.  Some of
+the libraries also provide client-side code which is not strictly part of
+the X protocol but which has traditionally been provided by Xlib.
+
+The XCB util module provides the following libraries:
+aux: Convenient access to connection setup and some core requests.
+atom: Standard core X atom constants and atom caching.
+event: Some utilities that have little to do with events any more.")
+    (license license:x11)))
+
+
+(define-public xcb-util-image
+  (package
+    (name "xcb-util-image")
+    (version "0.3.9")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "http://xcb.freedesktop.org/dist/" name "-"
+                                 version ".tar.bz2"))
+             (sha256
+              (base32
+               "1pr1l1nkg197gyl9d0fpwmn72jqpxjfgn9y13q4gawg1m873qnnk"))))
+    (build-system gnu-build-system)
+    (propagated-inputs
+     `(("libxcb" ,libxcb)))
+    (inputs
+     `(("pkg-config" ,pkg-config)
+       ("xcb-util" ,xcb-util)))
+    (home-page "http://cgit.freedesktop.org/xcb/util-image/")
+    (synopsis "XCB port of Xlib's XImage and XShmImage")
+    (description "The XCB util module provides a number of libraries which
+    sit on top of libxcb, the core X protocol library, and some of the
+    extension libraries.  These experimental libraries provide convenience
+functions and interfaces which make the raw X protocol more usable.  Some of
+the libraries also provide client-side code which is not strictly part of
+the X protocol but which has traditionally been provided by Xlib.
+
+The XCB util-image module provides the following library:
+image: Port of Xlib's XImage and XShmImage functions.")
+    (license license:x11)))
+
+
+(define-public xcb-util-keysyms
+  (package
+    (name "xcb-util-keysyms")
+    (version "0.3.9")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "http://xcb.freedesktop.org/dist/" name "-"
+                                 version ".tar.bz2"))
+             (sha256
+              (base32
+               "0vjwk7vrcfnlhiadv445c6skfxmdrg5v4qf81y8s2s5xagqarqbv"))))
+    (build-system gnu-build-system)
+    (propagated-inputs
+     `(("libxcb" ,libxcb)))
+    (inputs
+     `(("pkg-config" ,pkg-config)))
+    (home-page "http://cgit.freedesktop.org/xcb/util-keysyms/")
+    (synopsis "Standard X constants and conversion to/from keycodes")
+    (description "The XCB util module provides a number of libraries which
+    sit on top of libxcb, the core X protocol library, and some of the
+    extension libraries.  These experimental libraries provide convenience
+functions and interfaces which make the raw X protocol more usable.  Some of
+the libraries also provide client-side code which is not strictly part of
+the X protocol but which has traditionally been provided by Xlib.
+
+The XCB util-keysyms module provides the following library:
+keysyms: Standard X key constants and conversion to/from keycodes.")
+    (license license:x11)))
+
+
+(define-public xcb-util-renderutil
+  (package
+    (name "xcb-util-renderutil")
+    (version "0.3.8")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "http://xcb.freedesktop.org/dist/" name "-"
+                                 version ".tar.bz2"))
+             (sha256
+              (base32
+               "0lkl9ij9b447c0br2qc5qsynjn09c4fdz7sd6yp7pyi8az2sb2cp"))))
+    (build-system gnu-build-system)
+    (propagated-inputs
+     `(("libxcb" ,libxcb)))
+    (inputs
+     `(("pkg-config" ,pkg-config)))
+    (home-page "http://cgit.freedesktop.org/xcb/util-renderutil/")
+    (synopsis "SConvenience functions for the Render extension")
+    (description "The XCB util module provides a number of libraries which
+    sit on top of libxcb, the core X protocol library, and some of the
+    extension libraries.  These experimental libraries provide convenience
+functions and interfaces which make the raw X protocol more usable.  Some of
+the libraries also provide client-side code which is not strictly part of
+the X protocol but which has traditionally been provided by Xlib.
+
+The XCB util-renderutil module provides the following library:
+renderutil: Convenience functions for the Render extension.")
+    (license license:x11)))
+
+
+(define-public xcb-util-wm
+  (package
+    (name "xcb-util-wm")
+    (version "0.3.9")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "http://xcb.freedesktop.org/dist/xcb-util-wm-"
+                                 version ".tar.bz2"))
+             (sha256
+              (base32
+               "0c30fj33gvwzwhyz1dhsfwni0ai16bxpvxb4l6c6s7vvj7drp3q3"))))
+    (build-system gnu-build-system)
+    (propagated-inputs
+     `(("libxcb" ,libxcb)))
+    (inputs
+     `(("m4" ,m4)
+       ("pkg-config" ,pkg-config)))
+    (home-page "http://cgit.freedesktop.org/xcb/util-wm/")
+    (synopsis "Client and window-manager helpers for ICCCM and EWMH")
+    (description "The XCB util modules provides a number of libraries which
+    sit on top of libxcb, the core X protocol library, and some of the
+    extension libraries.  These experimental libraries provide convenience
+functions and interfaces which make the raw X protocol more usable.  Some of
+the libraries also provide client-side code which is not strictly part of
+the X protocol but which has traditionally been provided by Xlib.
+
+The XCB util-wm module provides the following libraries:
+ewmh: Both client and window-manager helpers for EWMH.
+icccm: Both client and window-manager helpers for ICCCM.")
     (license license:x11)))
 
 

@@ -18,7 +18,8 @@
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (gnu packages linux)
-  #:use-module (guix licenses)
+  #:use-module ((guix licenses)
+                #:hide (zlib))
   #:use-module (gnu packages)
   #:use-module ((gnu packages compression)
                 #:renamer (symbol-prefix-proc 'guix:))
@@ -30,8 +31,11 @@
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages algebra)
-  #:use-module ((gnu packages gettext)
-                #:renamer (symbol-prefix-proc 'g:))
+  #:use-module (gnu packages gettext)
+  #:use-module (gnu packages pulseaudio)
+  #:use-module (gnu packages attr)
+  #:use-module (gnu packages xml)
+  #:use-module (gnu packages autotools)
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix build-system gnu))
@@ -62,7 +66,7 @@
          version "-gnu.tar.xz")))
 
 (define-public linux-libre-headers
-  (let* ((version* "3.3.8")
+  (let* ((version "3.3.8")
          (build-phase
           (lambda (arch)
             `(lambda _
@@ -82,10 +86,10 @@
                         (string-append out
                                        "/include/config/kernel.release")
                       (lambda (p)
-                        (format p "~a-default~%" ,version*))))))))
+                        (format p "~a-default~%" ,version))))))))
    (package
     (name "linux-libre-headers")
-    (version version*)
+    (version version)
     (source (origin
              (method url-fetch)
              (uri (linux-libre-urls version))
@@ -99,7 +103,8 @@
                   (guix build utils)
                   (srfi srfi-1))
        #:phases (alist-replace
-                 'build ,(build-phase (%current-system))
+                 'build ,(build-phase (or (%current-target-system)
+                                          (%current-system)))
                  (alist-replace
                   'install ,install-phase
                   (alist-delete 'configure %standard-phases)))
@@ -141,7 +146,7 @@
     (license gpl2+)))
 
 (define-public linux-libre
-  (let* ((version* "3.11")
+  (let* ((version "3.12")
          (build-phase
           '(lambda* (#:key system #:allow-other-keys #:rest args)
              (let ((arch (car (string-split system #\-))))
@@ -181,13 +186,13 @@
                                "modules_install"))))))
    (package
     (name "linux-libre")
-    (version version*)
+    (version version)
     (source (origin
              (method url-fetch)
              (uri (linux-libre-urls version))
              (sha256
               (base32
-               "1vlk04xkvyy1kc9zz556md173rn1qzlnvhz7c9sljv4bpk3mdspl"))))
+               "0drjxm9h2k9bik2mhrqqqi6cm5rn2db647wf0zvb58xldj0zmhb6"))))
     (build-system gnu-build-system)
     (native-inputs `(("perl" ,perl)
                      ("bc" ,bc)
@@ -204,7 +209,9 @@
                   (alist-delete 'configure %standard-phases)))
        #:tests? #f))
     (synopsis "100% free redistribution of a cleaned Linux kernel")
-    (description "Linux-Libre operating system kernel.")
+    (description
+     "GNU Linux-Libre is a free (as in freedom) variant of the Linux kernel.
+It has been modified to remove all non-free binary blobs.")
     (license gpl2)
     (home-page "http://www.gnu.org/software/linux-libre/"))))
 
@@ -330,13 +337,12 @@ providing the system administrator with some help in common tasks.")
                                  version ".tar.gz"))
              (sha256
               (base32
-               "0d8mki0q4yamnkk4533kx8mc0jd879573srxhg6r2fs3lkc6iv8i"))))
+               "0d8mki0q4yamnkk4533kx8mc0jd879573srxhg6r2fs3lkc6iv8i"))
+             (patches (list (search-patch "procps-make-3.82.patch")))))
     (build-system gnu-build-system)
-    (inputs `(("ncurses" ,ncurses)
-              ("patch/make-3.82" ,(search-patch "procps-make-3.82.patch"))))
+    (inputs `(("ncurses" ,ncurses)))
     (arguments
-     '(#:patches (list (assoc-ref %build-inputs "patch/make-3.82"))
-       #:phases (alist-replace
+     '(#:phases (alist-replace
                  'configure
                  (lambda* (#:key outputs #:allow-other-keys)
                    ;; No `configure', just a single Makefile.
@@ -467,7 +473,8 @@ trace of all the system calls made by a another process/program.")
                    version ".tar.bz2"))
              (sha256
               (base32
-               "0fx057746dj7rjdi0jnvx2m9b0y1lgdkh1hks87d8w32xyihf3k9"))))
+               "0fx057746dj7rjdi0jnvx2m9b0y1lgdkh1hks87d8w32xyihf3k9"))
+             (patches (list (search-patch "alsa-lib-mips-atomic-fix.patch")))))
     (build-system gnu-build-system)
     (home-page "http://www.alsa-project.org/")
     (synopsis "The Advanced Linux Sound Architecture libraries")
@@ -475,6 +482,48 @@ trace of all the system calls made by a another process/program.")
      "The Advanced Linux Sound Architecture (ALSA) provides audio and
 MIDI functionality to the Linux-based operating system.")
     (license lgpl2.1+)))
+
+(define-public alsa-utils
+  (package
+    (name "alsa-utils")
+    (version "1.0.27.2")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "ftp://ftp.alsa-project.org/pub/utils/alsa-utils-"
+                                 version ".tar.bz2"))
+             (sha256
+              (base32
+               "1sjjngnq50jv5ilwsb4zys6smifni3bd6fn28gbnhfrg14wsrgq2"))))
+    (build-system gnu-build-system)
+    (arguments
+     ;; XXX: Disable man page creation until we have DocBook.
+     '(#:configure-flags (list "--disable-xmlto"
+                               (string-append "--with-udev-rules-dir="
+                                              (assoc-ref %outputs "out")
+                                              "/lib/udev/rules.d"))
+       #:phases (alist-cons-before
+                 'install 'pre-install
+                 (lambda _
+                   ;; Don't try to mkdir /var/lib/alsa.
+                   (substitute* "Makefile"
+                     (("\\$\\(MKDIR_P\\) .*ASOUND_STATE_DIR.*")
+                      "true\n")))
+                 %standard-phases)))
+    (inputs
+     `(("libsamplerate" ,libsamplerate)
+       ("ncurses" ,ncurses)
+       ("alsa-lib" ,alsa-lib)
+       ("xmlto" ,xmlto)
+       ("gettext" ,gnu-gettext)))
+    (home-page "http://www.alsa-project.org/")
+    (synopsis "Utilities for the Advanced Linux Sound Architecture (ALSA)")
+    (description
+     "The Advanced Linux Sound Architecture (ALSA) provides audio and
+MIDI functionality to the Linux-based operating system.")
+
+    ;; This is mostly GPLv2+ but a few files such as 'alsactl.c' are
+    ;; GPLv2-only.
+    (license gpl2)))
 
 (define-public iptables
   (package
@@ -504,7 +553,7 @@ packet filter.")
 (define-public iproute
   (package
     (name "iproute2")
-    (version "3.8.0")
+    (version "3.12.0")
     (source (origin
              (method url-fetch)
              (uri (string-append
@@ -512,7 +561,7 @@ packet filter.")
                    version ".tar.xz"))
              (sha256
               (base32
-               "0kqy30wz2krbg4y7750hjq5218hgy2vj9pm5qzkn1bqskxs4b4ap"))))
+               "04gi11gh087bg2nlxhj0lxrk8l9qxkpr88nsiil23917bm3h1xj4"))))
     (build-system gnu-build-system)
     (arguments
      `(#:tests? #f                                ; no test suite
@@ -578,8 +627,8 @@ manpages.")
                "0yvxrzk0mzmspr7sa34hm1anw6sif39gyn85w4c5ywfn8inxvr3s"))))
     (build-system gnu-build-system)
     (arguments
-     '(#:phases (alist-replace
-                 'patch
+     '(#:phases (alist-cons-after
+                 'unpack 'patch
                  (lambda* (#:key inputs #:allow-other-keys)
                    (define (apply-patch file)
                      (zero? (system* "patch" "-p1" "--batch"
@@ -628,7 +677,7 @@ manpages.")
                          (sha256
                           (base32
                            "0p93lsqx23v5fv4hpbrydmfvw1ha2rgqpn2zqbs2jhxkzhjc030p"))))))
-    (native-inputs `(("gettext" ,g:gettext)))
+    (native-inputs `(("gettext" ,gnu-gettext)))
 
     (synopsis "Tools for controlling the network subsystem in Linux")
     (description
@@ -638,3 +687,130 @@ netstat, rarp and route.  Additionally, this package contains utilities
 relating to particular network hardware types (plipconfig, slattach) and
 advanced aspects of IP configuration (iptunnel, ipmaddr).")
     (license gpl2+)))
+
+(define-public libcap
+  (package
+    (name "libcap")
+    (version "2.22")
+    (source (origin
+             (method url-fetch)
+
+             ;; Tarballs used to be available from
+             ;; <https://www.kernel.org/pub/linux/libs/security/linux-privs/>
+             ;; but they never came back after kernel.org was compromised.
+             (uri (string-append
+                   "mirror://debian/pool/main/libc/libcap2/libcap2_"
+                   version ".orig.tar.gz"))
+             (sha256
+              (base32
+               "07vjhkznm82p8dm4w6j8mmg7h5c70lp5s9bwwfdmgwpbixfydjp1"))))
+    (build-system gnu-build-system)
+    (arguments '(#:phases (alist-delete 'configure %standard-phases)
+                 #:tests? #f                      ; no 'check' target
+                 #:make-flags (list "lib=lib"
+                                    (string-append "prefix="
+                                                   (assoc-ref %outputs "out"))
+                                    "RAISE_SETFCAP=no")))
+    (native-inputs `(("perl" ,perl)))
+    (inputs `(("attr" ,attr)))
+    (home-page "https://sites.google.com/site/fullycapable/")
+    (synopsis "Library for working with POSIX capabilities")
+    (description
+     "libcap2 provides a programming interface to POSIX capabilities on
+Linux-based operating systems.")
+
+    ;; License is BSD-3 or GPLv2, at the user's choice.
+    (license gpl2)))
+
+(define-public bridge-utils
+  (package
+    (name "bridge-utils")
+    (version "1.5")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "mirror://sourceforge/bridge/bridge-utils-"
+                                 version ".tar.gz"))
+             (sha256
+              (base32
+               "12367cwqmi0yqphi6j8rkx97q8hw52yq2fx4k0xfclkcizxybya2"))))
+    (build-system gnu-build-system)
+
+    ;; The tarball lacks all the generated files.
+    (native-inputs `(("autoconf" ,autoconf)
+                     ("automake" ,automake)))
+    (arguments
+     '(#:phases (alist-cons-before
+                 'configure 'bootstrap
+                 (lambda _
+                   (zero? (system* "autoreconf" "-vf")))
+                 %standard-phases)
+       #:tests? #f))                              ; no 'check' target
+
+    (home-page
+     "http://www.linuxfoundation.org/collaborate/workgroups/networking/bridge")
+    (synopsis "Manipulate Ethernet bridges")
+    (description
+     "Utilities for Linux's Ethernet bridging facilities.  A bridge is a way
+to connect two Ethernet segments together in a protocol independent way.
+Packets are forwarded based on Ethernet address, rather than IP address (like
+a router).  Since forwarding is done at Layer 2, all protocols can go
+transparently through a bridge.")
+    (license gpl2+)))
+
+(define-public libnl
+  (package
+    (name "libnl")
+    (version "3.2.13")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append
+                    "http://www.infradead.org/~tgr/libnl/files/libnl-"
+                    version ".tar.gz"))
+              (sha256
+               (base32
+                "1ydw42lsd572qwrfgws97n76hyvjdpanwrxm03lysnhfxkna1ssd"))))
+    (build-system gnu-build-system)
+    (native-inputs `(("flex" ,flex) ("bison" ,bison)))
+    (home-page "http://www.infradead.org/~tgr/libnl/")
+    (synopsis "NetLink protocol library suite")
+    (description
+     "The libnl suite is a collection of libraries providing APIs to netlink
+protocol based Linux kernel interfaces.  Netlink is an IPC mechanism primarly
+between the kernel and user space processes.  It was designed to be a more
+flexible successor to ioctl to provide mainly networking related kernel
+configuration and monitoring interfaces.")
+
+    ;; Most files are LGPLv2.1-only, but some are GPLv2-only (like
+    ;; 'nl-addr-add.c'), so the result is GPLv2-only.
+    (license gpl2)))
+
+(define-public powertop
+  (package
+    (name "powertop")
+    (version "2.5")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append
+             "https://01.org/powertop/sites/default/files/downloads/powertop-"
+             version ".tar.gz"))
+       (sha256
+        (base32
+         "02rwqbpasdayl201v0549gbp2f82rd0hqiv3i111r7npanjhhb4b"))))
+    (build-system gnu-build-system)
+    (inputs
+     ;; TODO: Add pciutils.
+     `(("zlib" ,guix:zlib)
+       ("pkg-config" ,pkg-config)
+       ;; ("pciutils" ,pciutils)
+       ("ncurses" ,ncurses)
+       ("libnl" ,libnl)))
+    (home-page "https://01.org/powertop/")
+    (synopsis "Analyze power consumption on Intel-based laptops")
+    (description
+     "PowerTOP is a Linux tool to diagnose issues with power consumption and
+power management.  In addition to being a diagnostic tool, PowerTOP also has
+an interactive mode where the user can experiment various power management
+settings for cases where the operating system has not enabled these
+settings.")
+    (license gpl2)))

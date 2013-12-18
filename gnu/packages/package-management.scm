@@ -30,14 +30,14 @@
 (define-public guix
   (package
     (name "guix")
-    (version "0.3")
+    (version "0.4")
     (source (origin
              (method url-fetch)
              (uri (string-append "ftp://alpha.gnu.org/gnu/guix/guix-"
                                  version ".tar.gz"))
              (sha256
               (base32
-               "0xpfdmlfkkpmgrb8lpaqs5wxx31m4jslajs6b9waz5wp91zk7fix"))))
+               "1mmh28ds5p8mpzm2yfvgm6z92wgknqc3dlw6r6z16s13sk386igk"))))
     (build-system gnu-build-system)
     (arguments
      `(#:configure-flags (list
@@ -87,33 +87,12 @@
                        (base32
                         "0b5a2ngd9a7z2wnm01wc27rlwb61x854ndadxwmj8v8lrl6j2hxw"))))))
     (home-page "http://www.gnu.org/software/guix")
-    (synopsis "Managing installed software packages and versions")
+    (synopsis "Functional package manager for installed software packages and versions")
     (description
-     "GNU Guix is a purely functional package manager for the GNU system,
-and a distribution thereof.
-
-In addition to standard package management features, Guix supports
-transactional upgrades and roll-backs, unprivileged package management,
-per-user profiles, and garbage collection.
-
-It provides Guile Scheme APIs, including high-level embedded domain-specific
-languages (EDSLs), to describe how packages are built and composed.
-
-A user-land free software distribution for GNU/Linux comes as part of Guix.
-
-Guix is based on the Nix package manager.")
+     "GNU Guix is a functional package manager for the GNU system, and is
+also a distribution thereof.  It includes a virtual machine image. Besides
+the usual package management features, it also supports transactional
+upgrades and roll-backs, per-user profiles, and much more. It is based on the
+Nix package manager.")
     (license gpl3+)))
 
-(define-public guix-0.4
-  ;; XXX: Hack to allow the use of a 0.4ish tarball.  This assumes that you
-  ;; have run 'make dist' in your build tree.  Remove when 0.4 is out.
-  (let* ((builddir (dirname
-                    (canonicalize-path
-                     (dirname (search-path %load-path
-                                           "guix/config.scm")))))
-         (tarball  (string-append builddir "/guix-0.4.tar.gz")))
-    (package (inherit guix)
-      (version "0.4rc")
-      (source (if (file-exists? tarball)
-                  tarball
-                  (package-source guix))))))

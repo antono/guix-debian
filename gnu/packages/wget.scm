@@ -18,8 +18,7 @@
 
 (define-module (gnu packages wget)
   #:use-module (guix licenses)
-  #:use-module ((gnu packages gettext)
-                #:renamer (symbol-prefix-proc 'guix:))
+  #:use-module (gnu packages gettext)
   #:use-module (gnu packages gnutls)
   #:use-module (gnu packages perl)
   #:use-module (guix packages)
@@ -42,12 +41,12 @@
     (inputs
      `(("gnutls" ,gnutls)
        ("perl" ,perl)
-       ("gettext" ,guix:gettext)))
+       ("gettext" ,gnu-gettext)))
     (home-page "http://www.gnu.org/software/wget/")
     (synopsis "Non-interactive command-line utility for downloading files")
     (description
-     "GNU Wget is a free software package for retrieving files using HTTP,
-HTTPS and FTP, the most widely-used Internet protocols.  It is a
-non-interactive commandline tool, so it may easily be called from
-scripts, cron jobs, terminals without X-Windows support, etc.")
+     "GNU Wget is a non-interactive tool for fetching files using the HTTP,
+HTTPS and FTP protocols.  It can resume interrupted downloads, use filename
+wild cards, supports proxies and cookies, and it can convert absolute links
+in downloaded documents to relative links.")
     (license gpl3+))) ; some files are under GPLv2+

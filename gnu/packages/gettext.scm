@@ -17,26 +17,42 @@
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (gnu packages gettext)
-  #:use-module (guix licenses)
+  #:use-module ((guix licenses) #:select (gpl3))
   #:use-module (gnu packages)
   #:use-module (guix packages)
   #:use-module (guix download)
-  #:use-module (guix build-system gnu))
+  #:use-module (guix build-system gnu)
+  #:use-module (gnu packages xml))
 
-(define-public gettext
+;; Use that name to avoid clashes with Guile's 'gettext' procedure.
+;;
+;; We used to resort to #:renamer on the user side, but that prevented
+;; circular dependencies involving (gnu packages gettext).  This is because
+;; 'resolve-interface' (as of Guile 2.0.9) iterates eagerly over the used
+;; module when there's a #:renamer, and that module may be empty at that point
+;; in case or circular dependencies.
+(define-public gnu-gettext
   (package
     (name "gettext")
-    (version "0.18.3")
+    (version "0.18.3.1")
     (source (origin
              (method url-fetch)
              (uri (string-append "mirror://gnu/gettext/gettext-"
                                  version ".tar.gz"))
              (sha256
               (base32
-               "0j7rp56c61j4k1bz1xdc041hzv7186yyzhbp95fmc0zq7l2c3wrn"))))
+               "0p940zmmw1lndvdhck2vrazikjhr02affwy47mmpfxqvacrrm3qd"))))
     (build-system gnu-build-system)
+    (inputs
+     `(("expat" ,expat)))
     (arguments
      `(#:phases (alist-cons-before
+                 'configure 'link-expat
+                 (lambda _
+                   (substitute* "gettext-tools/configure"
+                     (("LIBEXPAT=\"-ldl\"") "LIBEXPAT=\"-ldl -lexpat\"")
+                     (("LTLIBEXPAT=\"-ldl\"") "LTLIBEXPAT=\"-ldl -lexpat\"")))
+                (alist-cons-before
                  'check 'patch-tests
                  (lambda* (#:key inputs #:allow-other-keys)
                    (let ((bash (which "sh")))
@@ -48,24 +64,13 @@
                                               "posix_spawn")
                        (("/bin/sh")
                         bash))))
-                 %standard-phases)))
+                 %standard-phases))))
     (home-page "http://www.gnu.org/software/gettext/")
     (synopsis "Tools and documentation for translation")
     (description
-     "Usually, programs are written and documented in English, and use
-English at execution time for interacting with users.  Using a common
-language is quite handy for communication between developers,
-maintainers and users from all countries.  On the other hand, most
-people are less comfortable with English than with their own native
-language, and would rather be using their mother tongue for day to
-day's work, as far as possible.  Many would simply love seeing their
-computer screen showing a lot less of English, and far more of their
-own language.
-
-GNU `gettext' is an important step for the GNU Translation Project, as
-bit is an asset on which we may build many other steps. This package
-offers to programmers, translators, and even users, a well integrated
-set of tools and documentation. Specifically, the GNU `gettext'
-utilities are a set of tools that provides a framework to help other
-GNU packages produce multi-lingual messages.")
+     "GNU Gettext is a package providing a framework for translating the
+textual output of programs into multiple languages.  It provides translators
+with the means to create message catalogs, as well as an Emacs mode to work
+with them, and a runtime library to load translated messages from the
+catalogs.  Nearly all GNU packages use Gettext.")
     (license gpl3))) ; some files are under GPLv2+

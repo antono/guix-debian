@@ -81,14 +81,14 @@ solve the shortest vector problem.")
 (define-public pari-gp
   (package
    (name "pari-gp")
-   (version "2.5.4")
+   (version "2.5.5")
    (source (origin
             (method url-fetch)
             (uri (string-append
                   "http://pari.math.u-bordeaux.fr/pub/pari/unix/pari-"
                   version ".tar.gz"))
             (sha256 (base32
-                     "0gpsj5n8d1gyl7nq2y915sscs3d334ryrv8qgjdwqf3cr95f2dwz"))))
+                     "058nw1fhggy7idii4f124ami521lv3izvngs9idfz964aks8cvvn"))))
    (build-system gnu-build-system)
    (inputs `(("gmp" ,gmp)
              ("perl" ,perl)
@@ -125,6 +125,38 @@ PARI is also available as a C library to allow for faster computations.")
    (license gpl2+)
    (home-page "http://pari.math.u-bordeaux.fr/")))
 
+(define-public gp2c
+  (package
+   (name "gp2c")
+   (version "0.0.8")
+   (source (origin
+            (method url-fetch)
+            (uri (string-append
+                  "http://pari.math.u-bordeaux.fr/pub/pari/GP2C/gp2c-"
+                  version ".tar.gz"))
+            (sha256 (base32
+                     "03fgiwy2si264g3zfgw2yi6i2l8szl5m106zgwk77sddshk20b34"))))
+   (build-system gnu-build-system)
+   (inputs `(("pari-gp" ,pari-gp)))
+   (arguments
+    '(#:configure-flags
+      (list (string-append "--with-paricfg="
+                           (assoc-ref %build-inputs "pari-gp")
+                           "/lib/pari/pari.cfg"))))
+   (synopsis "PARI/GP, a computer algebra system for number theory")
+   (description
+    "PARI/GP is a widely used computer algebra system designed for fast
+computations in number theory (factorisations, algebraic number theory,
+elliptic curves...), but it also contains a large number of other useful
+functions to compute with mathematical entities such as matrices,
+polynomials, power series, algebraic numbers, etc., and a lot of
+transcendental functions.
+PARI is also available as a C library to allow for faster computations.
+
+GP2C, the GP to C compiler, translates GP scripts to PARI programs.")
+   (license gpl2)
+   (home-page "http://pari.math.u-bordeaux.fr/")))
+
 (define-public bc
   (package
     (name "bc")
@@ -153,14 +185,42 @@ PARI is also available as a C library to allow for faster computations.")
     (home-page "http://www.gnu.org/software/bc/")
     (synopsis "Arbitrary precision numeric processing language")
     (description
-     "bc is an arbitrary precision numeric processing language. Syntax
-is similar to C, but differs in many substantial areas. It supports
-interactive execution of statements.  bc is a utility included in the
-POSIX P1003.2/D11 draft standard.
+     "bc is an arbitrary precision numeric processing language.  It includes
+an interactive environment for evaluating mathematical statements.  Its
+syntax is similar to that of C, so basic usage is familiar.  It also includes
+\"dc\", a reverse-polish calculator.")
+    (license gpl2+)))
 
-Since the POSIX document does not specify how bc must be implemented,
-this version does not use the historical method of having bc be a
-compiler for the dc calculator.  This version has a single executable
-that both compiles the language and runs the resulting `byte code'. The
-byte code is not the dc language.")
+(define-public fftw
+  (package
+    (name "fftw")
+    (version "3.3.3")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "ftp://ftp.fftw.org/pub/fftw/fftw-"
+                                 version".tar.gz"))
+             (sha256
+              (base32
+               "1wwp9b2va7vkq3ay7a9jk22nr4x5q6m37rzqy2j8y3d11c5grkc5"))))
+    (build-system gnu-build-system)
+    (arguments
+     '(#:configure-flags '("--enable-shared" "--enable-openmp")
+       #:phases (alist-cons-before
+                 'build 'no-native
+                 (lambda _
+                   ;; By default '-mtune=native' is used.  However, that may
+                   ;; cause the use of ISA extensions (SSE2, etc.) that are
+                   ;; not necessarily available on the user's machine when
+                   ;; that package is built on a different machine.
+                   (substitute* (find-files "." "Makefile$")
+                     (("-mtune=native") "")))
+                 %standard-phases)))
+    (native-inputs `(("perl" ,perl)))
+    (home-page "http://fftw.org")
+    (synopsis "Computing the discrete Fourier transform")
+    (description
+     "FFTW is a C subroutine library for computing the discrete Fourier
+transform (DFT) in one or more dimensions, of arbitrary input size, and of
+both real and complex data (as well as of even/odd data---i.e. the discrete
+cosine/ sine transforms or DCT/DST).")
     (license gpl2+)))

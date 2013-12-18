@@ -43,7 +43,8 @@
                           version ".tar.gz"))
       (sha256
        (base32
-        "0z6rlalhvfca64jpvksppc9bdhs7jwhiw4y35g5ibvh91xp3rn1l"))))
+        "0z6rlalhvfca64jpvksppc9bdhs7jwhiw4y35g5ibvh91xp3rn1l"))
+      (patches (list (search-patch "liboop-mips64-deplibs-fix.patch")))))
     (build-system gnu-build-system)
     (home-page "http://www.lysator.liu.se/liboop/")
     (synopsis "Event loop library")
@@ -119,7 +120,9 @@ basis for almost any application.")
     (home-page "http://www.lysator.liu.se/~nisse/lsh/")
     (synopsis "GNU implementation of the Secure Shell (ssh) protocols")
     (description
-     "lsh is a free implementation (in the GNU sense) of the ssh
-version 2 protocol, currently being standardised by the IETF
-SECSH working group.")
+     "GNU lsh is a free implementation of the SSH version 2 protocol.  It is
+used to create a secure line of communication between two computers,
+providing shell access to the server system from the client.  It provides
+both the server daemon and the client application, as well as tools for
+manipulating key files.")
     (license gpl2+)))

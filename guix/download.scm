@@ -24,6 +24,7 @@
   #:use-module ((guix store) #:select (derivation-path? add-to-store))
   #:use-module ((guix build download) #:renamer (symbol-prefix-proc 'build:))
   #:use-module (guix utils)
+  #:use-module (web uri)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-26)
   #:export (%mirrors
@@ -157,7 +158,11 @@
        "http://www.imagemagick.org/download"
        "ftp://mirror.searchdaimon.com/ImageMagick"
        "http://mirror.is.co.za/pub/imagemagick/"
-       "ftp://mirror.aarnet.edu.au/pub/imagemagick/"))))
+       "ftp://mirror.aarnet.edu.au/pub/imagemagick/")
+      (debian
+       "http://ftp.de.debian.org/debian/"
+       "http://ftp.fr.debian.org/debian/"
+       "http://ftp.debian.org/debian/"))))
 
 (define (gnutls-derivation store system)
   "Return the GnuTLS derivation for SYSTEM."
@@ -223,11 +228,11 @@ must be a list of symbol/URL-list pairs."
                            ;; set it here.
                            `(("GUILE_LOAD_PATH" . ,dir)))
                          '())))
-    (build-expression->derivation store (or name file-name) system
-                                  builder
-                                  (if gnutls-drv
-                                      `(("gnutls" ,gnutls-drv))
-                                      '())
+    (build-expression->derivation store (or name file-name) builder
+                                  #:system system
+                                  #:inputs (if gnutls-drv
+                                               `(("gnutls" ,gnutls-drv))
+                                               '())
                                   #:hash-algo hash-algo
                                   #:hash hash
                                   #:modules '((guix build download)
@@ -240,13 +245,18 @@ must be a list of symbol/URL-list pairs."
                             #:key (log (current-error-port)))
   "Download from URL to STORE, either under NAME or URL's basename if
 omitted.  Write progress reports to LOG."
-  (call-with-temporary-output-file
-   (lambda (temp port)
-     (let ((result
-            (parameterize ((current-output-port log))
-              (build:url-fetch url temp #:mirrors %mirrors))))
-       (close port)
-       (and result
-            (add-to-store store name #f "sha256" temp))))))
+  (define uri
+    (string->uri url))
+
+  (if (memq (uri-scheme uri) '(file #f))
+      (add-to-store store name #f "sha256" (uri-path uri))
+      (call-with-temporary-output-file
+       (lambda (temp port)
+         (let ((result
+                (parameterize ((current-output-port log))
+                  (build:url-fetch url temp #:mirrors %mirrors))))
+           (close port)
+           (and result
+                (add-to-store store name #f "sha256" temp)))))))
 
 ;;; download.scm ends here

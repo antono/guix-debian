@@ -18,8 +18,7 @@
 
 (define-module (gnu packages w3m)
   #:use-module ((guix licenses) #:select (x11-style))
-  #:use-module ((gnu packages gettext)
-                #:renamer (symbol-prefix-proc 'guix:))
+  #:use-module (gnu packages gettext)
   #:use-module (gnu packages bdw-gc)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages ncurses)
@@ -35,14 +34,17 @@
   (package
     (name "w3m")
     (version "0.5.3")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://sourceforge/w3m/w3m-"
-                          version ".tar.gz"))
-      (sha256
-       (base32
-        "1qx9f0kprf92r1wxl3sacykla0g04qsi0idypzz24b7xy9ix5579"))))
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "mirror://sourceforge/w3m/w3m-"
+                                 version ".tar.gz"))
+             (sha256
+              (base32
+               "1qx9f0kprf92r1wxl3sacykla0g04qsi0idypzz24b7xy9ix5579"))
+
+             ;; cf. https://bugs.archlinux.org/task/33397
+             (patches (list (search-patch "w3m-fix-compile.patch")))
+             (patch-flags '("-p0"))))
     (build-system gnu-build-system)
     (arguments `(#:tests? #f  ; no check target
                  #:phases (alist-cons-before
@@ -56,20 +58,15 @@
                              (substitute* '("scripts/w3mmail.cgi.in"
                                             "scripts/dirlist.cgi.in")
                                (("@PERL@") (which "perl"))))
-                           %standard-phases)
-                 ;; cf. https://bugs.archlinux.org/task/33397
-                 #:patches (list (assoc-ref %build-inputs
-                                            "patch/fix-compile"))
-                 #:patch-flags '("-p0")))
+                           %standard-phases)))
     (inputs
-     `(("gettext" ,guix:gettext)
+     `(("gettext" ,gnu-gettext)
        ("libgc" ,libgc)
        ("ncurses" ,ncurses)
        ("openssl" ,openssl)
        ("perl" ,perl)
        ("pkg-config" ,pkg-config)
-       ("zlib" ,zlib)
-       ("patch/fix-compile" ,(search-patch "w3m-fix-compile.patch"))))
+       ("zlib" ,zlib)))
     (home-page "http://w3m.sourceforge.net/")
     (synopsis "w3m, a text-mode web browser")
     (description

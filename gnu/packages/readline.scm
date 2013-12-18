@@ -45,15 +45,12 @@
                                    version ".tar.gz"))
                (sha256
                 (base32
-                 "10ckm2bd2rkxhvdmj7nmbsylmihw0abwcsnxf8y27305183rd9kr"))))
+                 "10ckm2bd2rkxhvdmj7nmbsylmihw0abwcsnxf8y27305183rd9kr"))
+               (patches (list (search-patch "readline-link-ncurses.patch")))
+               (patch-flags '("-p0"))))
       (build-system gnu-build-system)
       (propagated-inputs `(("ncurses" ,ncurses)))
-      (inputs `(("patch/link-ncurses"
-                 ,(search-patch "readline-link-ncurses.patch"))))
-      (arguments `(#:patches (list (assoc-ref %build-inputs
-                                              "patch/link-ncurses"))
-                   #:patch-flags '("-p0")
-                   #:configure-flags
+      (arguments `(#:configure-flags
                    (list (string-append "LDFLAGS=-Wl,-rpath -Wl,"
                                         (assoc-ref %build-inputs "ncurses")
                                         "/lib"))
@@ -64,15 +61,10 @@
                              %standard-phases)))
       (synopsis "Edit command lines while typing, with history support")
       (description
-       "The GNU Readline library provides a set of functions for use by
-applications that allow users to edit command lines as they are typed in.
-Both Emacs and vi editing modes are available.  The Readline library includes
-additional functions to maintain a list of previously-entered command lines,
-to recall and perhaps reedit those lines, and perform csh-like history
-expansion on previous commands.
-
-The history facilites are also placed into a separate library, the History
-library, as part of the build process.  The History library may be used
-without Readline in applications which desire its capabilities.")
+       "The GNU readline library allows users to edit command lines as they
+are typed in.  It can maintain a searchable history of previously entered
+commands, letting you easily recall, edit and re-enter past commands.  It
+features both Emacs-like and vi-like keybindings, making its usage
+comfortable for anyone.")
       (license gpl3+)
       (home-page "http://savannah.gnu.org/projects/readline/"))))

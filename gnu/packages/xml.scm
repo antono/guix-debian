@@ -23,6 +23,7 @@
   #:use-module (gnu packages gnupg)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages python)
+  #:use-module (gnu packages web)
   #:use-module ((guix licenses)
                 #:renamer (symbol-prefix-proc 'license:))
   #:use-module (guix packages)
@@ -140,6 +141,102 @@ as extra arguments to the parse methods, in which case they override options
 given at XML::Parser creation time.")
     (home-page "http://search.cpan.org/~toddr/XML-Parser-2.41/Parser.pm")))
 
+(define-public perl-libxml
+  (package
+    (name "perl-libxml")
+    (version "0.08")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append
+                   "mirror://cpan/authors/id/K/KM/KMACLEOD/libxml-perl-"
+                   version ".tar.gz"))
+             (sha256
+              (base32
+               "1jy9af0ljyzj7wakqli0437zb2vrbplqj4xhab7bfj2xgfdhawa5"))))
+    (build-system perl-build-system)
+    (propagated-inputs
+     `(("perl-xml-parser" ,perl-xml-parser)))
+    (license (package-license perl))
+    (synopsis "Perl SAX parser using XML::Parser")
+    (description
+     "XML::Parser::PerlSAX is a PerlSAX parser using the XML::Parser
+module.")
+    (home-page "http://search.cpan.org/~kmacleod/libxml-perl/lib/XML/Parser/PerlSAX.pm")))
+
+(define-public perl-xml-simple
+  (package
+    (name "perl-xml-simple")
+    (version "2.20")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append
+                   "mirror://cpan/authors/id/G/GR/GRANTM/XML-Simple-"
+                   version ".tar.gz"))
+             (sha256
+              (base32
+               "0jj3jiray1l4pi9wkjcpxjc3v431whdwx5aqnhgdm4i7h3817zsw"))))
+    (build-system perl-build-system)
+    (inputs
+     `(("perl-xml-parser" ,perl-xml-parser)))
+    (license (package-license perl))
+    (synopsis "Perl module for easy reading/writing of XML files")
+    (description
+     "The XML::Simple module provides a simple API layer on top of an
+underlying XML parsing module (either XML::Parser or one of the SAX2
+parser modules).")
+    (home-page "http://search.cpan.org/~grantm/XML-Simple-2.20/lib/XML/Simple.pm")))
+
+(define-public perl-xml-regexp
+  (package
+    (name "perl-xml-regexp")
+    (version "0.04")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append
+                   "mirror://cpan/authors/id/T/TJ/TJMATHER/XML-RegExp-"
+                   version ".tar.gz"))
+             (sha256
+              (base32
+               "0m7wj00a2kik7wj0azhs1zagwazqh3hlz4255n75q21nc04r06fz"))))
+    (build-system perl-build-system)
+    (inputs
+     `(("perl-xml-parser" ,perl-xml-parser)))
+    (license (package-license perl))
+    (synopsis "Perl regular expressions for XML tokens")
+    (description
+     "XML::RegExp contains regular expressions for the following XML tokens:
+BaseChar, Ideographic, Letter, Digit, Extender, CombiningChar, NameChar,
+EntityRef, CharRef, Reference, Name, NmToken, and AttValue.")
+    (home-page "http://search.cpan.org/~tjmather/XML-RegExp/lib/XML/RegExp.pm")))
+
+(define-public perl-xml-dom
+  (package
+    (name "perl-xml-dom")
+    (version "1.44")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append
+                   "mirror://cpan/authors/id/T/TJ/TJMATHER/XML-DOM-"
+                   version ".tar.gz"))
+             (sha256
+              (base32
+               "1r0ampc88ni3sjpzr583k86076qg399arfm9xirv3cw49k3k5bzn"))))
+    (build-system perl-build-system)
+    (propagated-inputs
+     `(("perl-libwww" ,perl-libwww)
+       ("perl-libxml" ,perl-libxml)
+       ("perl-xml-regexp" ,perl-xml-regexp)))
+    (license (package-license perl))
+    (synopsis
+     "Perl module for building DOM Level 1 compliant document structures")
+    (description
+     "This module extends the XML::Parser module by Clark Cooper.  The
+XML::Parser module is built on top of XML::Parser::Expat, which is a lower
+level interface to James Clark's expat library.  XML::DOM::Parser is derived
+from XML::Parser.  It parses XML strings or files and builds a data structure
+that conforms to the API of the Document Object Model.")
+    (home-page "http://search.cpan.org/~tjmather/XML-DOM-1.44/lib/XML/DOM.pm")))
+
 (define-public xmlto
   (package
     (name "xmlto")
@@ -154,8 +251,16 @@ given at XML::Parser creation time.")
        (base32
         "0dp5nxq491gymq806za0dk4hngfmq65ysrqbn0ypajqbbl6vf71n"))))
     (build-system gnu-build-system)
+    (arguments
+     ;; Make sure the reference to util-linux's 'getopt' is kept in 'xmlto'.
+     '(#:configure-flags (list (string-append "GETOPT="
+                                              (assoc-ref %build-inputs
+                                                         "util-linux")
+                                              "/bin/getopt"))))
     (inputs
-     `(("util-linux" ,util-linux)))
+     `(("util-linux" ,util-linux)                 ; for 'getopt'
+       ("libxml2" ,libxml2)                       ; for 'xmllint'
+       ("libxslt" ,libxslt)))                     ; for 'xsltproc'
     (home-page "http://cyberelk.net/tim/software/xmlto/")
     (synopsis "Front-end to an XSL toolchain")
     (description

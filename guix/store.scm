@@ -85,9 +85,11 @@
 
             %store-prefix
             store-path?
+            direct-store-path?
             derivation-path?
             store-path-package-name
-            store-path-hash-part))
+            store-path-hash-part
+            log-file))
 
 (define %protocol-version #x10c)
 
@@ -639,24 +641,56 @@ collected, and the number of bytes freed."
   ;; `isStorePath' in Nix does something similar.
   (string-prefix? (%store-prefix) path))
 
+(define (direct-store-path? path)
+  "Return #t if PATH is a store path, and not a sub-directory of a store path.
+This predicate is sometimes needed because files *under* a store path are not
+valid inputs."
+  (and (store-path? path)
+       (let ((len (+ 1 (string-length (%store-prefix)))))
+         (not (string-index (substring path len) #\/)))))
+
 (define (derivation-path? path)
   "Return #t if PATH is a derivation path."
   (and (store-path? path) (string-suffix? ".drv" path)))
 
+(define store-regexp*
+  ;; The substituter makes repeated calls to 'store-path-hash-part', hence
+  ;; this optimization.
+  (memoize
+   (lambda (store)
+     "Return a regexp matching a file in STORE."
+     (make-regexp (string-append "^" (regexp-quote store)
+                                 "/([0-9a-df-np-sv-z]{32})-([^/]+)$")))))
+
 (define (store-path-package-name path)
   "Return the package name part of PATH, a file name in the store."
-  (define store-path-rx
-    (make-regexp (string-append "^.*" (regexp-quote (%store-prefix))
-                                "/[^-]+-(.+)$")))
-
-  (and=> (regexp-exec store-path-rx path)
-         (cut match:substring <> 1)))
+  (let ((path-rx (store-regexp* (%store-prefix))))
+    (and=> (regexp-exec path-rx path)
+           (cut match:substring <> 2))))
 
 (define (store-path-hash-part path)
   "Return the hash part of PATH as a base32 string, or #f if PATH is not a
 syntactically valid store path."
-  (let ((path-rx (make-regexp
-                  (string-append"^" (regexp-quote (%store-prefix))
-                                "/([0-9a-df-np-sv-z]{32})-[^/]+$"))))
+  (let ((path-rx (store-regexp* (%store-prefix))))
     (and=> (regexp-exec path-rx path)
            (cut match:substring <> 1))))
+
+(define (log-file store file)
+  "Return the build log file for FILE, or #f if none could be found.  FILE
+must be an absolute store file name, or a derivation file name."
+  (define state-dir                               ; XXX: factorize
+    (or (getenv "NIX_STATE_DIR") %state-directory))
+
+  (cond ((derivation-path? file)
+         (let* ((base (basename file))
+                (log  (string-append (dirname state-dir) ; XXX: ditto
+                                     "/log/nix/drvs/"
+                                     (string-take base 2) "/"
+                                     (string-drop base 2) ".bz2")))
+           (and (file-exists? log) log)))
+        (else
+         (match (valid-derivers store file)
+           ((derivers ...)
+            ;; Return the first that works.
+            (any (cut log-file store <>) derivers))
+           (_ #f)))))

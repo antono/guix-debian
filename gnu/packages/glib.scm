@@ -26,9 +26,11 @@
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages)
   #:use-module (gnu packages base)
+  #:use-module (gnu packages bison)
   #:use-module (gnu packages compression)
-  #:use-module ((gnu packages gettext)
-                #:renamer (symbol-prefix-proc 'guix:))
+  #:use-module (gnu packages flex)
+  #:use-module (gnu packages gettext)
+  #:use-module (gnu packages gtk)
   #:use-module (gnu packages libffi)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
@@ -37,14 +39,18 @@
   #:use-module (gnu packages bash)
   #:use-module (gnu packages file)
   #:use-module (gnu packages xorg)
+  #:use-module (gnu packages m4)
 
   ;; Export variables up-front to allow circular dependency with the 'xorg'
   ;; module.
   #:export (dbus
             glib
+            gobject-introspection
             dbus-glib
             intltool
-            itstool))
+            itstool
+            libsigc++
+            glibmm))
 
 (define dbus
   (package
@@ -57,7 +63,8 @@
                              version ".tar.gz"))
              (sha256
               (base32
-               "1wacqyfkcpayg7f8rvx9awqg275n5pksxq5q7y21lxjx85x6pfjz"))))
+               "1wacqyfkcpayg7f8rvx9awqg275n5pksxq5q7y21lxjx85x6pfjz"))
+             (patches (list (search-patch "dbus-localstatedir.patch")))))
     (build-system gnu-build-system)
     (arguments
      '(#:configure-flags (list ;; Install the system bus socket under /var.
@@ -67,13 +74,10 @@
                                ;; config.
                                ;; "--sysconfdir=/etc"
 
-                               "--with-session-socket-dir=/tmp")
-       #:patches (list (assoc-ref %build-inputs "patch/localstatedir"))))
+                               "--with-session-socket-dir=/tmp")))
     (inputs
      `(("expat" ,expat)
        ("pkg-config" ,pkg-config)
-       ("patch/localstatedir"
-        ,(search-patch "dbus-localstatedir.patch"))
 
        ;; Add a dependency on libx11 so that 'dbus-launch' has support for
        ;; '--autolaunch'.
@@ -102,20 +106,24 @@ shared NFS home directories.")
 (define glib
   (package
    (name "glib")
-   (version "2.37.1")
+   (version "2.38.0")
    (source (origin
             (method url-fetch)
             (uri (string-append "mirror://gnome/sources/"
-                                name "/2.37/"
+                                name "/" (string-take version 4) "/"
                                 name "-" version ".tar.xz"))
             (sha256
-             (base32 "1lp705q0g9jlfj24x8fpgjh7awmmara5iyj9kz5lhd49sr9s813k"))))
+             (base32 "0cpzqadqk6z6bmb79p04pykxc8x57rvshh33414cnk41bvgaf4vm"))
+            (patches (list (search-patch "glib-tests-homedir.patch")
+                           (search-patch "glib-tests-desktop.patch")
+                           (search-patch "glib-tests-prlimit.patch")
+                           (search-patch "glib-tests-newnet.patch")))))
    (build-system gnu-build-system)
    (outputs '("out"                        ; everything
               "doc"))                      ; 20 MiB of GTK-Doc reference
    (inputs
     `(("coreutils" ,coreutils)
-      ("gettext" ,guix:gettext)
+      ("gettext" ,gnu-gettext)
       ("libffi" ,libffi)
       ("pkg-config" ,pkg-config)
       ("python" ,python-wrapper)
@@ -124,18 +132,9 @@ shared NFS home directories.")
       ("dbus" ,dbus)                              ; for GDBus tests
       ("bash" ,bash)
       ("tzdata" ,tzdata)                          ; for tests/gdatetime.c
-
-      ("patch/tests-homedir"
-       ,(search-patch "glib-tests-homedir.patch"))
-      ("patch/tests-desktop"
-       ,(search-patch "glib-tests-desktop.patch"))
-      ("patch/tests-prlimit"
-       ,(search-patch "glib-tests-prlimit.patch"))))
+      ))
    (arguments
-    '(#:patches (list (assoc-ref %build-inputs "patch/tests-homedir")
-                      (assoc-ref %build-inputs "patch/tests-desktop")
-                      (assoc-ref %build-inputs "patch/tests-prlimit"))
-      #:phases (alist-cons-before
+    '(#:phases (alist-cons-before
                 'build 'pre-build
                 (lambda* (#:key inputs outputs #:allow-other-keys)
                   ;; For tests/gdatetime.c.
@@ -150,13 +149,7 @@ shared NFS home directories.")
                                  "glib/tests/utils.c"
                                  "tests/spawn-test.c")
                     (("/bin/sh")
-                     (string-append (assoc-ref inputs "bash") "/bin/sh")))
-
-                  ;; Honor $(TESTS_ENVIRONMENT).
-                  (substitute* (find-files "." "^Makefile(\\.in)?$")
-                    (("^GTESTER[[:blank:]]*=(.*)$" _ rest)
-                     (string-append "GTESTER = $(TESTS_ENVIRONMENT) "
-                                    rest))))
+                     (string-append (assoc-ref inputs "bash") "/bin/sh"))))
                 %standard-phases)
 
       ;; Note: `--docdir' and `--htmldir' are not honored, so work around it.
@@ -170,6 +163,49 @@ and interfaces for such runtime functionality as an event loop, threads,
 dynamic loading, and an object system.")
    (home-page "http://developer.gnome.org/glib/")
    (license license:lgpl2.0+)))                        ; some files are under lgpl2.1+
+
+(define gobject-introspection
+  (package
+    (name "gobject-introspection")
+    (version "1.38.0")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "http://ftp.gnome.org/pub/GNOME/sources/"
+                   "gobject-introspection/"
+                   (substring version 0 (string-rindex version #\.))
+                   "/gobject-introspection-"
+                   version ".tar.xz"))
+             (sha256
+              (base32 "0wvxyvgajmms2bb6k3pf1rdpnd79xdxamykzvxzmcyn1ag9yax9m"))))
+    (build-system gnu-build-system)
+    (inputs
+     `(("bison" ,bison)
+       ("cairo" ,cairo)
+       ("flex" ,flex)
+       ("glib" ,glib)
+       ("libffi" ,libffi)
+       ("pkg-config" ,pkg-config)
+       ("python-2" ,python-2)))
+    (arguments
+     `(#:phases
+        (alist-replace
+         'configure
+         (lambda* (#:key #:allow-other-keys #:rest args)
+          (let ((configure (assoc-ref %standard-phases 'configure)))
+           ;; giscanner/sourcescanner.py looks for 'CC', let's set it here.
+           (setenv "CC" "gcc")
+           (apply configure args)))
+         %standard-phases)))
+    (home-page "https://wiki.gnome.org/GObjectIntrospection")
+    (synopsis "Generate interface introspection data for GObject libraries")
+    (description
+     "GObject introspection is a middleware layer between C libraries (using
+GObject) and language bindings.  The C library can be scanned at compile time
+and generate a metadata file, in addition to the actual native C library.  Then
+at runtime, language bindings can read this metadata and automatically provide
+bindings to call into the C library.")
+    ; Some bits are distributed under the LGPL2+, others under the GPL2+
+    (license license:gpl2+)))
 
 (define intltool
   (package
@@ -187,7 +223,7 @@ dynamic loading, and an object system.")
     (propagated-inputs
      `(;; Propagate gettext because users expect it to be there, and so does
        ;; the `intltool-update' script.
-       ("gettext" ,guix:gettext)
+       ("gettext" ,gnu-gettext)
 
        ;; `file' is used by `intltool-update' too.
        ("file" ,file)
@@ -224,6 +260,9 @@ The intltool collection can be used to do these things:
               (base32
                "1akq75aflihm3y7js8biy7b5mw2g11vl8yq90gydnwlwp0zxdzj6"))))
     (build-system gnu-build-system)
+    (propagated-inputs
+     `(("libxml2" ,libxml2)
+       ("python-2" ,python-2)))
     (home-page "http://www.itstool.org")
     (synopsis "Tool to translate XML documents with PO files")
     (description
@@ -270,3 +309,69 @@ translated.")
      "GLib bindings for D-Bus.  The package is obsolete and superseded
 by GDBus included in Glib.")
     (license license:gpl2)))                     ; or Academic Free License 2.1
+
+(define libsigc++
+  (package
+    (name "libsigc++")
+    (version "2.3.1")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "mirror://gnome/sources/libsigc++/2.3/libsigc++-"
+                                 version ".tar.xz"))
+             (sha256
+              (base32
+               "14q3sq6d43f6wfcmwhw4v1aal4ba0h5x9v6wkxy2dnqznd95il37"))))
+    (build-system gnu-build-system)
+    (inputs `(("pkg-config" ,pkg-config)))
+    (native-inputs `(("m4" ,m4)))
+    (home-page "http://libsigc.sourceforge.net/")
+    (synopsis "Type-safe callback system for standard C++")
+    (description
+     "libsigc++ implements a type-safe callback system for standard C++.  It
+allows you to define signals and to connect those signals to any callback
+function, either global or a member function, regardless of whether it is
+static or virtual.
+
+It also contains adaptor classes for connection of dissimilar callbacks and
+has an ease of use unmatched by other C++ callback libraries.")
+    (license license:lgpl2.1+)))
+
+(define glibmm
+  (package
+    (name "glibmm")
+    (version "2.37.7")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "mirror://gnome/sources/glibmm/2.37/glibmm-"
+                                 version ".tar.xz"))
+             (sha256
+              (base32
+               "0mms4yl5izsya1135772z4jkb184ss86x0wlg6dm7yvwxvb6bjlw"))))
+    (build-system gnu-build-system)
+    (arguments
+     `(#:phases (alist-cons-before
+                 'build 'pre-build
+                 (lambda _
+                   ;; This test uses /etc/fstab as an example file to read
+                   ;; from; choose a better example.
+                   (substitute* "tests/giomm_simple/main.cc"
+                     (("/etc/fstab")
+                      (string-append (getcwd)
+                                     "/tests/giomm_simple/main.cc")))
+
+                   ;; This test does a DNS lookup, and then expects to be able
+                   ;; to open a TLS session; just skip it.
+                   (substitute* "tests/giomm_tls_client/main.cc"
+                     (("Gio::init.*$")
+                      "return 77;\n")))
+                 %standard-phases)))
+    (inputs `(("pkg-config" ,pkg-config)))
+    (propagated-inputs
+     `(("libsigc++" ,libsigc++)
+       ("glib" ,glib)))
+    (home-page "http://gtkmm.org/")
+    (synopsis "C++ interface to the GLib library")
+    (description
+     "glibmm provides a C++ programming interface to the part of GLib that are
+useful for C++.")
+    (license license:lgpl2.1+)))

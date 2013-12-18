@@ -22,8 +22,7 @@
   #:use-module (guix download)
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages xorg)
-  #:use-module (gnu packages pkg-config)
-  #:use-module (gnu packages gtk))
+  #:use-module (gnu packages pkg-config))
 
 (define-public xnee
   (package
@@ -42,7 +41,6 @@
        ("pkg-config" ,pkg-config)
        ("inputproto" ,inputproto)
        ("libxi" ,libxi)
-       ("gtk+" ,gtk+)
        ("libxtst" ,libxtst)
        ("xextproto" ,xextproto)
        ("libxext" ,libxext)
@@ -51,8 +49,7 @@
     (home-page "http://www.gnu.org/software/xnee/")
     (synopsis "Record, replay and distribute user actions under X11")
     (description
-     "GNU Xnee is a suite of programs that can record, replay and distribute
-user actions under the X11 environment.  Think of it as a robot that can
-imitate the job you just did.  Xnee can be used to automate tests, demonstrate
-programs, distribute actions, record & replay \"macros\", retype a file.")
+     "GNU Xnee is a program that can record, replay and distribute user
+actions in X11.  It can be used to automate user interactions for testing or
+demonstration purposes.")
     (license gpl3+)))
