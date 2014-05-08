@@ -1,5 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
+;;; Copyright © 2014 Mark H Weaver <mhw@netris.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -23,11 +24,13 @@
   #:use-module (gnu packages gnupg)
   #:use-module (gnu packages groff)
   #:use-module (gnu packages openssl)
-  #:use-module (gnu packages patchelf)
+  #:use-module (gnu packages elf)
   #:use-module (gnu packages guile)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages autotools)
+  #:use-module (gnu packages texinfo)
   #:use-module (gnu packages which)
+  #:use-module (gnu packages)
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix build-system gnu)
@@ -36,20 +39,20 @@
 (define-public libssh
   (package
     (name "libssh")
-    (version "0.5.3")
+    (version "0.6.3")
     (source (origin
               (method url-fetch)
-              (uri (string-append "http://www.libssh.org/files/0.5/libssh-"
-                                  version ".tar.gz"))
+              (uri (string-append "https://red.libssh.org/attachments/download/87/libssh-"
+                                  version ".tar.xz"))
               (sha256
                (base32
-                "1w6s217vjq0w3v5i0c5ql6m0ki1yz05g9snah3azxfkl9k4schpd"))))
+                "1jyaj9h1iglvn02hrvcchbx8ycjpj8b91h8mi459k7q5jp2xgd9b"))))
     (build-system cmake-build-system)
     (arguments
      '(#:configure-flags '("-DWITH_GCRYPT=ON"
 
-                                     ;; Leave a valid RUNPATH upon install.
-                                     "-DCMAKE_SKIP_BUILD_RPATH=ON")
+                           ;; Leave a valid RUNPATH upon install.
+                           "-DCMAKE_SKIP_BUILD_RPATH=ON")
 
        ;; TODO: Add 'CMockery' and '-DWITH_TESTING=ON' for the test suite.
        #:tests? #f
@@ -80,7 +83,10 @@
                                       lib))))
                  %standard-phases)))
     (inputs `(("zlib" ,zlib)
-              ("libgcrypt" ,libgcrypt)))
+               ;; Link against an older gcrypt, because libssh tries to access
+               ;; fields of 'gcry_thread_cbs' that are now private:
+               ;; src/threads.c:72:26: error: 'struct gcry_thread_cbs' has no member named 'mutex_init'
+              ("libgcrypt", libgcrypt-1.5)))
     (native-inputs `(("patchelf" ,patchelf)))
     (synopsis "SSH client library")
     (description
@@ -90,6 +96,18 @@ programs, transfer files, and use a secure and transparent tunnel for your
 remote applications.")
     (home-page "http://www.libssh.org")
     (license license:lgpl2.1+)))
+
+(define libssh-0.5                                ; kept private
+  (package (inherit libssh)
+    (version "0.5.5")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "https://red.libssh.org/attachments/download/51/libssh-"
+                                  version ".tar.gz"))
+              (sha256
+               (base32
+                "17cfdff4hc0ijzrr15biq29fiabafz0bw621zlkbwbc1zh2hzpy0"))
+              (patches (list (search-patch "libssh-CVE-2014-0017.patch")))))))
 
 (define-public libssh2
   (package
@@ -103,8 +121,11 @@ remote applications.")
             (sha256 (base32
                      "0vdr478dbhbdgnniqmirawjb7mrcxckn4slhhrijxnzrkmgziipa"))))
    (build-system gnu-build-system)
-   (inputs `(("libgcrypt" ,libgcrypt)
-             ("zlib" ,zlib)))
+   ;; The installed libssh2.pc file does not include paths to libgcrypt and
+   ;; zlib libraries, so we need to propagate the inputs.
+   (propagated-inputs `(("libgcrypt" ,libgcrypt)
+                        ("zlib" ,zlib)))
+   (arguments '(#:configure-flags `("--with-libgcrypt")))
    (synopsis "libssh2, a client-side C library implementing the SSH2 protocol")
    (description
     "libssh2 is a library intended to allow software developers access to
@@ -117,14 +138,14 @@ a server that supports the SSH-2 protocol.")
 (define-public openssh
   (package
    (name "openssh")
-   (version "6.1p1")
+   (version "6.6p1")
    (source (origin
             (method url-fetch)
             (uri (string-append
                    "ftp://ftp.fr.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-"
                    version ".tar.gz"))
             (sha256 (base32
-                     "04f4l4vx6f964v5qjm03nhyixdc3llc90z6cj70r0bl5q3v5ghfi"))))
+                     "1fq3w86q05y5nn6z878wm312k0svaprw8k007188fd259dkg1ha8"))))
    (build-system gnu-build-system)
    (inputs `(("groff" ,groff)
              ("openssl" ,openssl)
@@ -132,23 +153,19 @@ a server that supports the SSH-2 protocol.")
    (arguments
     `(#:test-target "tests"
       #:phases
-       (alist-replace
-        'configure
-        (lambda* (#:key outputs #:allow-other-keys #:rest args)
-         (let ((configure (assoc-ref %standard-phases 'configure))
-               (out (assoc-ref outputs "out")))
-           (apply configure args)
-           (substitute* "Makefile"
-                        (("PRIVSEP_PATH=/var/empty")
-                        (string-append "PRIVSEP_PATH=" out "/var/empty")))))
-       (alist-replace
-        'check
-        (lambda* (#:key #:allow-other-keys #:rest args)
-         (let ((check (assoc-ref %standard-phases 'check)))
-           ;; remove tests that require the user sshd
-           (substitute* "regress/Makefile"
-                        (("t9 t-exec") "t9"))
-           (apply check args)))
+       (alist-cons-after
+        'configure 'reset-/var/empty
+        (lambda* (#:key outputs #:allow-other-keys)
+          (let ((out (assoc-ref outputs "out")))
+            (substitute* "Makefile"
+              (("PRIVSEP_PATH=/var/empty")
+               (string-append "PRIVSEP_PATH=" out "/var/empty")))))
+       (alist-cons-before
+        'check 'patch-tests
+        (lambda _
+          ;; remove tests that require the user sshd
+          (substitute* "regress/Makefile"
+            (("t10 t-exec") "t10")))
        (alist-replace
         'install
         (lambda* (#:key (make-flags '()) #:allow-other-keys)
@@ -182,7 +199,7 @@ Additionally, various channel-specific options can be negotiated.")
 (define-public guile-ssh
   (package
     (name "guile-ssh")
-    (version "0.4.0")
+    (version "0.6.0")
     (source (origin
               (method url-fetch)
               (uri (string-append
@@ -190,19 +207,13 @@ Additionally, various channel-specific options can be negotiated.")
                     version ".tar.gz"))
               (sha256
                (base32
-                "0vw02r261amkp6238cflww2y9y1v6vfx9ias6hvn8dlx0ghrd5dw"))))
+                "1v4y5vrwg0g6804pzbr160zahlqvj7k7iwys2bdpfzp7m2i47siq"))))
     (build-system gnu-build-system)
     (arguments
      '(#:phases (alist-cons-before
                  'configure 'autoreconf
                  (lambda* (#:key inputs #:allow-other-keys)
-                   ;; The 'configure' script would want libssh 0.5.4, but that
-                   ;; doesn't exist.
-                   (substitute* "configure.ac"
-                     (("0\\.5\\.4")
-                      "0.5.3"))
-
-                   (substitute* "src/Makefile.am"
+                   (substitute* "ssh/Makefile.am"
                      (("-lssh_threads" match)
                       (string-append "-L" (assoc-ref inputs "libssh")
                                      "/lib " match)))
@@ -226,14 +237,21 @@ Additionally, various channel-specific options can be negotiated.")
                   %standard-phases))
        #:configure-flags (list (string-append "--with-guilesitedir="
                                               (assoc-ref %outputs "out")
-                                              "/share/guile/site/2.0"))))
+                                              "/share/guile/site/2.0"))
+
+       ;; Building the .go requires building libguile-ssh.so first.
+       #:parallel-build? #f
+
+       ;; Tests are not parallel-safe.
+       #:parallel-tests? #f))
     (native-inputs `(("autoconf" ,autoconf)
                      ("automake" ,automake)
                      ("libtool" ,libtool "bin")
+                     ("texinfo" ,texinfo)
                      ("pkg-config" ,pkg-config)
                      ("which" ,which)))
     (inputs `(("guile" ,guile-2.0)
-              ("libssh" ,libssh)))
+              ("libssh" ,libssh-0.5)))
     (synopsis "Guile bindings to libssh")
     (description
      "Guile-SSH is a library that provides access to the SSH protocol for
@@ -241,3 +259,46 @@ programs written in GNU Guile interpreter.  It is a wrapper to the underlying
 libssh library.")
     (home-page "https://github.com/artyom-poptsov/libguile-ssh")
     (license license:gpl3+)))
+
+(define-public corkscrew
+  (package
+    (name "corkscrew")
+    (version "2.0")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "http://www.agroman.net/corkscrew/corkscrew-"
+                           version ".tar.gz"))
+       (sha256 (base32
+                "1gmhas4va6gd70i2x2mpxpwpgww6413mji29mg282jms3jscn3qd"))))
+    (build-system gnu-build-system)
+    (arguments
+     ;; Replace configure phase as the ./configure script does not link
+     ;; CONFIG_SHELL and SHELL passed as parameters
+     '(#:phases
+       (alist-replace
+        'configure
+        (lambda* (#:key outputs inputs system target
+                        #:allow-other-keys #:rest args)
+          (let* ((configure (assoc-ref %standard-phases 'configure))
+                 (prefix (assoc-ref outputs "out"))
+                 (bash   (which "bash"))
+                 ;; Set --build and --host flags as the provided config.guess
+                 ;; is not able to detect them
+                 (flags `(,(string-append "--prefix=" prefix)
+                          ,(string-append "--build=" system)
+                          ,(string-append "--host="
+                                          (or target system)))))
+            (setenv "CONFIG_SHELL" bash)
+            (zero? (apply system* bash
+                          (string-append "." "/configure")
+                          flags))))
+        %standard-phases)))
+    (home-page "http://www.agroman.net/corkscrew")
+    (synopsis "A tool for tunneling SSH through HTTP proxies")
+    (description
+     "Corkscrew allows creating TCP tunnels through HTTP proxies.  WARNING:
+At the moment only plain text authentication is supported, should you require
+to use it with your HTTP proxy.  Digest based authentication may be supported
+in future and NTLM based authentication is most likey never be supported.")
+    (license license:gpl2+)))

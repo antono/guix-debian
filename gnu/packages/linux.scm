@@ -1,6 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2012 Nikita Karetnikov <nikita@karetnikov.org>
+;;; Copyright © 2014 Mark H Weaver <mhw@netris.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -30,6 +31,7 @@
   #:use-module (gnu packages bdb)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages python)
   #:use-module (gnu packages algebra)
   #:use-module (gnu packages gettext)
   #:use-module (gnu packages pulseaudio)
@@ -38,7 +40,9 @@
   #:use-module (gnu packages autotools)
   #:use-module (guix packages)
   #:use-module (guix download)
-  #:use-module (guix build-system gnu))
+  #:use-module (guix build-system gnu)
+  #:use-module (guix build-system cmake)
+  #:use-module (guix build-system python))
 
 (define-public (system->linux-architecture arch)
   "Return the Linux architecture name for ARCH, a Guix system name such as
@@ -146,7 +150,7 @@
     (license gpl2+)))
 
 (define-public linux-libre
-  (let* ((version "3.12")
+  (let* ((version "3.13.7")
          (build-phase
           '(lambda* (#:key system #:allow-other-keys #:rest args)
              (let ((arch (car (string-split system #\-))))
@@ -158,10 +162,22 @@
              (let ((build (assoc-ref %standard-phases 'build)))
                (and (zero? (system* "make" "defconfig"))
                     (begin
-                      (format #t "enabling additional modules...~%")
-                      (substitute* ".config"
-                        (("^# CONFIG_CIFS.*$")
-                         "CONFIG_CIFS=m\n"))
+                      ;; Appending works even when the option wasn't in the
+                      ;; file.  The last one prevails if duplicated.
+                      (let ((port (open-file ".config" "a")))
+                        (display (string-append "CONFIG_NET_9P=m\n"
+                                                "CONFIG_NET_9P_VIRTIO=m\n"
+                                                "CONFIG_VIRTIO_BLK=m\n"
+                                                "CONFIG_VIRTIO_NET=m\n"
+                                                "CONFIG_VIRTIO_PCI=m\n"
+                                                "CONFIG_VIRTIO_BALLOON=m\n"
+                                                "CONFIG_VIRTIO_MMIO=m\n"
+                                                "CONFIG_FUSE_FS=m\n"
+                                                "CONFIG_CIFS=m\n"
+                                                "CONFIG_9P_FS=m\n")
+                                 port)
+                        (close-port port))
+
                       (zero? (system* "make" "oldconfig")))
 
                     ;; Call the default `build' phase so `-j' is correctly
@@ -192,7 +208,7 @@
              (uri (linux-libre-urls version))
              (sha256
               (base32
-               "0drjxm9h2k9bik2mhrqqqi6cm5rn2db647wf0zvb58xldj0zmhb6"))))
+               "0j28dg0zq4vlbk4ady4fq021i8dxx2h8h90n26mzigr9hky86n8d"))))
     (build-system gnu-build-system)
     (native-inputs `(("perl" ,perl)
                      ("bc" ,bc)
@@ -235,7 +251,7 @@ It has been modified to remove all non-free binary blobs.")
        (base32
         "1hlz2kqvbjisvwyicdincq7nz897b9rrafyzccwzqiqg53b8gf5s"))))
     (build-system gnu-build-system)
-    (inputs
+    (native-inputs
      `(("flex" ,flex)
 
        ;; TODO: optional dependencies
@@ -314,8 +330,9 @@ providing the system administrator with some help in common tasks.")
                        (("@PERL@") "/bin/perl"))))
                  %standard-phases)))
     (inputs `(("zlib" ,guix:zlib)
-              ("ncurses" ,ncurses)
-              ("perl" ,perl)))
+              ("ncurses" ,ncurses)))
+    (native-inputs
+     `(("perl" ,perl)))
     (home-page "https://www.kernel.org/pub/linux/utils/util-linux/")
     (synopsis "Collection of utilities for the Linux kernel")
     (description
@@ -395,7 +412,9 @@ slabtop, and skill.")
         "03pd57vv8c6x0hgjqcbrxnzi14h8hcghmapg89p8k5zpwpkvbdfr"))))
     (build-system gnu-build-system)
     (inputs
-     `(("libusb" ,libusb) ("pkg-config" ,pkg-config)))
+     `(("libusb" ,libusb)))
+    (native-inputs
+     `(("pkg-config" ,pkg-config)))
     (home-page "http://www.linux-usb.org/")
     (synopsis
      "Tools for working with USB devices, such as lsusb")
@@ -415,8 +434,8 @@ slabtop, and skill.")
               (base32
                "0ibkkvp6kan0hn0d1anq4n2md70j5gcm7mwna515w82xwyr02rfw"))))
     (build-system gnu-build-system)
-    (inputs `(("util-linux" ,util-linux)
-              ("pkg-config" ,pkg-config)))
+    (inputs `(("util-linux" ,util-linux)))
+    (native-inputs `(("pkg-config" ,pkg-config)))
     (arguments
      '(#:phases (alist-cons-before
                  'configure 'patch-shells
@@ -454,7 +473,7 @@ slabtop, and skill.")
               (base32
                "158iwk0pl2mfw93m1843xb7a2zb8p6lh0qim07rca6f1ff4dk764"))))
     (build-system gnu-build-system)
-    (inputs `(("perl" ,perl)))
+    (native-inputs `(("perl" ,perl)))
     (home-page "http://strace.sourceforge.net/")
     (synopsis "System call tracer for Linux")
     (description
@@ -582,8 +601,9 @@ packet filter.")
                  %standard-phases)))
     (inputs
      `(("iptables" ,iptables)
-       ("db4" ,bdb)
-       ("pkg-config" ,pkg-config)
+       ("db4" ,bdb)))
+    (native-inputs
+     `(("pkg-config" ,pkg-config)
        ("flex" ,flex)
        ("bison" ,bison)))
     (home-page
@@ -664,9 +684,11 @@ manpages.")
        #:parallel-build? #f
 
        #:tests? #f                                ; no test suite
-       #:make-flags (list "CC=gcc"
-                          (string-append "BASEDIR="
-                                         (assoc-ref %outputs "out")))))
+       #:make-flags (let ((out (assoc-ref %outputs "out")))
+                      (list "CC=gcc"
+                            (string-append "BASEDIR=" out)
+                            (string-append "INSTALLNLSDIR=" out "/share/locale")
+                            (string-append "mandir=/share/man")))))
 
     ;; Use the big Debian patch set (the thing does not even compile out of
     ;; the box.)
@@ -801,10 +823,11 @@ configuration and monitoring interfaces.")
     (inputs
      ;; TODO: Add pciutils.
      `(("zlib" ,guix:zlib)
-       ("pkg-config" ,pkg-config)
        ;; ("pciutils" ,pciutils)
        ("ncurses" ,ncurses)
        ("libnl" ,libnl)))
+    (native-inputs
+       `(("pkg-config" ,pkg-config)))
     (home-page "https://01.org/powertop/")
     (synopsis "Analyze power consumption on Intel-based laptops")
     (description
@@ -814,3 +837,138 @@ an interactive mode where the user can experiment various power management
 settings for cases where the operating system has not enabled these
 settings.")
     (license gpl2)))
+
+(define-public aumix
+  (package
+    (name "aumix")
+    (version "2.9.1")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append
+                    "http://www.jpj.net/~trevor/aumix/releases/aumix-"
+                    version ".tar.bz2"))
+              (sha256
+               (base32
+                "0a8fwyxnc5qdxff8sl2sfsbnvgh6pkij4yafiln0fxgg6bal7knj"))))
+    (build-system gnu-build-system)
+    (inputs `(("ncurses" ,ncurses)))
+    (home-page "http://www.jpj.net/~trevor/aumix.html")
+    (synopsis "Audio mixer for X and the console")
+    (description
+     "Aumix adjusts an audio mixer from X, the console, a terminal,
+the command line or a script.")
+    (license gpl2+)))
+
+(define-public iotop
+  (package
+    (name "iotop")
+    (version "0.6")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "http://guichaz.free.fr/iotop/files/iotop-"
+                           version ".tar.gz"))
+       (sha256 (base32
+                "1kp8mqg2pbxq4xzpianypadfxcsyfgwcaqgqia6h9fsq6zyh4z0s"))))
+    (build-system python-build-system)
+    (arguments
+     ;; The setup.py script expects python-2.
+     `(#:python ,python-2
+       ;; There are currently no checks in the package.
+       #:tests? #f))
+    (native-inputs `(("python" ,python-2)))
+    (home-page "http://guichaz.free.fr/iotop/")
+    (synopsis
+     "Displays the IO activity of running processes")
+    (description
+     "Iotop is a Python program with a top like user interface to show the
+processes currently causing I/O.")
+    (license gpl2+)))
+
+(define-public fuse
+  (package
+    (name "fuse")
+    (version "2.9.3")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://sourceforge/fuse/fuse-"
+                                  version ".tar.gz"))
+              (sha256
+               (base32
+                "071r6xjgssy8vwdn6m28qq1bqxsd2bphcd2mzhq0grf5ybm87sqb"))))
+    (build-system gnu-build-system)
+    (inputs `(("util-linux" ,util-linux)))
+    (arguments
+     '(#:configure-flags (list (string-append "MOUNT_FUSE_PATH="
+                                              (assoc-ref %outputs "out")
+                                              "/sbin")
+                               (string-append "INIT_D_PATH="
+                                              (assoc-ref %outputs "out")
+                                              "/etc/init.d")
+                               (string-append "UDEV_RULES_PATH="
+                                              (assoc-ref %outputs "out")
+                                              "/etc/udev"))
+      #:phases (alist-cons-before
+                'build 'set-file-names
+                (lambda* (#:key inputs #:allow-other-keys)
+                  ;; libfuse calls out to mount(8) and umount(8).  Make sure
+                  ;; it refers to the right ones.
+                  (substitute* '("lib/mount_util.c" "util/mount_util.c")
+                    (("/bin/(u?)mount" _ maybe-u)
+                     (string-append (assoc-ref inputs "util-linux")
+                                    "/bin/" maybe-u "mount")))
+                  (substitute* '("util/mount.fuse.c")
+                    (("/bin/sh")
+                     (which "sh"))))
+                %standard-phases)))
+    (home-page "http://fuse.sourceforge.net/")
+    (synopsis "Support file systems implemented in user space")
+    (description
+     "As a consequence of its monolithic design, file system code for Linux
+normally goes into the kernel itself---which is not only a robustness issue,
+but also an impediment to system extensibility.  FUSE, for \"file systems in
+user space\", is a kernel module and user-space library that tries to address
+part of this problem by allowing users to run file system implementations as
+user-space processes.")
+    (license (list lgpl2.1                        ; library
+                   gpl2+))))                      ; command-line utilities
+
+(define-public unionfs-fuse
+  (package
+    (name "unionfs-fuse")
+    (version "0.26")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append
+                    "http://podgorny.cz/unionfs-fuse/releases/unionfs-fuse-"
+                    version ".tar.xz"))
+              (sha256
+               (base32
+                "0qpnr4czgc62vsfnmv933w62nq3xwcbnvqch72qakfgca75rsp4d"))))
+    (build-system cmake-build-system)
+    (inputs `(("fuse" ,fuse)))
+    (arguments '(#:tests? #f))                    ; no tests
+    (home-page "http://podgorny.cz/moin/UnionFsFuse")
+    (synopsis "User-space union file system")
+    (description
+     "UnionFS-FUSE is a flexible union file system implementation in user
+space, using the FUSE library.  Mounting a union file system allows you to
+\"aggregate\" the contents of several directories into a single mount point.
+UnionFS-FUSE additionally supports copy-on-write.")
+    (license bsd-3)))
+
+(define-public unionfs-fuse/static
+  (package (inherit unionfs-fuse)
+    (synopsis "User-space union file system (statically linked)")
+    (name (string-append (package-name unionfs-fuse) "-static"))
+    (source (origin (inherit (package-source unionfs-fuse))
+              (modules '((guix build utils)))
+              (snippet
+               ;; Add -ldl to the libraries, because libfuse.a needs that.
+               '(substitute* "src/CMakeLists.txt"
+                  (("target_link_libraries(.*)\\)" _ libs)
+                   (string-append "target_link_libraries"
+                                  libs " dl)"))))))
+    (arguments
+     '(#:tests? #f
+       #:configure-flags '("-DCMAKE_EXE_LINKER_FLAGS=-static")))))

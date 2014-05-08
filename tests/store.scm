@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -28,10 +28,12 @@
   #:use-module (gnu packages)
   #:use-module (gnu packages bootstrap)
   #:use-module (ice-9 match)
+  #:use-module (rnrs bytevectors)
   #:use-module (rnrs io ports)
   #:use-module (web uri)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-11)
+  #:use-module (srfi srfi-26)
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-64))
 
@@ -85,7 +87,44 @@
               (%store-prefix)
               "/283gqy39v3g9dxjy26rynl0zls82fmcg-guile-2.0.7/bin/guile")))))
 
-(test-skip (if %store 0 10))
+(test-skip (if %store 0 13))
+
+(test-assert "valid-path? live"
+  (let ((p (add-text-to-store %store "hello" "hello, world")))
+    (valid-path? %store p)))
+
+(test-assert "valid-path? false"
+  (not (valid-path? %store
+                    (string-append (%store-prefix) "/"
+                                   (make-string 32 #\e) "-foobar"))))
+
+(test-assert "valid-path? error"
+  (with-store s
+    (guard (c ((nix-protocol-error? c) #t))
+      (valid-path? s "foo")
+      #f)))
+
+(test-assert "valid-path? recovery"
+  ;; Prior to Nix commit 51800e0 (18 Mar. 2014), the daemon would immediately
+  ;; close the connection after receiving a 'valid-path?' RPC with a non-store
+  ;; file name.  See
+  ;; <http://article.gmane.org/gmane.linux.distributions.nixos/12411> for
+  ;; details.
+  (with-store s
+    (let-syntax ((true-if-error (syntax-rules ()
+                                  ((_ exp)
+                                   (guard (c ((nix-protocol-error? c) #t))
+                                     exp #f)))))
+      (and (true-if-error (valid-path? s "foo"))
+           (true-if-error (valid-path? s "bar"))
+           (true-if-error (valid-path? s "baz"))
+           (true-if-error (valid-path? s "chbouib"))
+           (valid-path? s (add-text-to-store s "valid" "yeah"))))))
+
+(test-assert "hash-part->path"
+  (let ((p (add-text-to-store %store "hello" "hello, world")))
+    (equal? (hash-part->path %store (store-path-hash-part p))
+            p)))
 
 (test-assert "dead-paths"
   (let ((p (add-text-to-store %store "random-text" (random-text))))
@@ -159,6 +198,47 @@
                  (list o))
          (equal? (valid-derivers %store o)
                  (list (derivation-file-name d))))))
+
+(test-assert "topologically-sorted, one item"
+  (let* ((a (add-text-to-store %store "a" "a"))
+         (b (add-text-to-store %store "b" "b" (list a)))
+         (c (add-text-to-store %store "c" "c" (list b)))
+         (d (add-text-to-store %store "d" "d" (list c)))
+         (s (topologically-sorted %store (list d))))
+    (equal? s (list a b c d))))
+
+(test-assert "topologically-sorted, several items"
+  (let* ((a  (add-text-to-store %store "a" "a"))
+         (b  (add-text-to-store %store "b" "b" (list a)))
+         (c  (add-text-to-store %store "c" "c" (list b)))
+         (d  (add-text-to-store %store "d" "d" (list c)))
+         (s1 (topologically-sorted %store (list d a c b)))
+         (s2 (topologically-sorted %store (list b d c a b d))))
+    (equal? s1 s2 (list a b c d))))
+
+(test-assert "topologically-sorted, more difficult"
+  (let* ((a  (add-text-to-store %store "a" "a"))
+         (b  (add-text-to-store %store "b" "b" (list a)))
+         (c  (add-text-to-store %store "c" "c" (list b)))
+         (d  (add-text-to-store %store "d" "d" (list c)))
+         (w  (add-text-to-store %store "w" "w"))
+         (x  (add-text-to-store %store "x" "x" (list w)))
+         (y  (add-text-to-store %store "y" "y" (list x d)))
+         (s1 (topologically-sorted %store (list y)))
+         (s2 (topologically-sorted %store (list c y)))
+         (s3 (topologically-sorted %store (cons y (references %store y)))))
+    ;; The order in which 'references' returns the references of Y is
+    ;; unspecified, so accommodate.
+    (let* ((x-then-d? (equal? (references %store y) (list x d))))
+      (and (equal? s1
+                   (if x-then-d?
+                       (list w x a b c d y)
+                       (list a b c d w x y)))
+           (equal? s2
+                   (if x-then-d?
+                       (list a b c w x d y)
+                       (list a b c d w x y)))
+           (lset= string=? s1 s3)))))
 
 (test-assert "log-file, derivation"
   (let* ((b (add-text-to-store %store "build" "echo $foo > $out" '()))
@@ -294,6 +374,64 @@ Deriver: ~a~%"
          (build-derivations s (list d))
          (equal? c (call-with-input-file o get-string-all)))))
 
+(test-assert "substitute, corrupt output hash"
+  ;; Tweak the substituter into installing a substitute whose hash doesn't
+  ;; match the one announced in the narinfo.  The daemon must notice this and
+  ;; raise an error.
+  (let* ((s   (open-connection))
+         (c   "hello, world")                     ; contents of the output
+         (d   (build-expression->derivation
+               s "corrupt-substitute"
+               `(mkdir %output)
+               #:guile-for-build
+               (package-derivation s %bootstrap-guile (%current-system))))
+         (o   (derivation->output-path d))
+         (dir (and=> (getenv "GUIX_BINARY_SUBSTITUTE_URL")
+                     (compose uri-path string->uri))))
+    ;; Create fake substituter data, to be read by `substitute-binary'.
+    (call-with-output-file (string-append dir "/nix-cache-info")
+      (lambda (p)
+        (format p "StoreDir: ~a\nWantMassQuery: 0\n"
+                (%store-prefix))))
+    (call-with-output-file (string-append dir "/example.out")
+      (lambda (p)
+        (display "The contents here do not match C." p)))
+    (call-with-output-file (string-append dir "/example.nar")
+      (lambda (p)
+        (write-file (string-append dir "/example.out") p)))
+    (call-with-output-file (string-append dir "/" (store-path-hash-part o)
+                                          ".narinfo")
+      (lambda (p)
+        (format p "StorePath: ~a
+URL: ~a
+Compression: none
+NarSize: 1234
+NarHash: sha256:~a
+References: 
+System: ~a
+Deriver: ~a~%"
+                o                                   ; StorePath
+                "example.nar"                       ; relative URL
+                (bytevector->nix-base32-string
+                 (sha256 (string->utf8 c)))
+                (%current-system)                   ; System
+                (basename
+                 (derivation-file-name d)))))       ; Deriver
+
+    ;; Make sure we use `substitute-binary'.
+    (set-build-options s
+                       #:use-substitutes? #t
+                       #:fallback? #f)
+    (and (has-substitutes? s o)
+         (guard (c ((nix-protocol-error? c)
+                    ;; XXX: the daemon writes "hash mismatch in downloaded
+                    ;; path", but the actual error returned to the client
+                    ;; doesn't mention that.
+                    (pk 'corrupt c)
+                    (not (zero? (nix-protocol-error-status c)))))
+           (build-derivations s (list d))
+           #f))))
+
 (test-assert "substitute --fallback"
   (let* ((s   (open-connection))
          (t   (random-text))                      ; contents of the output
@@ -343,6 +481,91 @@ Deriver: ~a~%"
            ;; Should fail.
            (build-derivations s (list d))
            #f))))
+
+(test-assert "export/import several paths"
+  (let* ((texts (unfold (cut >= <> 10)
+                        (lambda _ (random-text))
+                        1+
+                        0))
+         (files (map (cut add-text-to-store %store "text" <>) texts))
+         (dump  (call-with-bytevector-output-port
+                 (cut export-paths %store files <>))))
+    (delete-paths %store files)
+    (and (every (negate file-exists?) files)
+         (let* ((source   (open-bytevector-input-port dump))
+                (imported (import-paths %store source)))
+           (and (equal? imported files)
+                (every file-exists? files)
+                (equal? texts
+                        (map (lambda (file)
+                               (call-with-input-file file
+                                 get-string-all))
+                             files)))))))
+
+(test-assert "export/import paths, ensure topological order"
+  (let* ((file0 (add-text-to-store %store "baz" (random-text)))
+         (file1 (add-text-to-store %store "foo" (random-text)
+                                   (list file0)))
+         (file2 (add-text-to-store %store "bar" (random-text)
+                                   (list file1)))
+         (files (list file1 file2))
+         (dump1 (call-with-bytevector-output-port
+                 (cute export-paths %store (list file1 file2) <>)))
+         (dump2 (call-with-bytevector-output-port
+                 (cute export-paths %store (list file2 file1) <>))))
+    (delete-paths %store files)
+    (and (every (negate file-exists?) files)
+         (bytevector=? dump1 dump2)
+         (let* ((source   (open-bytevector-input-port dump1))
+                (imported (import-paths %store source)))
+           ;; DUMP1 should contain exactly FILE1 and FILE2, not FILE0.
+           (and (equal? imported (list file1 file2))
+                (every file-exists? files)
+                (equal? (list file0) (references %store file1))
+                (equal? (list file1) (references %store file2)))))))
+
+(test-assert "import corrupt path"
+  (let* ((text (random-text))
+         (file (add-text-to-store %store "text" text))
+         (dump (call-with-bytevector-output-port
+                (cut export-paths %store (list file) <>))))
+    (delete-paths %store (list file))
+
+    ;; Flip a bit in the stream's payload.
+    (let* ((index (quotient (bytevector-length dump) 4))
+           (byte  (bytevector-u8-ref dump index)))
+      (bytevector-u8-set! dump index (logxor #xff byte)))
+
+    (and (not (file-exists? file))
+         (guard (c ((nix-protocol-error? c)
+                    (pk 'c c)
+                    (and (not (zero? (nix-protocol-error-status c)))
+                         (string-contains (nix-protocol-error-message c)
+                                          "corrupt"))))
+           (let* ((source   (open-bytevector-input-port dump))
+                  (imported (import-paths %store source)))
+             (pk 'corrupt-imported imported)
+             #f)))))
+
+(test-assert "register-path"
+  (let ((file (string-append (%store-prefix) "/" (make-string 32 #\f)
+                             "-fake")))
+    (when (valid-path? %store file)
+      (delete-paths %store (list file)))
+    (false-if-exception (delete-file file))
+
+    (let ((ref (add-text-to-store %store "ref-of-fake" (random-text)))
+          (drv (string-append file ".drv")))
+      (call-with-output-file file
+        (cut display "This is a fake store item.\n" <>))
+      (register-path file
+                     #:references (list ref)
+                     #:deriver drv)
+
+      (and (valid-path? %store file)
+           (equal? (references %store file) (list ref))
+           (null? (valid-derivers %store file))
+           (null? (referrers %store file))))))
 
 (test-end "store")
 

@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -28,6 +28,7 @@
   #:use-module (gnu packages bootstrap)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-64)
+  #:use-module (rnrs io ports)
   #:use-module (ice-9 match))
 
 ;; Exercise the (guix build union) module.
@@ -43,46 +44,50 @@
 
 (test-begin "union")
 
-(test-equal "tree-union, empty"
-  '()
-  (tree-union '()))
+(test-assert "union-build with symlink to directory"
+  ;; http://bugs.gnu.org/17083
+  ;; Here both ONE and TWO provide an element called 'foo', but in ONE it's a
+  ;; directory whereas in TWO it's a symlink to a directory.
+  (let* ((one     (build-expression->derivation
+                   %store "one"
+                   '(begin
+                      (use-modules (guix build utils) (srfi srfi-26))
+                      (let ((foo (string-append %output "/foo")))
+                        (mkdir-p foo)
+                        (call-with-output-file (string-append foo "/one")
+                          (cut display "one" <>))))
+                   #:modules '((guix build utils))))
+         (two     (build-expression->derivation
+                   %store "two"
+                   '(begin
+                      (use-modules (guix build utils) (srfi srfi-26))
+                      (let ((foo (string-append %output "/foo"))
+                            (bar (string-append %output "/bar")))
+                        (mkdir-p bar)
+                        (call-with-output-file (string-append bar "/two")
+                          (cut display "two" <>))
+                        (symlink "bar" foo)))
+                   #:modules '((guix build utils))))
+         (builder '(begin
+                     (use-modules (guix build union))
 
-(test-equal "tree-union, leaves only"
-  '(a b c d)
-  (tree-union '(a b c d)))
-
-(test-equal "tree-union, simple"
-  '((bin ls touch make awk gawk))
-  (tree-union '((bin ls touch)
-                (bin make)
-                (bin awk gawk))))
-
-(test-equal "tree-union, several levels"
-  '((share (doc (make README) (coreutils README)))
-    (bin ls touch make))
-  (tree-union '((bin ls touch)
-                (share (doc (coreutils README)))
-                (bin make)
-                (share (doc (make README))))))
-
-(test-equal "delete-duplicate-leaves, default"
-  '(bin make touch ls)
-  (delete-duplicate-leaves '(bin ls make touch ls)))
-
-(test-equal "delete-duplicate-leaves, file names"
-  '("doc" ("info"
-           "/binutils/ld.info"
-           "/gcc/gcc.info"
-           "/binutils/standards.info"))
-  (let ((leaf=? (lambda (a b)
-                  (string=? (basename a) (basename b)))))
-    (delete-duplicate-leaves '("doc"
-                               ("info"
-                                "/binutils/ld.info"
-                                "/binutils/standards.info"
-                                "/gcc/gcc.info"
-                                "/gcc/standards.info"))
-                             leaf=?)))
+                     (union-build (assoc-ref %outputs "out")
+                                  (list (assoc-ref %build-inputs "one")
+                                        (assoc-ref %build-inputs "two")))))
+         (drv
+          (build-expression->derivation %store "union-collision-symlink"
+                                        builder
+                                        #:inputs `(("one" ,one) ("two" ,two))
+                                        #:modules '((guix build union)))))
+    (and (build-derivations %store (list drv))
+         (with-directory-excursion (pk (derivation->output-path drv))
+           (and (string=? "one"
+                          (call-with-input-file "foo/one" get-string-all))
+                (string=? "two"
+                          (call-with-input-file "foo/two" get-string-all))
+                (string=? "two"
+                          (call-with-input-file "bar/two" get-string-all))
+                (not (file-exists? "bar/one")))))))
 
 (test-skip (if (and %store
                     (false-if-exception

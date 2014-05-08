@@ -1,5 +1,5 @@
 /* GNU Guix --- Functional package management for GNU
-   Copyright (C) 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+   Copyright (C) 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 
    This file is part of GNU Guix.
 
@@ -30,6 +30,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <strings.h>
 #include <exception>
 
 /* Variables used by `nix-daemon.cc'.  */
@@ -67,6 +68,9 @@ builds derivations on behalf of its clients.";
 #define GUIX_OPT_CHROOT_DIR 10
 #define GUIX_OPT_LISTEN 11
 #define GUIX_OPT_NO_SUBSTITUTES 12
+#define GUIX_OPT_NO_BUILD_HOOK 13
+#define GUIX_OPT_GC_KEEP_OUTPUTS 14
+#define GUIX_OPT_GC_KEEP_DERIVATIONS 15
 
 static const struct argp_option options[] =
   {
@@ -94,6 +98,8 @@ static const struct argp_option options[] =
       "Perform builds as a user of GROUP" },
     { "no-substitutes", GUIX_OPT_NO_SUBSTITUTES, 0, 0,
       "Do not use substitutes" },
+    { "no-build-hook", GUIX_OPT_NO_BUILD_HOOK, 0, 0,
+      "Do not use the 'build hook'" },
     { "cache-failures", GUIX_OPT_CACHE_FAILURES, 0, 0,
       "Cache build failures" },
     { "lose-logs", GUIX_OPT_LOSE_LOGS, 0, 0,
@@ -108,12 +114,36 @@ static const struct argp_option options[] =
       " (this option has no effect in this configuration)"
 #endif
     },
+    { "gc-keep-outputs", GUIX_OPT_GC_KEEP_OUTPUTS,
+      "yes/no", OPTION_ARG_OPTIONAL,
+      "Tell whether the GC must keep outputs of live derivations" },
+    { "gc-keep-derivations", GUIX_OPT_GC_KEEP_DERIVATIONS,
+      "yes/no", OPTION_ARG_OPTIONAL,
+      "Tell whether the GC must keep derivations corresponding \
+to live outputs" },
+
     { "listen", GUIX_OPT_LISTEN, "SOCKET", 0,
       "Listen for connections on SOCKET" },
     { "debug", GUIX_OPT_DEBUG, 0, 0,
       "Produce debugging output" },
     { 0, 0, 0, 0, 0 }
   };
+
+
+/* Convert ARG to a Boolean value, or throw an error if it does not denote a
+   Boolean.  */
+static bool
+string_to_bool (const char *arg, bool dflt = true)
+{
+  if (arg == NULL)
+    return dflt;
+  else if (strcasecmp (arg, "yes") == 0)
+    return true;
+  else if (strcasecmp (arg, "no") == 0)
+    return false;
+  else
+    throw nix::Error (format ("'%1%': invalid Boolean value") % arg);
+}
 
 /* Parse a single option. */
 static error_t
@@ -157,16 +187,25 @@ parse_opt (int key, char *arg, struct argp_state *state)
 	}
       break;
     case GUIX_OPT_NO_SUBSTITUTES:
-      settings.useSubstitutes = false;
+      settings.set ("build-use-substitutes", "false");
+      break;
+    case GUIX_OPT_NO_BUILD_HOOK:
+      settings.useBuildHook = false;
       break;
     case GUIX_OPT_DEBUG:
       verbosity = lvlDebug;
       break;
+    case GUIX_OPT_GC_KEEP_OUTPUTS:
+      settings.gcKeepOutputs = string_to_bool (arg);
+      break;
+    case GUIX_OPT_GC_KEEP_DERIVATIONS:
+      settings.gcKeepDerivations = string_to_bool (arg);
+      break;
     case 'c':
-      settings.buildCores = atoi (arg);
+      settings.set ("build-cores", arg);
       break;
     case 'M':
-      settings.maxBuildJobs = atoi (arg);
+      settings.set ("build-max-jobs", arg);
       break;
     case GUIX_OPT_SYSTEM:
       settings.thisSystem = arg;
@@ -195,6 +234,10 @@ main (int argc, char *argv[])
       exit (EXIT_FAILURE);
     }
 
+  /* Tell Libgcrypt that initialization has completed, as per the Libgcrypt
+     1.6.0 manual (although this does not appear to be strictly needed.)  */
+  gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
+
   /* Set the umask so that the daemon does not end up creating group-writable
      files, which would lead to "suspicious ownership or permission" errors.
      See <http://lists.gnu.org/archive/html/bug-guix/2013-07/msg00033.html>.  */
@@ -212,22 +255,54 @@ main (int argc, char *argv[])
     {
       settings.processEnvironment ();
 
+      /* Hackily help 'local-store.cc' find our 'guix-authenticate' program, which
+	 is known as 'OPENSSL_PATH' here.  */
+      std::string search_path (getenv ("PATH"));
+      search_path = settings.nixLibexecDir + ":" + search_path;
+      setenv ("PATH", search_path.c_str (), 1);
+
       /* Use our substituter by default.  */
       settings.substituters.clear ();
-      settings.useSubstitutes = true;
+      settings.set ("build-use-substitutes", "true");
+
+#ifdef HAVE_DAEMON_OFFLOAD_HOOK
+      /* Use our build hook for distributed builds by default.  */
+      settings.useBuildHook = true;
+      if (getenv ("NIX_BUILD_HOOK") == NULL)
+	{
+	  std::string build_hook;
+
+	  build_hook = settings.nixLibexecDir + "/guix/offload";
+	  setenv ("NIX_BUILD_HOOK", build_hook.c_str (), 1);
+	}
+#else
+      /* We are not installing any build hook, so disable it.  */
+      settings.useBuildHook = false;
+#endif
 
       argp_parse (&argp, argc, argv, 0, 0, 0);
+
+      /* Effect all the changes made via 'settings.set'.  */
+      settings.update ();
 
       if (settings.useSubstitutes)
 	{
 	  string subs = getEnv ("NIX_SUBSTITUTERS", "default");
 
 	  if (subs == "default")
-	    settings.substituters.push_back (settings.nixLibexecDir
-					     + "/guix/substitute-binary");
-	  else
-	    settings.substituters = tokenizeString<Strings> (subs, ":");
+	    {
+	      string subst =
+		settings.nixLibexecDir + "/guix/substitute-binary";
+	      setenv ("NIX_SUBSTITUTERS", subst.c_str (), 1);
+	    }
 	}
+      else
+	/* Clear the substituter list to make sure nothing ever gets
+	   substituted, regardless of the client's settings.  */
+	setenv ("NIX_SUBSTITUTERS", "", 1);
+
+      /* Effect the $NIX_SUBSTITUTERS change.  */
+      settings.update ();
 
       if (geteuid () == 0 && settings.buildUsersGroup.empty ())
 	fprintf (stderr, "warning: daemon is running as root, so "

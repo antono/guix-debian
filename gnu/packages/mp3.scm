@@ -23,12 +23,13 @@
   #:use-module (gnu packages autotools)
   #:use-module (gnu packages cdrom)
   #:use-module (gnu packages compression)
+  #:use-module (gnu packages gettext)
   #:use-module (gnu packages ghostscript)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages gtk)
-  #:use-module (gnu packages oggvorbis)
   #:use-module (gnu packages pcre)
   #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages xiph)
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix build-system gnu))
@@ -49,13 +50,11 @@
    (build-system gnu-build-system)
    (arguments
     `(#:phases
-       (alist-replace
-        'configure
-        (lambda* (#:key #:allow-other-keys #:rest args)
-         (let ((configure (assoc-ref %standard-phases 'configure)))
-           ;; remove option that is not supported by gcc any more
-           (substitute* "configure" ((" -fforce-mem") ""))
-           (apply configure args)))
+       (alist-cons-before
+        'configure 'remove-unsupported-gcc-flags
+        (lambda _
+          ;; remove option that is not supported by gcc any more
+          (substitute* "configure" ((" -fforce-mem") "")))
        %standard-phases)))
    (synopsis "libmad, an MPEG audio decoder")
    (description
@@ -104,20 +103,19 @@ versions of ID3v2")
    (build-system gnu-build-system)
    (arguments
     `(#:phases
-       (alist-replace
-        'configure
-        (lambda* (#:key #:allow-other-keys #:rest args)
-          (let ((configure (assoc-ref %standard-phases 'configure)))
-            (substitute* "configure"
-              (("iomanip.h") "")) ; drop check for unused header
-            ;; see http://www.linuxfromscratch.org/patches/downloads/id3lib/
-            (substitute* "include/id3/id3lib_strings.h"
-              (("include <string>") "include <cstring>\n#include <string>"))
-            (substitute* "include/id3/writers.h"
-              (("//\\#include <string.h>") "#include <cstring>"))
-            (substitute* "examples/test_io.cpp"
-              (("dami;") "dami;\nusing namespace std;"))
-            (apply configure args)))
+       (alist-cons-before
+        'configure 'apply-patches
+        ;; TODO: create a patch for origin instead?
+        (lambda _
+          (substitute* "configure"
+            (("iomanip.h") "")) ; drop check for unused header
+          ;; see http://www.linuxfromscratch.org/patches/downloads/id3lib/
+          (substitute* "include/id3/id3lib_strings.h"
+            (("include <string>") "include <cstring>\n#include <string>"))
+          (substitute* "include/id3/writers.h"
+            (("//\\#include <string.h>") "#include <cstring>"))
+          (substitute* "examples/test_io.cpp"
+            (("dami;") "dami;\nusing namespace std;")))
          %standard-phases)))
    (synopsis "a library for reading, writing, and manipulating ID3v1 and ID3v2 tags")
    (description
@@ -147,8 +145,9 @@ a highly stable and efficient implementation.")
              ("libogg" ,libogg)
              ("libtool" ,libtool)
              ("libvorbid" ,libvorbis)
-             ("pkg-config" ,pkg-config)
              ("pcre" ,pcre)))
+   (native-inputs
+     `(("pkg-config" ,pkg-config)))
    (synopsis "libmp3splt, a library for splitting mp3 and ogg vorbis files")
    (description
     "Mp3splt is a utility to split mp3 and ogg vorbis files selecting a begin
@@ -254,8 +253,9 @@ use with CD-recording software).")
    (inputs
     `(("glib" ,glib)
       ("gtk+" ,gtk+-2)
-      ("id3lib" ,id3lib)
-      ("pkg-config" ,pkg-config)))
+      ("id3lib" ,id3lib)))
+   (native-inputs
+    `(("pkg-config" ,pkg-config)))
    (synopsis "GTK program to rip and encode CD audio tracks")
    (description
     "RipperX is a GTK program to rip CD audio tracks and encode them to the
@@ -264,3 +264,65 @@ a few mouse clicks to convert an entire album. It supports CDDB lookups
 for album and track information.")
    (license license:gpl2)
    (home-page "http://sourceforge.net/projects/ripperx/")))
+
+(define-public libmpcdec
+  (package
+    (name "libmpcdec")
+    (version "1.2.6")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append
+                    "http://files.musepack.net/source/libmpcdec-"
+                    version ".tar.bz2"))
+              (sha256
+               (base32
+                "1a0jdyga1zfi4wgkg3905y6inghy3s4xfs5m4x7pal08m0llkmab"))))
+    (build-system gnu-build-system)
+    (synopsis "Decoding library for the Musepack audio format")
+    (description
+     "This library supports decoding of the Musepack (MPC) audio compression
+format.")
+    (license license:bsd-3)
+    (home-page "http://musepack.net")))
+
+(define-public mpc123
+  (package
+    (name "mpc123")
+    (version "0.2.4")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://sourceforge/mpc123/version%20"
+                                  version "/mpc123-" version ".tar.gz"))
+              (sha256
+               (base32
+                "0sf4pns0245009z6mbxpx7kqy4kwl69bc95wz9v23wgappsvxgy1"))
+              (patches (list (search-patch "mpc123-initialize-ao.patch")))))
+    (build-system gnu-build-system)
+    (arguments
+     '(#:phases (alist-replace
+                 'configure
+                 (lambda _
+                   (substitute* "Makefile"
+                     (("CC[[:blank:]]*:=.*")
+                      "CC := gcc\n")))
+                 (alist-replace
+                  'install
+                  (lambda* (#:key outputs #:allow-other-keys)
+                    (let* ((out (assoc-ref outputs "out"))
+                           (bin (string-append out "/bin")))
+                      (mkdir-p bin)
+                      (copy-file "mpc123" (string-append bin "/mpc123"))))
+                  %standard-phases))
+       #:tests? #f))
+
+    (native-inputs
+     `(("gettext" ,gnu-gettext)))
+    (inputs
+     `(("libao" ,ao)
+       ("libmpcdec" ,libmpcdec)))
+    (home-page "http://mpc123.sourceforge.net/")
+    (synopsis "Audio player for Musepack-formatted files")
+    (description
+     "mpc123 is a command-line player for files in the Musepack audio
+compression format (.mpc files.)")
+    (license license:gpl2+)))

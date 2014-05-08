@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.68)
-AC_INIT([GNU Guix], [0.5], [bug-guix@gnu.org], [guix],
+AC_INIT([GNU Guix], [0.6], [bug-guix@gnu.org], [guix],
   [http://www.gnu.org/software/guix/])
 AC_CONFIG_AUX_DIR([build-aux])
 
@@ -26,20 +26,29 @@ GUIX_ASSERT_SUPPORTED_SYSTEM
 
 AC_ARG_WITH(store-dir,
   AC_HELP_STRING([--with-store-dir=PATH],
-    [path of the store (defaults to /nix/store)]),
+    [file name of the store (defaults to /gnu/store)]),
   [storedir="$withval"],
-  [storedir="/nix/store"])
+  [storedir="/gnu/store"])
 AC_SUBST(storedir)
+
+dnl Better be verbose.
+AC_MSG_CHECKING([for the store directory])
+AC_MSG_RESULT([$storedir])
 
 AC_ARG_ENABLE([daemon],
   [AS_HELP_STRING([--disable-daemon], [build the Nix daemon (C++)])],
   [guix_build_daemon="$enableval"],
   [guix_build_daemon="yes"])
 
-# Prepare a version of $localstatedir that does not contain references
+# Prepare a version of $localstatedir & co. that does not contain references
 # to shell variables.
-guix_localstatedir="`eval echo $localstatedir | sed -e "s|NONE|/usr/local|g"`"
+guix_prefix="`eval echo $prefix | sed -e"s|NONE|/usr/local|g"`"
+guix_localstatedir="`eval echo $localstatedir | sed -e "s|NONE|$guix_prefix|g"`"
+guix_sysconfdir="`eval echo $sysconfdir | sed -e "s|NONE|$guix_prefix|g"`"
+guix_sbindir="`eval echo $sbindir | sed -e "s|NONE|$guix_prefix|g"`"
 AC_SUBST([guix_localstatedir])
+AC_SUBST([guix_sysconfdir])
+AC_SUBST([guix_sbindir])
 
 dnl We require the pkg.m4 set of macros from pkg-config.
 dnl Make sure it's available.
@@ -60,7 +69,8 @@ GUIX_CHECK_SRFI_37
 AM_CONDITIONAL([INSTALL_SRFI_37], [test "x$ac_cv_guix_srfi_37_broken" = xyes])
 
 AC_ARG_WITH([nix-prefix],
-  [AS_HELP_STRING([--with-nix-prefix=DIR], [search for Nix in DIR])],
+  [AS_HELP_STRING([--with-nix-prefix=DIR],
+    [search for Nix in DIR (for testing purposes and '--disable-daemon' builds)])],
   [case "$withval" in
     yes|no) ;;
     *)
@@ -84,7 +94,8 @@ if test "x$NIX_INSTANTIATE" = "x"; then
 fi
 
 AC_ARG_WITH([nixpkgs],
-  [AS_HELP_STRING([--with-nixpkgs=DIR], [search for Nixpkgs in DIR])],
+  [AS_HELP_STRING([--with-nixpkgs=DIR],
+    [search for Nixpkgs in DIR (for testing purposes only)])],
   [case "$withval" in
     yes|no) AC_MSG_ERROR([Please use `--with-nixpkgs=DIR'.]);;
     *)      NIXPKGS="$withval";;

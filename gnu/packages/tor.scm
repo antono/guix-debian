@@ -1,5 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2014 Mark H Weaver <mhw@netris.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -31,14 +32,14 @@
 (define-public tor
   (package
     (name "tor")
-    (version "0.2.3.25")
+    (version "0.2.4.21")
     (source (origin
              (method url-fetch)
              (uri (string-append "https://www.torproject.org/dist/tor-"
                                  version ".tar.gz"))
              (sha256
               (base32
-               "183n667zgmp37brxl4qna1ciw6dz8d0ihd3fgv9i2gpk6q8nybdv"))))
+               "1kpijqapml7y4sl54qgyrzppxxhmy4xgk2y7wkqwjxn7q24g97d1"))))
     (build-system gnu-build-system)
     (inputs
      `(("zlib" ,zlib)

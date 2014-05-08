@@ -33,6 +33,8 @@
   #:use-module (gnu packages libjpeg)
   #:use-module (gnu packages libtiff)
   #:use-module (gnu packages libpng)
+  #:use-module (gnu packages giflib)
+  #:use-module (gnu packages linux)
   #:use-module ((gnu packages compression)
                 #:renamer (symbol-prefix-proc 'compression:))
   #:use-module (gnu packages xml)
@@ -54,8 +56,7 @@
     (arguments
      '(#:configure-flags
        (list (string-append "--with-crt-dir=" (assoc-ref %build-inputs "libc")
-                            "/lib")
-             "--with-gif=no")                     ; XXX: add libungif
+                            "/lib"))
        #:phases (alist-cons-before
                  'configure 'fix-/bin/pwd
                  (lambda _
@@ -65,9 +66,7 @@
                       "pwd")))
                  %standard-phases)))
     (inputs
-     `(("pkg-config" ,pkg-config)
-       ("gnutls" ,gnutls)
-       ("texinfo" ,texinfo)
+     `(("gnutls" ,gnutls)
        ("ncurses" ,ncurses)
 
        ;; TODO: Add the optional dependencies.
@@ -75,7 +74,7 @@
        ("gtk+" ,gtk+-2)
        ("libXft" ,libxft)
        ("libtiff" ,libtiff)
-       ;; ("libungif" ,libungif)
+       ("giflib" ,giflib)
        ("libjpeg" ,libjpeg-8)
 
        ;; When looking for libpng `configure' links with `-lpng -lz', so we
@@ -85,7 +84,13 @@
 
        ("libXpm" ,libxpm)
        ("libxml2" ,libxml2)
+       ("libice" ,libice)
+       ("libsm" ,libsm)
+       ("alsa-lib" ,alsa-lib)
        ("dbus" ,dbus)))
+    (native-inputs
+     `(("pkg-config" ,pkg-config)
+       ("texinfo" ,texinfo)))
     (home-page "http://www.gnu.org/software/emacs/")
     (synopsis "The extensible, customizable, self-documenting text editor")
     (description

@@ -27,15 +27,16 @@
 (define-public openssl
   (package
    (name "openssl")
-   (version "1.0.1c")
+   (version "1.0.1g")
    (source (origin
             (method url-fetch)
             (uri (string-append "ftp://ftp.openssl.org/source/openssl-" version
                                 ".tar.gz"))
-            (sha256 (base32
-                     "1gjy6a7d8nszi9wq8jdzx3cffn0nss23h3cw2ywlw4cb9v6v77ia"))))
+            (sha256
+             (base32
+              "0a70qdqccg16nw4bbawa6pjvzn05vfp5wkwg6jl0grch7f683jsk"))))
    (build-system gnu-build-system)
-   (inputs `(("perl" ,perl)))
+   (native-inputs `(("perl" ,perl)))
    (arguments
     '(#:parallel-build? #f
       #:parallel-tests? #f
@@ -52,8 +53,8 @@
                      (string-append "--prefix=" out)))))
        (alist-cons-before
         'patch-source-shebangs 'patch-tests
-        (lambda* (#:key inputs #:allow-other-keys)
-          (let ((bash (assoc-ref inputs "bash")))
+        (lambda* (#:key inputs native-inputs #:allow-other-keys)
+          (let ((bash (assoc-ref (or native-inputs inputs) "bash")))
             (substitute* (find-files "test" ".*")
               (("/bin/sh")
                (string-append bash "/bin/bash"))

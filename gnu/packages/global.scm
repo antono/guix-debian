@@ -28,21 +28,35 @@
 (define-public global                             ; a global variable
   (package
     (name "global")
-    (version "6.2.9")
+    (version "6.2.12")
     (source (origin
              (method url-fetch)
              (uri (string-append "mirror://gnu/global/global-"
                                  version ".tar.gz"))
              (sha256
               (base32
-               "00y38kp0zbpjl9c9phldy7j2ihqc54qn4cdgk0azbjdsv75k3n6q"))))
+               "05jkhya1cs6yqhkf8nw5x56adkxxrqyga7sq7hx44dbf7alczwfa"))))
     (build-system gnu-build-system)
     (inputs `(("ncurses" ,ncurses)
               ("libtool" ,libtool)))
     (arguments
      `(#:configure-flags
        (list (string-append "--with-ncurses="
-                            (assoc-ref %build-inputs "ncurses")))))
+                            (assoc-ref %build-inputs "ncurses")))
+
+       #:phases (alist-cons-after
+                 'install 'post-install
+                 (lambda* (#:key outputs #:allow-other-keys)
+                   ;; Install the Emacs Lisp file in the right place.
+                   (let* ((out  (assoc-ref outputs "out"))
+                          (data (string-append out "/share/gtags"))
+                          (lisp (string-append out "/share/emacs/site-lisp")))
+                     (mkdir-p lisp)
+                     (copy-file (string-append data "/gtags.el")
+                                (string-append lisp "/gtags.el"))
+                     (delete-file (string-append data "/gtags.el"))
+                     #t))
+                 %standard-phases)))
     (home-page "http://www.gnu.org/software/global/")
     (synopsis "Cross-environment source code tag system")
     (description

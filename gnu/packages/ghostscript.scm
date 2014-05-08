@@ -134,34 +134,27 @@ printing, and psresize, for adjusting page sizes.")
              ("libpng" ,libpng)
              ("libpaper" ,libpaper)
              ("libtiff" ,libtiff)
-             ("perl" ,perl)
-             ("pkg-config" ,pkg-config) ; needed to find libtiff
-             ("python" ,python-wrapper)
-             ("tcl" ,tcl)
              ("zlib" ,zlib)))
+   (native-inputs
+      `(("perl" ,perl)
+        ("pkg-config" ,pkg-config) ; needed to find libtiff
+        ("python" ,python-wrapper)
+        ("tcl" ,tcl)))
    (arguments
     `(#:phases
-      (alist-replace
-       'configure
-       (lambda* (#:key #:allow-other-keys #:rest args)
-        (let ((configure (assoc-ref %standard-phases 'configure)))
-          (apply configure args)
-          (substitute* "base/all-arch.mak"
-            (("/bin/sh") (which "bash")))
-          (substitute* "base/unixhead.mak"
-            (("/bin/sh") (which "bash")))))
-      (alist-replace
-       'build
-       (lambda* (#:key #:allow-other-keys #:rest args)
-        (let ((build (assoc-ref %standard-phases 'build)))
-          (apply build args)
-          (system* "make" "so")))
-      (alist-replace
-       'install
-       (lambda* (#:key #:allow-other-keys #:rest args)
-        (let ((install (assoc-ref %standard-phases 'install)))
-          (apply install args)
-          (system* "make" "install-so")))
+      (alist-cons-after
+       'configure 'patch-config-files
+       (lambda _
+         (substitute* "base/all-arch.mak"
+           (("/bin/sh") (which "bash")))
+         (substitute* "base/unixhead.mak"
+           (("/bin/sh") (which "bash"))))
+      (alist-cons-after
+       'build 'build-so
+       (lambda _ (system* "make" "so"))
+      (alist-cons-after
+       'install 'install-so
+       (lambda _ (system* "make" "install-so"))
       %standard-phases)))))
    (synopsis "PostScript and PDF interpreter")
    (description
@@ -225,8 +218,8 @@ Ghostscript. It currently includes the 35 standard PostScript fonts.")
             (sha256 (base32
                      "1v63lqc6bhhxwkpa43qmz8phqs8ci4dhzizyy16d3vkb20m846z8"))))
    (build-system gnu-build-system)
-   (inputs `(("ghostscript" ,ghostscript)
-             ("pkg-config" ,pkg-config)))
+   (inputs `(("ghostscript" ,ghostscript)))
+   (native-inputs `(("pkg-config" ,pkg-config)))
    (synopsis "postscript rendering library")
    (description
     "libspectre is a small library for rendering Postscript documents.

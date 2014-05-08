@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -20,20 +20,20 @@
   #:use-module (guix licenses)
   #:use-module (guix packages)
   #:use-module (guix download)
-  #:use-module (guix build-system gnu))
+  #:use-module (guix build-system gnu)
+  #:use-module (gnu packages pkg-config))
 
-(define-public libgc
+(define-public libgc-7.2
   (package
    (name "libgc")
-   (version "7.2d")
+   (version "7.2e")
    (source (origin
             (method url-fetch)
-            (uri (string-append
-                  "http://www.hpl.hp.com/personal/Hans_Boehm/gc/gc_source/gc-"
-                  version ".tar.gz"))
+            (uri (string-append "http://www.hboehm.info/gc/gc_source/gc-"
+                                version ".tar.gz"))
             (sha256
              (base32
-              "0phwa5driahnpn79zqff14w9yc8sn3599cxz91m78hqdcpl0mznr"))))
+              "0jxgr71rhk58dzc1ihqs51vldh2qs1m154bn41qh6q1dm145nc89"))))
    (build-system gnu-build-system)
    (arguments
     ;; Make it so that we don't rely on /proc.  This is especially useful in
@@ -57,8 +57,49 @@ simple collector interface.
 
 Alternatively, the garbage collector may be used as a leak detector for
 C or C++ programs, though that is not its primary goal.")
-   (home-page "http://www.hpl.hp.com/personal/Hans_Boehm/gc/")
+   (home-page "http://www.hboehm.info/gc/")
 
-   ;; permissive X11-style license:
-   ;; http://www.hpl.hp.com/personal/Hans_Boehm/gc/license.txt
-   (license x11)))
+   (license (x11-style (string-append home-page "license.txt")))))
+
+(define-public libatomic-ops
+  (package
+    (name "libatomic-ops")
+    (version "7.4.0")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append
+                    "http://www.hboehm.info/gc/gc_source/libatomic_ops-"
+                    version ".tar.gz"))
+              (sha256
+               (base32
+                "0njv3n63zw6v45k68z6dz14g2hpk5p230ncwmdfkglsljb1cqx98"))))
+    (build-system gnu-build-system)
+    (outputs '("out" "debug"))
+    (synopsis "Accessing hardware atomic memory update operations")
+    (description
+     "This C library provides semi-portable access to hardware-provided atomic
+memory update operations on a number architectures.  These might allow you to
+write code that does more interesting things in signal handlers, write
+lock-free code, experiment with thread programming paradigms, etc.")
+    (home-page "https://github.com/ivmai/libatomic_ops/")
+
+    ;; Some source files are X11-style, others are GPLv2+.
+    (license gpl2+)))
+
+(define-public libgc
+  (package (inherit libgc-7.2)
+    (version "7.4.0")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "http://www.hboehm.info/gc/gc_source/gc-"
+                                  version ".tar.gz"))
+              (sha256
+               (base32
+                "10z2nph62ilab063wygg2lv0jxlsbcf2az9w1lx01jzqj5lzry31"))))
+
+    ;; New dependencies.
+    (native-inputs `(("pkg-config" ,pkg-config)))
+    (inputs `(("libatomic-ops" ,libatomic-ops)))
+
+    ;; 'USE_LIBC_PRIVATES' is now the default.
+    (arguments '())))

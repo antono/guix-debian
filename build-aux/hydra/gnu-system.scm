@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -36,11 +36,16 @@
                      dir)
              (set! %load-path (cons dir %load-path))))))
 
-(use-modules (guix store)
+(use-modules (guix config)
+             (guix store)
              (guix packages)
              (guix derivations)
+             (guix monads)
+             ((guix licenses) #:select (gpl3+))
              ((guix utils) #:select (%current-system))
+             ((guix scripts system) #:select (read-operating-system))
              (gnu packages)
+             (gnu packages gcc)
              (gnu packages base)
              (gnu packages gawk)
              (gnu packages guile)
@@ -48,6 +53,8 @@
              (gnu packages compression)
              (gnu packages multiprecision)
              (gnu packages make-bootstrap)
+             (gnu system)
+             (gnu system vm)
              (srfi srfi-1)
              (srfi srfi-26)
              (ice-9 match))
@@ -66,7 +73,11 @@
     (long-description . ,(package-description package))
     (license . ,(package-license package))
     (home-page . ,(package-home-page package))
-    (maintainers . ("bug-guix@gnu.org"))))
+    (maintainers . ("bug-guix@gnu.org"))
+
+    ;; Work around versions of 'hydra-eval-guile-jobs' before Hydra commit
+    ;; 61448ca (27 Feb. 2014) which used a default timeout of 2h.
+    (timeout . 72000)))
 
 (define (package-job store job-name package system)
   "Return a job called JOB-NAME that builds PACKAGE on SYSTEM."
@@ -83,7 +94,11 @@ SYSTEM."
            (cut package-cross-derivation <> <> target <>))))
 
 (define %core-packages
-  (list gmp mpfr mpc coreutils findutils diffutils patch sed grep
+  ;; Note: Don't put the '-final' package variants because (1) that's
+  ;; implicit, and (2) they cannot be cross-built (due to the explicit input
+  ;; chain.)
+  (list gcc-4.8 gcc-4.7 glibc binutils
+        gmp mpfr mpc coreutils findutils diffutils patch sed grep
         gawk gnu-gettext hello guile-2.0 zlib gzip xz
         %bootstrap-binaries-tarball
         %binutils-bootstrap-tarball
@@ -99,18 +114,37 @@ SYSTEM."
   '("mips64el-linux-gnu"
     "mips64el-linux-gnuabi64"))
 
+(define (qemu-jobs store system)
+  "Return a list of jobs that build QEMU images for SYSTEM."
+  (define (->alist drv)
+    `((derivation . ,(derivation-file-name drv))
+      (description . "Stand-alone QEMU image of the GNU system")
+      (long-description . "This is a demo stand-alone QEMU image of the GNU
+system.")
+      (license . ,gpl3+)
+      (home-page . ,%guix-home-page-url)
+      (maintainers . ("bug-guix@gnu.org"))))
+
+  (define (->job name drv)
+    (let ((name (symbol-append name (string->symbol ".")
+                               (string->symbol system))))
+      `(,name . ,(cut ->alist drv))))
+
+  (if (string=? system "x86_64-linux")
+      (let* ((dir  (dirname (assoc-ref (current-source-location) 'filename)))
+             (file (string-append dir "/demo-os.scm"))
+             (os   (read-operating-system file)))
+        (if (operating-system? os)
+            (list (->job 'qemu-image
+                         (run-with-store store (system-qemu-image os))))
+            '()))
+      '()))
+
 (define (hydra-jobs store arguments)
   "Return Hydra jobs."
   (define systems
-    (match (filter-map (match-lambda
-                        (('system . value)
-                         value)
-                        (_ #f))
-                       arguments)
-      ((lst ..1)
-       lst)
-      (_
-       (list (%current-system)))))
+    ;; Systems we want to build for.
+    '("x86_64-linux" "i686-linux"))
 
   (define subset
     (match (assoc-ref arguments 'subset)
@@ -121,12 +155,19 @@ SYSTEM."
     (compose string->symbol package-full-name))
 
   (define (cross-jobs system)
+    (define (from-32-to-64? target)
+      ;; Return true if SYSTEM is 32-bit and TARGET is 64-bit.
+      ;; This hacks prevents known-to-fail cross-builds from i686-linux to
+      ;; mips64el-linux-gnuabi64.
+      (and (string-prefix? "i686-" system)
+           (string-suffix? "64" target)))
+
     (append-map (lambda (target)
                   (map (lambda (package)
                          (package-cross-job store (job-name package)
                                             package target system))
                        %packages-to-cross-build))
-                %cross-targets))
+                (remove from-32-to-64? %cross-targets)))
 
   ;; Return one job for each package, except bootstrap packages.
   (let ((base-packages (delete-duplicates
@@ -147,7 +188,8 @@ SYSTEM."
                                           (cons (package-job store (job-name package)
                                                              package system)
                                                 result)))
-                                    (cross-jobs system)))
+                                    (append (qemu-jobs store system)
+                                            (cross-jobs system))))
                     ((core)
                      ;; Build core packages only.
                      (append (map (lambda (package)

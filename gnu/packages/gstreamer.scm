@@ -43,16 +43,19 @@
        (base32
         "0c0irk85jd2cihm5pmf4zxhlpg08qpxjcqv1l9qn2n3h2gsaj2lf"))))
     (build-system gnu-build-system)
-    (inputs
+    (arguments
+     ;; XXX: Temporarily disable tests to work around 'gst/gstbus' test
+     ;; failure: <https://bugzilla.gnome.org/show_bug.cgi?id=724073>.
+     '(#:tests? #f))
+    (inputs `(("glib" ,glib)))
+    (native-inputs
      `(("bison" ,bison)
        ("flex" ,flex)
-       ("glib" ,glib)
        ("perl" ,perl)
        ("pkg-config" ,pkg-config)
        ("python-wrapper" ,python-wrapper)))
     (home-page "http://gstreamer.freedesktop.org/")
-    (synopsis
-     "Multimedia library")
+    (synopsis "Multimedia library")
     (description
      "GStreamer is a library for constructing graphs of media-handling
 components.  The applications it supports range from simple Ogg/Vorbis
@@ -82,10 +85,10 @@ This package provides the core library and elements.")
               (search-patch "gstreamer-0.10-silly-test.patch")))))
     (propagated-inputs
      `(("libxml2" ,libxml2)))
-    (inputs
+    (inputs `(("glib" ,glib)))
+    (native-inputs
      `(("bison" ,bison)
        ("flex" ,flex)
-       ("glib" ,glib)
        ("perl" ,perl)
        ("pkg-config" ,pkg-config)
        ("python" ,python-2)))))
@@ -106,9 +109,10 @@ This package provides the core library and elements.")
     ;; FIXME: Add more dependencies for further plugins.
     (inputs
      `(("glib" ,glib)
-       ("gstreamer" ,gstreamer)
-       ("pkg-config" ,pkg-config)
-       ("python-wrapper" ,python-wrapper)))
+       ("gstreamer" ,gstreamer)))
+    (native-inputs
+      `(("pkg-config" ,pkg-config)
+        ("python-wrapper" ,python-wrapper)))
     (arguments
      `(#:tests? #f))
       ;; All tests pass except for one:
@@ -147,6 +151,7 @@ This package provides an essential exemplary set of elements.")
         "0jp6hjlra98cnkal4n6bdmr577q8mcyp3c08s3a02c4hjhw5rr0z"))))
     (inputs
      `(("glib" ,glib)
-       ("gstreamer" ,gstreamer-0.10)
-       ("pkg-config" ,pkg-config)
+       ("gstreamer" ,gstreamer-0.10)))
+    (native-inputs
+      `(("pkg-config" ,pkg-config)
        ("python" ,python-2)))))

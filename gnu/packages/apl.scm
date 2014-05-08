@@ -28,14 +28,14 @@
 (define-public apl
   (package
     (name "apl")
-    (version "1.1")
+    (version "1.3")
     (source
      (origin
       (method url-fetch)
       (uri (string-append "mirror://gnu/apl/apl-" version ".tar.gz"))
       (sha256
        (base32
-        "1myinxa0m3y4fanpxflfakfk3m1s8641wdlbwbs0vg5yp10xm0m3"))))
+        "1pkwlm0nf5vb8sp9hf9wjmsrsyr4vdpd4kv5y3hzmsgf3wcf8y3i"))))
     (build-system gnu-build-system)
     (home-page "http://www.gnu.org/software/apl/")
     (inputs

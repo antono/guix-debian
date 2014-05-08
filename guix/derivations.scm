@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -47,6 +47,7 @@
             derivation-output-path
             derivation-output-hash-algo
             derivation-output-hash
+            derivation-output-recursive?
 
             <derivation-input>
             derivation-input?
@@ -91,11 +92,12 @@
   (file-name derivation-file-name))               ; the .drv file name
 
 (define-record-type <derivation-output>
-  (make-derivation-output path hash-algo hash)
+  (make-derivation-output path hash-algo hash recursive?)
   derivation-output?
   (path       derivation-output-path)             ; store path
   (hash-algo  derivation-output-hash-algo)        ; symbol | #f
-  (hash       derivation-output-hash))            ; bytevector | #f
+  (hash       derivation-output-hash)             ; bytevector | #f
+  (recursive? derivation-output-recursive?))      ; Boolean
 
 (define-record-type <derivation-input>
   (make-derivation-input path sub-derivations)
@@ -241,14 +243,19 @@ that second value is the empty list."
                   (match output
                     ((name path "" "")
                      (alist-cons name
-                                 (make-derivation-output path #f #f)
+                                 (make-derivation-output path #f #f #f)
                                  result))
                     ((name path hash-algo hash)
                      ;; fixed-output
-                     (let ((algo (string->symbol hash-algo))
-                           (hash (base16-string->bytevector hash)))
+                     (let* ((rec? (string-prefix? "r:" hash-algo))
+                            (algo (string->symbol
+                                   (if rec?
+                                       (string-drop hash-algo 2)
+                                       hash-algo)))
+                            (hash (base16-string->bytevector hash)))
                        (alist-cons name
-                                   (make-derivation-output path algo hash)
+                                   (make-derivation-output path algo
+                                                           hash rec?)
                                    result)))))
                 '()
                 x))
@@ -368,9 +375,12 @@ that form."
 
   (define (write-output output port)
     (match output
-     ((name . ($ <derivation-output> path hash-algo hash))
+     ((name . ($ <derivation-output> path hash-algo hash recursive?))
       (write-tuple (list name path
-                         (or (and=> hash-algo symbol->string) "")
+                         (if hash-algo
+                             (string-append (if recursive? "r:" "")
+                                            (symbol->string hash-algo))
+                             "")
                          (or (and=> hash bytevector->base16-string)
                              ""))
                    write
@@ -441,13 +451,13 @@ that form."
   ;; This procedure is called frequently, so memoize it.
   (memoize
    (lambda* (path #:optional (output "out"))
-     "Read the derivation from PATH (`/nix/store/xxx.drv'), and return the store
+     "Read the derivation from PATH (`/gnu/store/xxx.drv'), and return the store
 path of its output OUTPUT."
      (derivation->output-path (call-with-input-file path read-derivation)
                               output))))
 
 (define (derivation-path->output-paths path)
-  "Read the derivation from PATH (`/nix/store/xxx.drv'), and return the
+  "Read the derivation from PATH (`/gnu/store/xxx.drv'), and return the
 list of name/path pairs of its outputs."
   (derivation->output-paths (call-with-input-file path read-derivation)))
 
@@ -476,11 +486,14 @@ in SIZE bytes."
     "Return the hash of DRV, modulo its fixed-output inputs, as a bytevector."
     (match drv
       (($ <derivation> ((_ . ($ <derivation-output> path
-                                (? symbol? hash-algo) (? bytevector? hash)))))
+                                (? symbol? hash-algo) (? bytevector? hash)
+                                (? boolean? recursive?)))))
        ;; A fixed-output derivation.
        (sha256
         (string->utf8
-         (string-append "fixed:out:" (symbol->string hash-algo)
+         (string-append "fixed:out:"
+                        (if recursive? "r:" "")
+                        (symbol->string hash-algo)
                         ":" (bytevector->base16-string hash)
                         ":" path))))
       (($ <derivation> outputs inputs sources
@@ -527,20 +540,41 @@ the derivation called NAME with hash HASH."
                   name
                   (string-append name "-" output))))
 
+(define (fixed-output-path output hash-algo hash recursive? name)
+  "Return an output path for the fixed output OUTPUT defined by HASH of type
+HASH-ALGO, of the derivation NAME.  RECURSIVE? has the same meaning as for
+'add-to-store'."
+  (if (and recursive? (eq? hash-algo 'sha256))
+      (store-path "source" hash name)
+      (let ((tag (string-append "fixed:" output ":"
+                                (if recursive? "r:" "")
+                                (symbol->string hash-algo) ":"
+                                (bytevector->base16-string hash) ":")))
+        (store-path (string-append "output:" output)
+                    (sha256 (string->utf8 tag))
+                    name))))
+
 (define* (derivation store name builder args
                      #:key
                      (system (%current-system)) (env-vars '())
                      (inputs '()) (outputs '("out"))
-                     hash hash-algo hash-mode
-                     references-graphs)
+                     hash hash-algo recursive?
+                     references-graphs
+                     local-build?)
   "Build a derivation with the given arguments, and return the resulting
-<derivation> object.  When HASH, HASH-ALGO, and HASH-MODE are given, a
+<derivation> object.  When HASH and HASH-ALGO are given, a
 fixed-output derivation is created---i.e., one whose result is known in
-advance, such as a file download.
+advance, such as a file download.  If, in addition, RECURSIVE? is true, then
+that fixed output may be an executable file or a directory and HASH must be
+the hash of an archive containing this output.
 
 When REFERENCES-GRAPHS is true, it must be a list of file name/store path
 pairs.  In that case, the reference graph of each store path is exported in
-the build environment in the corresponding file, in a simple text format."
+the build environment in the corresponding file, in a simple text format.
+
+When LOCAL-BUILD? is true, declare that the derivation is not a good candidate
+for offloading and should rather be built locally.  This is the case for small
+derivations where the costs of data transfers would outweigh the benefits."
   (define (add-output-paths drv)
     ;; Return DRV with an actual store path for each of its output and the
     ;; corresponding environment variable.
@@ -550,12 +584,16 @@ the build environment in the corresponding file, in a simple text format."
        (let* ((drv-hash (derivation-hash drv))
               (outputs  (map (match-lambda
                               ((output-name . ($ <derivation-output>
-                                                 _ algo hash))
-                               (let ((path (output-path output-name
-                                                        drv-hash name)))
+                                                 _ algo hash rec?))
+                               (let ((path (if hash
+                                               (fixed-output-path output-name
+                                                                  algo hash
+                                                                  rec? name)
+                                               (output-path output-name
+                                                            drv-hash name))))
                                  (cons output-name
                                        (make-derivation-output path algo
-                                                               hash)))))
+                                                               hash rec?)))))
                              outputs)))
          (make-derivation outputs inputs sources system builder args
                           (map (match-lambda
@@ -571,16 +609,20 @@ the build environment in the corresponding file, in a simple text format."
     ;; Some options are passed to the build daemon via the env. vars of
     ;; derivations (urgh!).  We hide that from our API, but here is the place
     ;; where we kludgify those options.
-    (match references-graphs
-      (((file . path) ...)
-       (let ((value (map (cut string-append <> " " <>)
-                         file path)))
-         ;; XXX: This all breaks down if an element of FILE or PATH contains
-         ;; white space.
-         `(("exportReferencesGraph" . ,(string-join value " "))
-           ,@env-vars)))
-      (#f
-       env-vars)))
+    (let ((env-vars (if local-build?
+                        `(("preferLocalBuild" . "1")
+                          ,@env-vars)
+                        env-vars)))
+      (match references-graphs
+        (((file . path) ...)
+         (let ((value (map (cut string-append <> " " <>)
+                           file path)))
+           ;; XXX: This all breaks down if an element of FILE or PATH contains
+           ;; white space.
+           `(("exportReferencesGraph" . ,(string-join value " "))
+             ,@env-vars)))
+        (#f
+         env-vars))))
 
   (define (env-vars-with-empty-outputs env-vars)
     ;; Return a variant of ENV-VARS where each OUTPUTS is associated with an
@@ -609,7 +651,8 @@ the build environment in the corresponding file, in a simple text format."
   (let* ((outputs    (map (lambda (name)
                             ;; Return outputs with an empty path.
                             (cons name
-                                  (make-derivation-output "" hash-algo hash)))
+                                  (make-derivation-output "" hash-algo
+                                                          hash recursive?)))
                           outputs))
          (inputs     (map (match-lambda
                            (((? derivation? drv))
@@ -827,7 +870,8 @@ system, imported, and appears under FINAL-PATH in the resulting store path."
     (build-expression->derivation store name builder
                                   #:system system
                                   #:inputs files
-                                  #:guile-for-build guile)))
+                                  #:guile-for-build guile
+                                  #:local-build? #t)))
 
 (define* (imported-modules store modules
                            #:key (name "module-import")
@@ -893,18 +937,20 @@ they can refer to each other."
     (build-expression->derivation store name builder
                                   #:inputs `(("modules" ,module-drv))
                                   #:system system
-                                  #:guile-for-build guile)))
+                                  #:guile-for-build guile
+                                  #:local-build? #t)))
 
 (define* (build-expression->derivation store name exp
                                        #:key
                                        (system (%current-system))
                                        (inputs '())
                                        (outputs '("out"))
-                                       hash hash-algo
+                                       hash hash-algo recursive?
                                        (env-vars '())
                                        (modules '())
                                        guile-for-build
-                                       references-graphs)
+                                       references-graphs
+                                       local-build?)
   "Return a derivation that executes Scheme expression EXP as a builder
 for derivation NAME.  INPUTS must be a list of (NAME DRV-PATH SUB-DRV)
 tuples; when SUB-DRV is omitted, \"out\" is assumed.  MODULES is a list
@@ -923,7 +969,8 @@ EXP returns #f, the build is considered to have failed.
 EXP is built using GUILE-FOR-BUILD (a derivation).  When GUILE-FOR-BUILD is
 omitted or is #f, the value of the `%guile-for-build' fluid is used instead.
 
-See the `derivation' procedure for the meaning of REFERENCES-GRAPHS."
+See the `derivation' procedure for the meaning of REFERENCES-GRAPHS and
+LOCAL-BUILD?."
   (define guile-drv
     (or guile-for-build (%guile-for-build)))
 
@@ -1045,5 +1092,7 @@ See the `derivation' procedure for the meaning of REFERENCES-GRAPHS."
                                env-vars)
 
                 #:hash hash #:hash-algo hash-algo
+                #:recursive? recursive?
                 #:outputs outputs
-                #:references-graphs references-graphs)))
+                #:references-graphs references-graphs
+                #:local-build? local-build?)))

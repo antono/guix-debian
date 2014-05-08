@@ -1,5 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2014 Mark H Weaver <mhw@netris.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -35,7 +36,9 @@
   #:use-module (gnu packages which)
   #:use-module (guix packages)
   #:use-module (guix download)
-  #:use-module (guix build-system gnu))
+  #:use-module (guix build-system gnu)
+  #:use-module (guix utils)
+  #:use-module (ice-9 match))
 
 ;;; Commentary:
 ;;;
@@ -106,14 +109,14 @@ without requiring the source code to be rewritten.")
 (define-public guile-2.0
   (package
    (name "guile")
-   (version "2.0.9")
+   (version "2.0.11")
    (source (origin
             (method url-fetch)
             (uri (string-append "mirror://gnu/guile/guile-" version
                                 ".tar.xz"))
             (sha256
              (base32
-              "0nw9y8vjyz4r61v06p9msks5lm58pd91irmzg4k487vmv743h2pp"))))
+              "1qh3j7308qvsjgwf7h94yqgckpbgz2k3yqdkzsyhqcafvfka9l5f"))))
    (build-system gnu-build-system)
    (native-inputs `(("pkgconfig" ,pkg-config)))
    (inputs `(("libffi" ,libffi)
@@ -150,11 +153,7 @@ without requiring the source code to be rewritten.")
                     (substitute* "module/ice-9/popen.scm"
                       (("/bin/sh")
                        (string-append bash "/bin/bash")))))
-                %standard-phases)
-
-      ,@(if (%current-target-system)
-            '(#:configure-flags '("CC_FOR_BUILD=gcc"))
-            '())))
+                %standard-phases)))
 
    (native-search-paths
     (list (search-path-specification
@@ -326,5 +325,36 @@ for Guile\".")
     ;; distribution terms such as LGPL and public domain.  See `COPYING' for
     ;; details.
     (license gpl3+)))
+
+(define-public guile-json
+  (package
+    (name "guile-json")
+    (version "0.3.1")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "mirror://savannah/guile-json/guile-json-"
+                                 version ".tar.gz"))
+             (sha256
+              (base32
+               "0nz2sx61kd6cfflwzxxq0cb9dz0asb81abbhfawv4p9ghciqdr3g"))
+             (modules '((guix build utils)))
+             (snippet
+              ;; Make sure everything goes under .../site/2.0, like Guile's
+              ;; search paths expects.
+              '(substitute* '("Makefile.in" "json/Makefile.in")
+                 (("moddir =.*/share/guile/site" all)
+                  (string-append all "/2.0"))))))
+    (build-system gnu-build-system)
+    (inputs `(("guile" ,guile-2.0)))
+    (home-page "http://savannah.nongnu.org/projects/guile-json/")
+    (synopsis "JSON module for Guile")
+    (description
+     "Guile-json supports parsing and building JSON documents according to the
+http:://json.org specification. These are the main features:
+- Strictly complies to http://json.org specification.
+- Build JSON documents programmatically via macros.
+- Unicode support for strings.
+- Allows JSON pretty printing.")
+    (license lgpl3+)))
 
 ;;; guile.scm ends here

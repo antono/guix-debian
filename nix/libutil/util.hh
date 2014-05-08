@@ -45,6 +45,10 @@ Path dirOf(const Path & path);
    following the final `/'. */
 string baseNameOf(const Path & path);
 
+/* Check whether a given path is a descendant of the given
+   directory. */
+bool isInDir(const Path & path, const Path & dir);
+
 /* Get status of `path'. */
 struct stat lstat(const Path & path);
 
@@ -74,19 +78,12 @@ string readLine(int fd);
 /* Write a line to a file descriptor. */
 void writeLine(int fd, string s);
 
-/* Compute the sum of the sizes of all files in `path'. */
-void computePathSize(const Path & path,
-    unsigned long long & bytes, unsigned long long & blocks);
-
 /* Delete a path; i.e., in the case of a directory, it is deleted
    recursively.  Don't use this at home, kids.  The second variant
    returns the number of bytes and blocks freed. */
 void deletePath(const Path & path);
 
 void deletePath(const Path & path, unsigned long long & bytesFreed);
-
-/* Make a path read-only recursively. */
-void makePathReadOnly(const Path & path);
 
 /* Create a temporary directory. */
 Path createTempDir(const Path & tmpRoot = "", const Path & prefix = "nix",
@@ -95,6 +92,9 @@ Path createTempDir(const Path & tmpRoot = "", const Path & prefix = "nix",
 /* Create a directory and all its parents, if necessary.  Returns the
    list of created directories, in order of creation. */
 Paths createDirs(const Path & path);
+
+/* Create a symlink. */
+void createSymlink(const Path & target, const Path & link);
 
 
 template<class T, class A>
@@ -125,11 +125,11 @@ private:
 public:
     Nest();
     ~Nest();
-    void open(Verbosity level, const format & f);
+    void open(Verbosity level, const FormatOrString & fs);
     void close();
 };
 
-void printMsg_(Verbosity level, const format & f);
+void printMsg_(Verbosity level, const FormatOrString & fs);
 
 #define startNest(varName, level, f) \
     Nest varName; \
@@ -146,7 +146,7 @@ void printMsg_(Verbosity level, const format & f);
 
 #define debug(f) printMsg(lvlDebug, f)
 
-void warnOnce(bool & haveWarned, const format & f);
+void warnOnce(bool & haveWarned, const FormatOrString & fs);
 
 void writeToStderr(const string & s);
 
@@ -264,10 +264,6 @@ void closeMostFDs(const set<int> & exceptions);
 /* Set the close-on-exec flag for the given file descriptor. */
 void closeOnExec(int fd);
 
-/* Common initialisation for setuid programs: clear the environment,
-   sanitize file handles 0, 1 and 2. */
-void setuidCleanup();
-
 /* Call vfork() if available, otherwise fork(). */
 extern pid_t (*maybeVfork)();
 
@@ -315,7 +311,12 @@ template<class N> bool string2Int(const string & s, N & n)
     return str && str.get() == EOF;
 }
 
-string int2String(int n);
+template<class N> string int2String(N n)
+{
+    std::ostringstream str;
+    str << n;
+    return str.str();
+}
 
 
 /* Return true iff `s' ends in `suffix'. */

@@ -1,5 +1,5 @@
 # GNU Guix --- Functional package management for GNU
-# Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+# Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 # Copyright © 2013 Nikita Karetnikov <nikita@karetnikov.org>
 #
 # This file is part of GNU Guix.
@@ -40,6 +40,9 @@ then false; else true; fi
 guix package --bootstrap -p "$profile" -i guile-bootstrap
 test -L "$profile" && test -L "$profile-1-link"
 test -f "$profile/bin/guile"
+
+# Make sure the profile is a GC root.
+guix gc --list-live | grep "`readlink "$profile-1-link"`"
 
 # Installing the same package a second time does nothing.
 guix package --bootstrap -p "$profile" -i guile-bootstrap
@@ -155,8 +158,11 @@ then
     guix package -p "$profile" --delete-generations=0
 fi
 
+# Make sure multiple arguments to -i works.
+guix package --bootstrap -i guile gcc -p "$profile" -n
+
 # Make sure the `:' syntax works.
-guix package --bootstrap -i "binutils:lib" -p "$profile" -n
+guix package --bootstrap -i "glibc:debug" -p "$profile" -n
 
 # Make sure nonexistent outputs are reported.
 guix package --bootstrap -i "guile-bootstrap:out" -p "$profile" -n
@@ -206,6 +212,10 @@ fi
 default_profile="`readlink "$HOME/.guix-profile"`"
 for i in `seq 1 3`
 do
+    # Make sure the current generation is a GC root.
+    profile_link="`readlink "$default_profile"`"
+    guix gc --list-live | grep "`readlink "$profile_link"`"
+
     guix package --bootstrap --roll-back
     ! test -f "$HOME/.guix-profile/bin"
     ! test -f "$HOME/.guix-profile/lib"
@@ -215,3 +225,10 @@ done
 # Extraneous argument.
 if guix package install foo-bar;
 then false; else true; fi
+
+# Make sure the "broken pipe" doesn't yield an error.
+# Note: 'pipefail' is a Bash-specific option.
+set -o pipefail || true
+guix package -A g | head -1 2> "$HOME/err1"
+guix package -I | head -1 2> "$HOME/err2"
+test "`cat "$HOME/err1" "$HOME/err2"`" = ""

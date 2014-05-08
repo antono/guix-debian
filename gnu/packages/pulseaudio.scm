@@ -1,5 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013, 2014 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2014 Mark H Weaver <mhw@netris.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -23,18 +24,18 @@
                 #:renamer (symbol-prefix-proc 'l:))
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages)
-  #:use-module (gnu packages linux)
-  #:use-module (gnu packages oggvorbis)
-  #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages algebra)
+  #:use-module ((gnu packages autotools) #:select (libtool))
   #:use-module (gnu packages avahi)
+  #:use-module (gnu packages check)
+  #:use-module (gnu packages gdbm)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages gtk)
   #:use-module (gnu packages libcanberra)
-  #:use-module (gnu packages algebra)
-  #:use-module ((gnu packages autotools) #:select (libtool))
-  #:use-module (gnu packages gdbm)
+  #:use-module (gnu packages linux)
   #:use-module (gnu packages m4)
-  #:use-module (gnu packages check)
+  #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages xiph)
   #:export (libsndfile
             libsamplerate
             json-c
@@ -134,7 +135,7 @@ parse JSON formatted strings back into the C representation of JSON objects.")
 (define pulseaudio
   (package
     (name "pulseaudio")
-    (version "4.0")
+    (version "5.0")
     (source (origin
              (method url-fetch)
              (uri (string-append
@@ -142,8 +143,7 @@ parse JSON formatted strings back into the C representation of JSON objects.")
                    version ".tar.xz"))
              (sha256
               (base32
-               "1bndz4l8jxyq3zq128gzp3gryxl6yjs66j2y1d7yabw2n5mv7kim"))
-             (patches (list (search-patch "pulseaudio-test-timeouts.patch")))))
+               "0fgrr8v7yfh0byhzdv4c87v9lkj8g7gpjm8r9xrbvpa92a5kmhcr"))))
     (build-system gnu-build-system)
     (arguments
      `(#:configure-flags '("--localstatedir=/var" ;"--sysconfdir=/etc"
@@ -153,15 +153,11 @@ parse JSON formatted strings back into the C representation of JSON objects.")
                  (lambda _
                    ;; 'tests/lock-autospawn-test.c' wants to create a file
                    ;; under ~/.config/pulse.
-                   (setenv "HOME" (getcwd)))
-                 %standard-phases)
-
-       ,@(if (or (string=? (%current-system) "i686-linux")
-                 (string=? (%current-system) "mips64el-linux"))
-             ;; Work around test failure:
-             ;; <https://bugs.freedesktop.org/show_bug.cgi?id=72374>.
-             '(#:tests? #f)
-             '())))
+                   (setenv "HOME" (getcwd))
+                   ;; 'thread-test' needs more time on hydra and on slower
+                   ;; machines, so we set the default timeout to 120 seconds.
+                   (setenv "CK_DEFAULT_TIMEOUT" "120"))
+                 %standard-phases)))
     (inputs
      ;; TODO: Add optional inputs (GTK+?).
      `(;; ("sbc" ,sbc)
@@ -176,7 +172,7 @@ parse JSON formatted strings back into the C representation of JSON objects.")
        ("pkg-config" ,pkg-config)
        ("m4" ,m4)
        ("libtool" ,libtool)
-       ("fftw" ,fftw)
+       ("fftwf" ,fftwf)
        ("avahi" ,avahi)
        ("check" ,check)))
     (propagated-inputs
@@ -212,10 +208,11 @@ mixing several sounds into one are easily achieved using a sound server. ")
                "02s775m1531sshwlbvfddk3pz8zjmwkv1sgzggn386ja3gc9vwi2"))))
     (build-system gnu-build-system)
     (inputs
-     `(("intltool" ,intltool)
-       ("libcanberra" ,libcanberra)
+     `(("libcanberra" ,libcanberra)
        ("gtkmm" ,gtkmm)
-       ("pulseaudio" ,pulseaudio)
+       ("pulseaudio" ,pulseaudio)))
+    (native-inputs
+     `(("intltool" ,intltool)
        ("pkg-config" ,pkg-config)))
     (home-page "http://freedesktop.org/software/pulseaudio/pavucontrol/")
     (synopsis "PulseAudio volume control")

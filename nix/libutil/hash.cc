@@ -239,7 +239,7 @@ bool isHash(const string & s)
 }
 
 
-union Ctx
+struct Ctx
 {
     MD5_CTX md5;
     SHA_CTX sha1;

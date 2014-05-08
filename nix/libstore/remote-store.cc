@@ -3,6 +3,7 @@
 #include "remote-store.hh"
 #include "worker-protocol.hh"
 #include "archive.hh"
+#include "affinity.hh"
 #include "globals.hh"
 
 #include <sys/types.h>
@@ -14,7 +15,6 @@
 #include <iostream>
 #include <unistd.h>
 #include <cstring>
-
 
 namespace nix {
 
@@ -71,8 +71,19 @@ void RemoteStore::openConnection(bool reserveSpace)
         if (GET_PROTOCOL_MAJOR(daemonVersion) != GET_PROTOCOL_MAJOR(PROTOCOL_VERSION))
             throw Error("Nix daemon protocol version not supported");
         writeInt(PROTOCOL_VERSION, to);
+
+        if (GET_PROTOCOL_MINOR(daemonVersion) >= 14) {
+            int cpu = settings.lockCPU ? lockToCurrentCPU() : -1;
+            if (cpu != -1) {
+                writeInt(1, to);
+                writeInt(cpu, to);
+            } else
+                writeInt(0, to);
+        }
+
         if (GET_PROTOCOL_MINOR(daemonVersion) >= 11)
             writeInt(reserveSpace, to);
+
         processStderr();
     }
     catch (Error & e) {
@@ -436,9 +447,9 @@ Paths RemoteStore::importPaths(bool requireSignature, Source & source)
 }
 
 
-void RemoteStore::buildPaths(const PathSet & drvPaths, bool repair)
+void RemoteStore::buildPaths(const PathSet & drvPaths, BuildMode buildMode)
 {
-    if (repair) throw Error("repairing is not supported when building through the Nix daemon");
+    if (buildMode != bmNormal) throw Error("repairing or checking is not supported when building through the Nix daemon");
     openConnection();
     writeInt(wopBuildPaths, to);
     if (GET_PROTOCOL_MINOR(daemonVersion) >= 13)

@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2013 Nikita Karetnikov <nikita@karetnikov.org>
 ;;;
@@ -106,14 +106,14 @@ shared NFS home directories.")
 (define glib
   (package
    (name "glib")
-   (version "2.38.0")
+   (version "2.39.1")
    (source (origin
             (method url-fetch)
             (uri (string-append "mirror://gnome/sources/"
                                 name "/" (string-take version 4) "/"
                                 name "-" version ".tar.xz"))
             (sha256
-             (base32 "0cpzqadqk6z6bmb79p04pykxc8x57rvshh33414cnk41bvgaf4vm"))
+             (base32 "0lqi6z47068vgh91fm59jn0kq969wf3g2q8k4m33jsb0amprg36h"))
             (patches (list (search-patch "glib-tests-homedir.patch")
                            (search-patch "glib-tests-desktop.patch")
                            (search-patch "glib-tests-prlimit.patch")
@@ -123,16 +123,16 @@ shared NFS home directories.")
               "doc"))                      ; 20 MiB of GTK-Doc reference
    (inputs
     `(("coreutils" ,coreutils)
-      ("gettext" ,gnu-gettext)
       ("libffi" ,libffi)
+      ("zlib" ,zlib)
+      ("tzdata" ,tzdata)))     ; for tests/gdatetime.c
+   (native-inputs
+     `(("gettext" ,gnu-gettext)
+      ("dbus" ,dbus)                              ; for GDBus tests
       ("pkg-config" ,pkg-config)
       ("python" ,python-wrapper)
-      ("zlib" ,zlib)
       ("perl" ,perl)                              ; needed by GIO tests
-      ("dbus" ,dbus)                              ; for GDBus tests
-      ("bash" ,bash)
-      ("tzdata" ,tzdata)                          ; for tests/gdatetime.c
-      ))
+      ("bash" ,bash)))
    (arguments
     '(#:phases (alist-cons-before
                 'build 'pre-build
@@ -155,7 +155,11 @@ shared NFS home directories.")
       ;; Note: `--docdir' and `--htmldir' are not honored, so work around it.
       #:configure-flags (list (string-append "--with-html-dir="
                                              (assoc-ref %outputs "doc")
-                                             "/share/gtk-doc"))))
+                                             "/share/gtk-doc"))
+
+      ;; In 'gio/tests', 'gdbus-test-codegen-generated.h' is #included in a
+      ;; file that gets compiled possibly before it has been fully generated.
+      #:parallel-tests? #f))
    (synopsis "Thread-safe general utility library; basis of GTK+ and GNOME")
    (description
     "GLib provides data structure handling for C, portability wrappers,
@@ -176,25 +180,27 @@ dynamic loading, and an object system.")
                    "/gobject-introspection-"
                    version ".tar.xz"))
              (sha256
-              (base32 "0wvxyvgajmms2bb6k3pf1rdpnd79xdxamykzvxzmcyn1ag9yax9m"))))
+              (base32 "0wvxyvgajmms2bb6k3pf1rdpnd79xdxamykzvxzmcyn1ag9yax9m"))
+             (patches (list (search-patch "gobject-introspection-cc.patch")))))
     (build-system gnu-build-system)
     (inputs
      `(("bison" ,bison)
        ("cairo" ,cairo)
        ("flex" ,flex)
        ("glib" ,glib)
-       ("libffi" ,libffi)
        ("pkg-config" ,pkg-config)
        ("python-2" ,python-2)))
+    (propagated-inputs
+     `(;; In practice, GIR users will need libffi when using
+       ;; gobject-introspection.
+       ("libffi" ,libffi)))
     (arguments
      `(#:phases
-        (alist-replace
-         'configure
-         (lambda* (#:key #:allow-other-keys #:rest args)
-          (let ((configure (assoc-ref %standard-phases 'configure)))
-           ;; giscanner/sourcescanner.py looks for 'CC', let's set it here.
-           (setenv "CC" "gcc")
-           (apply configure args)))
+        (alist-cons-before
+         'configure 'patch-paths
+         (lambda _
+           (substitute* "giscanner/sourcescanner.py"
+             (("GUIX_GCC_PATH") (which "gcc"))))
          %standard-phases)))
     (home-page "https://wiki.gnome.org/GObjectIntrospection")
     (synopsis "Generate interface introspection data for GObject libraries")

@@ -21,18 +21,21 @@
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix build-system gnu)
+  #:use-module (gnu packages)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages gnupg)
   #:use-module (gnu packages gstreamer)
   #:use-module (gnu packages gtk)
   #:use-module (gnu packages pdf)
   #:use-module (gnu packages ghostscript)
+  #:use-module (gnu packages iso-codes)
   #:use-module (gnu packages libcanberra)
   #:use-module (gnu packages libpng)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
   #:use-module (gnu packages xml)
+  #:use-module (gnu packages gl)
   #:use-module (gnu packages xorg))
 
 (define-public brasero
@@ -49,25 +52,70 @@
     (build-system gnu-build-system)
     (propagated-inputs
      `(("hicolor-icon-theme" ,hicolor-icon-theme)))
+    (native-inputs
+     `(("intltool" ,intltool)
+       ("pkg-config" ,pkg-config)))
     (inputs
      `(("glib" ,glib)
        ("gnome-doc-utils" ,gnome-doc-utils)
        ("gstreamer" ,gstreamer)
        ("gst-plugins-base" ,gst-plugins-base)
        ("gtk+" ,gtk+)
-       ("intltool" ,intltool)
        ("itstool" ,itstool)
        ("libcanberra" ,libcanberra)
        ("libice" ,libice)
        ("libnotify" ,libnotify)
        ("libsm" ,libsm)
-       ("libxml2" ,libxml2)
+       ("libxml2" ,libxml2)))
+    (native-inputs
+     `(("intltool" ,intltool)
        ("pkg-config" ,pkg-config)))
     (home-page "https://projects.gnome.org/brasero/")
     (synopsis "CD/DVD burning tool for Gnome")
     (description "Brasero is an application to burn CD/DVD for the Gnome
 Desktop.  It is designed to be as simple as possible and has some unique
 features to enable users to create their discs easily and quickly.")
+    (license gpl2+)))
+
+(define-public gnome-desktop
+  (package
+    (name "gnome-desktop")
+    (version "3.10.0")
+    (source
+     (origin
+      (method url-fetch)
+      (uri (string-append "mirror://gnome/sources/" name "/3.10/"
+                          name "-" version ".tar.xz"))
+      (sha256
+       (base32
+        "0p5p6wvmy5zvcdnmp5h2biz7rjrcw99chq5kkwcnb68flcmkb1ry"))))
+    (build-system gnu-build-system)
+    (native-inputs
+     `(("intltool" ,intltool)
+       ("pkg-config" ,pkg-config)))
+    (inputs
+     `(("gdk-pixbuf" ,gdk-pixbuf)
+       ("glib" ,glib)
+       ("gsettings-desktop-schemas" ,gsettings-desktop-schemas)
+       ("gtk+" ,gtk+)
+       ("iso-codes" ,iso-codes)
+       ("itstool" ,itstool)
+       ("libx11" ,libx11)
+       ("libxext" ,libxext)
+       ("libxkbfile" ,libxkbfile)
+       ("libxrandr" ,libxrandr)
+       ("xkeyboard-config" ,xkeyboard-config)))
+    (home-page "https://www.gnome.org/")
+    (synopsis
+     "libgnome-desktop, gnome-about, and desktop-wide documents")
+    (description
+     "The libgnome-desktop library provides API shared by several applications
+on the desktop, but that cannot live in the platform for various reasons. There
+is no API or ABI guarantee, although we are doing our best to provide
+stability. Documentation for the API is available with gtk-doc.
+
+The gnome-about program helps find which version of GNOME is installed.")
+    ; Some bits under the LGPL.
     (license gpl2+)))
 
 (define-public gnome-doc-utils
@@ -83,7 +131,7 @@ features to enable users to create their discs easily and quickly.")
        (base32
         "19n4x25ndzngaciiyd8dd6s2mf9gv6nv3wv27ggns2smm7zkj1nb"))))
     (build-system gnu-build-system)
-    (inputs
+    (native-inputs
      `(("intltool" ,intltool)
        ("libxml2" ,libxml2)
        ("libxslt" ,libxslt)
@@ -114,12 +162,12 @@ and keep up to date translations of documentation.")
               (base32
                "0c4qrjpmv1hqga3xv6wsq2z10x2n78qgw7q3k3s01y1pggxkgjkd"))))
     (build-system gnu-build-system)
-    (native-inputs
-     `(("intltool" ,intltool)))
     (inputs
-     `(("pkg-config" ,pkg-config)
-       ("libgcrypt" ,libgcrypt)
+     `(("libgcrypt" ,libgcrypt)
        ("dbus" ,dbus)))
+    (native-inputs
+     `(("pkg-config" ,pkg-config)
+       ("intltool" ,intltool)))
     (propagated-inputs
      ;; Referred to in .h files and .pc.
      `(("glib" ,glib)))
@@ -177,7 +225,6 @@ and keep up to date translations of documentation.")
        ("gtk+" ,gtk+)
        ("glib" ,glib)
        ("libxml2" ,libxml2)
-       ("pkg-config" ,pkg-config)
        ("libsm" ,libsm)
        ("libice" ,libice)
        ("shared-mime-info" ,shared-mime-info)
@@ -185,7 +232,8 @@ and keep up to date translations of documentation.")
        ;; For tests.
        ("dogtail" ,python2-dogtail)))
     (native-inputs
-     `(("intltool" ,intltool)))
+     `(("intltool" ,intltool)
+       ("pkg-config" ,pkg-config)))
     (home-page
      "http://www.gnome.org/projects/evince/")
     (synopsis "GNOME's document viewer")
@@ -211,8 +259,9 @@ on the GNOME Desktop with a single simple application.")
         "1km8qxwrzvravmg8j680qv64bwnwbdgrmy8bqmhs0dgxn2b1as6a"))))
     (build-system gnu-build-system)
     (inputs
-     `(("glib" ,glib)
-       ("intltool" ,intltool)
+     `(("glib" ,glib)))
+    (native-inputs
+     `(("intltool" ,intltool)
        ("pkg-config" ,pkg-config)))
     (home-page "https://launchpad.net/gsettings-desktop-schemas")
     (synopsis
@@ -263,9 +312,10 @@ GNOME and KDE desktops to the icon names proposed in the specification.")
     (build-system gnu-build-system)
     (inputs
      `(("gtk+" ,gtk+)
-       ("icon-naming-utils" ,icon-naming-utils)
-       ("intltool" ,intltool)
-       ("pkg-config" ,pkg-config)))
+       ("icon-naming-utils" ,icon-naming-utils)))
+    (native-inputs
+       `(("intltool" ,intltool)
+         ("pkg-config" ,pkg-config)))
     (home-page "http://art.gnome.org/")
     (synopsis
      "GNOME icon theme")
@@ -290,10 +340,10 @@ GNOME and KDE desktops to the icon names proposed in the specification.")
      '(#:parallel-build? #f))
     (inputs
      `(("glib" ,glib)
-       ("libxml2" ,libxml2)
-       ("pkg-config" ,pkg-config)))
+       ("libxml2" ,libxml2)))
     (native-inputs
-     `(("intltool" ,intltool)))
+     `(("intltool" ,intltool)
+       ("pkg-config" ,pkg-config)))
     (home-page "http://freedesktop.org/wiki/Software/shared-mime-info")
     (synopsis "Database of common MIME types")
     (description
@@ -344,8 +394,9 @@ database is translated at Transifex.")
      `(("gdk-pixbuf" ,gdk-pixbuf)
        ("glib" ,glib)
        ("gtk+" ,gtk+)
-       ("libpng" ,libpng)
-       ("pkg-config" ,pkg-config)))
+       ("libpng" ,libpng)))
+    (native-inputs
+      `(("pkg-config" ,pkg-config)))
     (home-page "https://developer-next.gnome.org/libnotify/")
     (synopsis
      "GNOME desktop notification library")
@@ -355,3 +406,120 @@ notification daemon, as defined in the Desktop Notifications spec. These
 notifications can be used to inform the user about an event or display
 some form of information without getting in the user's way.")
     (license lgpl2.1+)))
+
+(define-public libpeas
+  (package
+    (name "libpeas")
+    (version "1.9.0")
+    (source
+     (origin
+      (method url-fetch)
+      (uri (string-append "mirror://gnome/sources/" name "/"
+                          (substring version 0 (string-rindex version #\.)) "/"
+                          name "-" version ".tar.xz"))
+      (sha256
+       (base32
+        "13fzyzv6c0cfdj83z1s16lv8k997wpnzyzr0wfwcfkcmvz64g1q0"))))
+    (build-system gnu-build-system)
+    (arguments
+     `(#:modules ((guix build gnome)
+                  (guix build gnu-build-system)
+                  (guix build utils))
+       #:imported-modules ((guix build gnome)
+                           (guix build gnu-build-system)
+                           (guix build utils))
+       #:phases
+        (alist-replace
+         'configure
+         (lambda* (#:key inputs #:allow-other-keys #:rest args)
+          (let ((configure (assoc-ref %standard-phases 'configure)))
+           (substitute* "libpeas-gtk/Makefile.in"
+            (("--add-include-path")
+             (string-append
+               " --add-include-path=" (gir-directory inputs "atk")
+               " --add-include-path=" (gir-directory inputs "gdk-pixbuf")
+               " --add-include-path=" (gir-directory inputs "gtk+")
+               " --add-include-path=" (gir-directory inputs "pango")
+               " --add-include-path")))
+           (substitute* "libpeas-gtk/Makefile.in"
+            (("--includedir=\\$\\(top_builddir")
+             (string-append
+              " --includedir=" (gir-directory inputs "atk")
+              " --includedir=" (gir-directory inputs "gdk-pixbuf")
+              " --includedir=" (gir-directory inputs "gtk+")
+              " --includedir=" (gir-directory inputs "pango")
+              " --includedir=$(top_builddir")))
+           (apply configure args)))
+         %standard-phases)))
+    (inputs
+     `(("atk" ,atk)
+       ("gdk-pixbuf" ,gdk-pixbuf)
+       ("glib" ,glib)
+       ("gobject-introspection" ,gobject-introspection)
+       ("gtk+" ,gtk+)
+       ("intltool" ,intltool)
+       ("pango" ,pango)
+       ("pkg-config" ,pkg-config)))
+    (home-page "https://wiki.gnome.org/Libpeas")
+    (synopsis "GObject plugin system")
+    (description
+     "libpeas is a gobject-based plugins engine, and is targetted at giving
+every application the chance to assume its own extensibility.  It also has a
+set of features including, but not limited to: multiple extension points; on
+demand (lazy) programming language support for C, Python and JS; simplicity of
+the API")
+
+    (license lgpl2.0+)))
+
+(define-public gtkglext
+  (package
+    (name "gtkglext")
+    (version "1.2.0")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://sourceforge/project/gtkglext/gtkglext/"
+                                  version "/gtkglext-" version ".tar.gz"))
+              (sha256
+               (base32 "1ya4d2j2aacr9ii5zj4ac95fjpdvlm2rg79mgnk7yvl1dcy3y1z5"))
+              (patches (list
+                        (search-patch "gtkglext-remove-pangox-dependency.patch")
+                        (search-patch "gtkglext-disable-disable-deprecated.patch")))))
+    (build-system gnu-build-system)
+    (inputs `(("gtk+" ,gtk+-2)
+              ("mesa" ,mesa)
+              ("libx11" ,libx11)
+              ("libxt" ,libxt)))
+    (native-inputs `(("pkg-config" ,pkg-config)))
+    (home-page "https://projects.gnome.org/gtkglext")
+    (synopsis "OpenGL extension to GTK+.")
+    (description "GtkGLExt is an OpenGL extension to GTK+. It provides
+additional GDK objects which support OpenGL rendering in GTK+ and GtkWidget
+API add-ons to make GTK+ widgets OpenGL-capable.")
+    (license lgpl2.1+)))
+
+(define-public glade3
+  (package
+    (name "glade")
+    (version "3.8.4")
+    (source
+     (origin
+      (method url-fetch)
+      (uri (string-append "mirror://gnome/sources/" name "/"
+                          (substring version 0 (string-rindex version #\.)) "/"
+                          name "3-" version ".tar.xz"))
+              (sha256
+               (base32 "021xgq2l18w3rvwms9aq2idm0fk66vwb4f777gs0qh3ap5shgbn7"))))
+    (build-system gnu-build-system)
+    (inputs
+     `(("gtk+" ,gtk+-2)
+       ("libxml2" ,libxml2)))
+    (native-inputs
+     `(("intltool" ,intltool)
+       ("python" ,python)
+       ("pkg-config" ,pkg-config)))
+    (home-page "https://glade.gnome.org")
+    (synopsis "GTK+ rapid application development tool")
+    (description "Glade is a rapid application development (RAD) tool to
+enable quick & easy development of user interfaces for the GTK+ toolkit and
+the GNOME desktop environment.")
+    (license lgpl2.0+)))

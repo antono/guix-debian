@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2013 Mark H Weaver <mhw@netris.org>
 ;;;
 ;;; This file is part of GNU Guix.
@@ -21,6 +21,7 @@
   #:use-module (guix config)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9)
+  #:use-module (srfi srfi-11)
   #:use-module (srfi srfi-26)
   #:use-module (srfi srfi-39)
   #:use-module (srfi srfi-60)
@@ -34,7 +35,7 @@
   #:use-module (ice-9 regex)
   #:use-module (ice-9 match)
   #:use-module (ice-9 format)
-  #:autoload   (system foreign) (pointer->procedure)
+  #:use-module (system foreign)
   #:export (bytevector->base16-string
             base16-string->bytevector
 
@@ -43,6 +44,7 @@
             nixpkgs-derivation*
 
             compile-time-value
+            fcntl-flock
             memoize
             default-keyword-arguments
             substitute-keyword-arguments
@@ -67,8 +69,15 @@
             file-extension
             file-sans-extension
             call-with-temporary-output-file
+            with-atomic-file-output
             fold2
-            filtered-port))
+
+            filtered-port
+            compressed-port
+            decompressed-port
+            call-with-decompressed-port
+            compressed-output-port
+            call-with-compressed-output-port))
 
 
 ;;;
@@ -153,18 +162,29 @@ COMMAND (a list).  In addition, return a list of PIDs that the caller must
 wait.  When INPUT is a file port, it must be unbuffered; otherwise, any
 buffered data is lost."
   (let loop ((input input)
-             (pids '()))
+             (pids  '()))
     (if (file-port? input)
         (match (pipe)
           ((in . out)
            (match (primitive-fork)
              (0
-              (close-port in)
-              (close-port (current-input-port))
-              (dup2 (fileno input) 0)
-              (close-port (current-output-port))
-              (dup2 (fileno out) 1)
-              (apply execl (car command) command))
+              (dynamic-wind
+                (const #f)
+                (lambda ()
+                  (close-port in)
+                  (close-port (current-input-port))
+                  (dup2 (fileno input) 0)
+                  (close-port (current-output-port))
+                  (dup2 (fileno out) 1)
+                  (catch 'system-error
+                    (lambda ()
+                      (apply execl (car command) command))
+                    (lambda args
+                      (format (current-error-port)
+                              "filtered-port: failed to execute '~{~a ~}': ~a~%"
+                              command (strerror (system-error-errno args))))))
+                (lambda ()
+                  (primitive-_exit 1))))
              (child
               (close-port out)
               (values in (cons child pids))))))
@@ -182,10 +202,103 @@ buffered data is lost."
                   (dump-port input out))
                 (lambda ()
                   (false-if-exception (close out))
-                  (primitive-exit 0))))
+                  (primitive-_exit 0))))
              (child
               (close-port out)
               (loop in (cons child pids)))))))))
+
+(define (decompressed-port compression input)
+  "Return an input port where INPUT is decompressed according to COMPRESSION,
+a symbol such as 'xz."
+  (match compression
+    ((or #f 'none) (values input '()))
+    ('bzip2        (filtered-port `(,%bzip2 "-dc") input))
+    ('xz           (filtered-port `(,%xz "-dc") input))
+    ('gzip         (filtered-port `(,%gzip "-dc") input))
+    (else          (error "unsupported compression scheme" compression))))
+
+(define (compressed-port compression input)
+  "Return an input port where INPUT is decompressed according to COMPRESSION,
+a symbol such as 'xz."
+  (match compression
+    ((or #f 'none) (values input '()))
+    ('bzip2        (filtered-port `(,%bzip2 "-c") input))
+    ('xz           (filtered-port `(,%xz "-c") input))
+    ('gzip         (filtered-port `(,%gzip "-c") input))
+    (else          (error "unsupported compression scheme" compression))))
+
+(define (call-with-decompressed-port compression port proc)
+  "Call PROC with a wrapper around PORT, a file port, that decompresses data
+read from PORT according to COMPRESSION, a symbol such as 'xz.  PORT is closed
+as soon as PROC's dynamic extent is entered."
+  (let-values (((decompressed pids)
+                (decompressed-port compression port)))
+    (dynamic-wind
+      (const #f)
+      (lambda ()
+        (close-port port)
+        (proc decompressed))
+      (lambda ()
+        (close-port decompressed)
+        (unless (every (compose zero? cdr waitpid) pids)
+          (error "decompressed-port failure" pids))))))
+
+(define (filtered-output-port command output)
+  "Return an output port.  Data written to that port is filtered through
+COMMAND and written to OUTPUT, an output file port.  In addition, return a
+list of PIDs to wait for.  OUTPUT must be unbuffered; otherwise, any buffered
+data is lost."
+  (match (pipe)
+    ((in . out)
+     (match (primitive-fork)
+       (0
+        (dynamic-wind
+          (const #f)
+          (lambda ()
+            (close-port out)
+            (close-port (current-input-port))
+            (dup2 (fileno in) 0)
+            (close-port (current-output-port))
+            (dup2 (fileno output) 1)
+            (catch 'system-error
+              (lambda ()
+                (apply execl (car command) command))
+              (lambda args
+                (format (current-error-port)
+                        "filtered-output-port: failed to execute '~{~a ~}': ~a~%"
+                        command (strerror (system-error-errno args))))))
+          (lambda ()
+            (primitive-_exit 1))))
+       (child
+        (close-port in)
+        (values out (list child)))))))
+
+(define (compressed-output-port compression output)
+  "Return an output port whose input is compressed according to COMPRESSION,
+a symbol such as 'xz, and then written to OUTPUT.  In addition return a list
+of PIDs to wait for."
+  (match compression
+    ((or #f 'none) (values output '()))
+    ('bzip2        (filtered-output-port `(,%bzip2 "-c") output))
+    ('xz           (filtered-output-port `(,%xz "-c") output))
+    ('gzip         (filtered-output-port `(,%gzip "-c") output))
+    (else          (error "unsupported compression scheme" compression))))
+
+(define (call-with-compressed-output-port compression port proc)
+  "Call PROC with a wrapper around PORT, a file port, that compresses data
+that goes to PORT according to COMPRESSION, a symbol such as 'xz.  PORT is
+closed as soon as PROC's dynamic extent is entered."
+  (let-values (((compressed pids)
+                (compressed-output-port compression port)))
+    (dynamic-wind
+      (const #f)
+      (lambda ()
+        (close-port port)
+        (proc compressed))
+      (lambda ()
+        (close-port compressed)
+        (unless (every (compose zero? cdr waitpid) pids)
+          (error "compressed-output-port failure" pids))))))
 
 
 ;;;
@@ -220,6 +333,110 @@ buffered data is lost."
 (define-syntax-rule (nixpkgs-derivation* attribute)
   "Evaluate the given Nixpkgs derivation at compile-time."
   (compile-time-value (nixpkgs-derivation attribute)))
+
+
+;;;
+;;; Advisory file locking.
+;;;
+
+(define %struct-flock
+  ;; 'struct flock' from <fcntl.h>.
+  (list short                                     ; l_type
+        short                                     ; l_whence
+        size_t                                    ; l_start
+        size_t                                    ; l_len
+        int))                                     ; l_pid
+
+(define F_SETLKW
+  ;; On Linux-based systems, this is usually 7, but not always
+  ;; (exceptions include SPARC.)  On GNU/Hurd, it's 9.
+  (compile-time-value
+   (cond ((string-contains %host-type "sparc") 9) ; sparc-*-linux-gnu
+         ((string-contains %host-type "linux") 7) ; *-linux-gnu
+         (else 9))))                              ; *-gnu*
+
+(define F_SETLK
+  ;; Likewise: GNU/Hurd and SPARC use 8, while the others typically use 6.
+  (compile-time-value
+   (cond ((string-contains %host-type "sparc") 8) ; sparc-*-linux-gnu
+         ((string-contains %host-type "linux") 6) ; *-linux-gnu
+         (else 8))))                              ; *-gnu*
+
+(define F_xxLCK
+  ;; The F_RDLCK, F_WRLCK, and F_UNLCK constants.
+  (compile-time-value
+   (cond ((string-contains %host-type "sparc") #(1 2 3))    ; sparc-*-linux-gnu
+         ((string-contains %host-type "hppa")  #(1 2 3))    ; hppa-*-linux-gnu
+         ((string-contains %host-type "linux") #(0 1 2))    ; *-linux-gnu
+         (else                                 #(1 2 3))))) ; *-gnu*
+
+(define %libc-errno-pointer
+  ;; Glibc's 'errno' pointer.
+  (let ((errno-loc (dynamic-func "__errno_location" (dynamic-link))))
+    (and errno-loc
+         (let ((proc (pointer->procedure '* errno-loc '())))
+           (proc)))))
+
+(define errno
+  (if %libc-errno-pointer
+      (let ((bv (pointer->bytevector %libc-errno-pointer (sizeof int))))
+        (lambda ()
+          "Return the current errno."
+          ;; XXX: We assume that nothing changes 'errno' while we're doing all this.
+          ;; In particular, that means that no async must be running here.
+
+          ;; Use one of the fixed-size native-ref procedures because they are
+          ;; optimized down to a single VM instruction, which reduces the risk
+          ;; that we fiddle with 'errno' (needed on Guile 2.0.5, libc 2.11.)
+          (let-syntax ((ref (lambda (s)
+                              (syntax-case s ()
+                                ((_ bv)
+                                 (case (sizeof int)
+                                   ((4)
+                                    #'(bytevector-s32-native-ref bv 0))
+                                   ((8)
+                                    #'(bytevector-s64-native-ref bv 0))
+                                   (else
+                                    (error "unsupported 'int' size"
+                                           (sizeof int)))))))))
+            (ref bv))))
+      (lambda () 0)))
+
+(define fcntl-flock
+  (let* ((ptr  (dynamic-func "fcntl" (dynamic-link)))
+         (proc (pointer->procedure int ptr `(,int ,int *))))
+    (lambda* (fd-or-port operation #:key (wait? #t))
+      "Perform locking OPERATION on the file beneath FD-OR-PORT.  OPERATION
+must be a symbol, one of 'read-lock, 'write-lock, or 'unlock.  When WAIT? is
+true, block until the lock is acquired; otherwise, thrown an 'flock-error'
+exception if it's already taken."
+      (define (operation->int op)
+        (case op
+          ((read-lock)  (vector-ref F_xxLCK 0))
+          ((write-lock) (vector-ref F_xxLCK 1))
+          ((unlock)     (vector-ref F_xxLCK 2))
+          (else         (error "invalid fcntl-flock operation" op))))
+
+      (define fd
+        (if (port? fd-or-port)
+            (fileno fd-or-port)
+            fd-or-port))
+
+      ;; XXX: 'fcntl' is a vararg function, but here we happily use the
+      ;; standard ABI; crossing fingers.
+      (let ((err (proc fd
+                       (if wait?
+                           F_SETLKW               ; lock & wait
+                           F_SETLK)               ; non-blocking attempt
+                       (make-c-struct %struct-flock
+                                      (list (operation->int operation)
+                                            SEEK_SET
+                                            0 0   ; whole file
+                                            0)))))
+        (or (zero? err)
+
+            ;; Presumably we got EAGAIN or so.
+            (throw 'flock-error (errno)))))))
 
 
 ;;;
@@ -424,6 +641,21 @@ call."
         (proc template out))
       (lambda ()
         (false-if-exception (close out))
+        (false-if-exception (delete-file template))))))
+
+(define (with-atomic-file-output file proc)
+  "Call PROC with an output port for the file that is going to replace FILE.
+Upon success, FILE is atomically replaced by what has been written to the
+output port, and PROC's result is returned."
+  (let* ((template (string-append file ".XXXXXX"))
+         (out      (mkstemp! template)))
+    (with-throw-handler #t
+      (lambda ()
+        (let ((result (proc out)))
+          (close out)
+          (rename-file template file)
+          result))
+      (lambda (key . args)
         (false-if-exception (delete-file template))))))
 
 (define fold2

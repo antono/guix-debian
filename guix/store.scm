@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -33,6 +33,7 @@
   #:use-module (ice-9 match)
   #:use-module (ice-9 regex)
   #:use-module (ice-9 vlist)
+  #:use-module (ice-9 popen)
   #:export (%daemon-socket-file
 
             nix-server?
@@ -52,9 +53,11 @@
 
             open-connection
             close-connection
+            with-store
             set-build-options
             valid-path?
             query-path-hash
+            hash-part->path
             add-text-to-store
             add-to-store
             build-derivations
@@ -74,14 +77,19 @@
             references
             requisites
             referrers
+            topologically-sorted
             valid-derivers
             query-derivation-outputs
             live-paths
             dead-paths
             collect-garbage
             delete-paths
+            import-paths
+            export-paths
 
             current-build-output-port
+
+            register-path
 
             %store-prefix
             store-path?
@@ -93,8 +101,8 @@
 
 (define %protocol-version #x10c)
 
-(define %worker-magic-1 #x6e697863)
-(define %worker-magic-2 #x6478696f)
+(define %worker-magic-1 #x6e697863)               ; "nixc"
+(define %worker-magic-2 #x6478696f)               ; "dxio"
 
 (define (protocol-major magic)
   (logand magic #xff00))
@@ -156,8 +164,7 @@
   (delete-specific 3))
 
 (define %default-socket-path
-  (string-append (or (getenv "NIX_STATE_DIR") %state-directory)
-                 "/daemon-socket/socket"))
+  (string-append %state-directory "/daemon-socket/socket"))
 
 (define %daemon-socket-file
   ;; File name of the socket the daemon listens too.
@@ -191,7 +198,7 @@
                       result))))))
 
 (define-syntax write-arg
-  (syntax-rules (integer boolean file string string-list
+  (syntax-rules (integer boolean file string string-list string-pairs
                  store-path store-path-list base16)
     ((_ integer arg p)
      (write-int arg p))
@@ -203,6 +210,8 @@
      (write-string arg p))
     ((_ string-list arg p)
      (write-string-list arg p))
+    ((_ string-pairs arg p)
+     (write-string-pairs arg p))
     ((_ store-path arg p)
      (write-store-path arg p))
     ((_ store-path-list arg p)
@@ -319,11 +328,45 @@ operate, should the disk become full.  Return a server object."
   "Close the connection to SERVER."
   (close (nix-server-socket server)))
 
+(define-syntax-rule (with-store store exp ...)
+  "Bind STORE to an open connection to the store and evaluate EXPs;
+automatically close the store when the dynamic extent of EXP is left."
+  (let ((store (open-connection)))
+    (dynamic-wind
+      (const #f)
+      (lambda ()
+        exp ...)
+      (lambda ()
+        (false-if-exception (close-connection store))))))
+
 (define current-build-output-port
   ;; The port where build output is sent.
   (make-parameter (current-error-port)))
 
-(define (process-stderr server)
+(define* (dump-port in out
+                    #:optional len
+                    #:key (buffer-size 16384))
+  "Read LEN bytes from IN (or as much as possible if LEN is #f) and write it
+to OUT, using chunks of BUFFER-SIZE bytes."
+  (define buffer
+    (make-bytevector buffer-size))
+
+  (let loop ((total 0)
+             (bytes (get-bytevector-n! in buffer 0
+                                       (if len
+                                           (min len buffer-size)
+                                           buffer-size))))
+    (or (eof-object? bytes)
+        (and len (= total len))
+        (let ((total (+ total bytes)))
+          (put-bytevector out buffer 0 bytes)
+          (loop total
+                (get-bytevector-n! in buffer 0
+                                   (if len
+                                       (min (- len total) buffer-size)
+                                       buffer-size)))))))
+
+(define* (process-stderr server #:optional user-port)
   "Read standard output and standard error from SERVER, writing it to
 CURRENT-BUILD-OUTPUT-PORT.  Return #t when SERVER is done sending data, and
 #f otherwise; in the latter case, the caller should call `process-stderr'
@@ -336,25 +379,38 @@ encoding conversion errors."
     (nix-server-socket server))
 
   ;; magic cookies from worker-protocol.hh
-  (define %stderr-next  #x6f6c6d67)
-  (define %stderr-read  #x64617461)               ; data needed from source
-  (define %stderr-write #x64617416)               ; data for sink
-  (define %stderr-last  #x616c7473)
-  (define %stderr-error #x63787470)
+  (define %stderr-next  #x6f6c6d67)          ; "olmg", build log
+  (define %stderr-read  #x64617461)          ; "data", data needed from source
+  (define %stderr-write #x64617416)          ; "dat\x16", data for sink
+  (define %stderr-last  #x616c7473)          ; "alts", we're done
+  (define %stderr-error #x63787470)          ; "cxtp", error reporting
 
   (let ((k (read-int p)))
     (cond ((= k %stderr-write)
-           (read-latin1-string p)
+           ;; Write a byte stream to USER-PORT.
+           (let* ((len (read-int p))
+                  (m   (modulo len 8)))
+             (dump-port p user-port len)
+             (unless (zero? m)
+               ;; Consume padding, as for strings.
+               (get-bytevector-n p (- 8 m))))
            #f)
           ((= k %stderr-read)
-           (let ((len (read-int p)))
-             (read-latin1-string p)               ; FIXME: what to do?
+           ;; Read a byte stream from USER-PORT.
+           (let* ((max-len (read-int p))
+                  (data    (get-bytevector-n user-port max-len))
+                  (len     (bytevector-length data)))
+             (write-int len p)
+             (put-bytevector p data)
+             (write-padding len p)
              #f))
           ((= k %stderr-next)
+           ;; Log a string.
            (let ((s (read-latin1-string p)))
              (display s (current-build-output-port))
              #f))
           ((= k %stderr-error)
+           ;; Report an error.
            (let ((error  (read-latin1-string p))
                  ;; Currently the daemon fails to send a status code for early
                  ;; errors like DB schema version mismatches, so check for EOF.
@@ -377,6 +433,7 @@ encoding conversion errors."
                             #:key keep-failed? keep-going? fallback?
                             (verbosity 0)
                             (max-build-jobs (current-processor-count))
+                            timeout
                             (max-silent-time 3600)
                             (use-build-hook? #t)
                             (build-verbosity 0)
@@ -399,22 +456,21 @@ encoding conversion errors."
     (send (boolean keep-failed?) (boolean keep-going?)
           (boolean fallback?) (integer verbosity)
           (integer max-build-jobs) (integer max-silent-time))
-    (if (>= (nix-server-minor-version server) 2)
-        (send (boolean use-build-hook?)))
-    (if (>= (nix-server-minor-version server) 4)
-        (send (integer build-verbosity) (integer log-type)
-              (boolean print-build-trace)))
-    (if (>= (nix-server-minor-version server) 6)
-        (send (integer build-cores)))
-    (if (>= (nix-server-minor-version server) 10)
-        (send (boolean use-substitutes?)))
-    (if (>= (nix-server-minor-version server) 12)
-        (send (string-list (fold-right (lambda (pair result)
-                                         (match pair
-                                           ((h . t)
-                                            (cons* h t result))))
-                                       '()
-                                       binary-caches))))
+    (when (>= (nix-server-minor-version server) 2)
+      (send (boolean use-build-hook?)))
+    (when (>= (nix-server-minor-version server) 4)
+      (send (integer build-verbosity) (integer log-type)
+            (boolean print-build-trace)))
+    (when (>= (nix-server-minor-version server) 6)
+      (send (integer build-cores)))
+    (when (>= (nix-server-minor-version server) 10)
+      (send (boolean use-substitutes?)))
+    (when (>= (nix-server-minor-version server) 12)
+      (let ((pairs (if timeout
+                       `(("build-timeout" . ,(number->string timeout))
+                         ,@binary-caches)
+                       binary-caches)))
+        (send (string-pairs pairs))))
     (let loop ((done? (process-stderr server)))
       (or done? (process-stderr server)))))
 
@@ -445,6 +501,18 @@ encoding conversion errors."
 (define-operation (query-path-hash (store-path path))
   "Return the SHA256 hash of PATH as a bytevector."
   base16)
+
+(define hash-part->path
+  (let ((query-path-from-hash-part
+         (operation (query-path-from-hash-part (string hash))
+                    #f
+                    store-path)))
+   (lambda (server hash-part)
+     "Return the store path whose hash part is HASH-PART (a nix-base32
+string).  Raise an error if no such path exists."
+     ;; This RPC is primarily used by Hydra to reply to HTTP GETs of
+     ;; /HASH.narinfo.
+     (query-path-from-hash-part server hash-part))))
 
 (define add-text-to-store
   ;; A memoizing version of `add-to-store', to avoid repeated RPCs with
@@ -537,6 +605,40 @@ SEED."
 references, recursively)."
   (fold-path store cons '() path))
 
+(define (topologically-sorted store paths)
+  "Return a list containing PATHS and all their references sorted in
+topological order."
+  (define (traverse)
+    ;; Do a simple depth-first traversal of all of PATHS.
+    (let loop ((paths   paths)
+               (visited vlist-null)
+               (result  '()))
+      (define (visit n)
+        (vhash-cons n #t visited))
+
+      (define (visited? n)
+        (vhash-assoc n visited))
+
+      (match paths
+        ((head tail ...)
+         (if (visited? head)
+             (loop tail visited result)
+             (call-with-values
+                 (lambda ()
+                   (loop (references store head)
+                         (visit head)
+                         result))
+               (lambda (visited result)
+                 (loop tail
+                       visited
+                       (cons head result))))))
+        (()
+         (values visited result)))))
+
+  (call-with-values traverse
+    (lambda (_ result)
+      (reverse result))))
+
 (define referrers
   (operation (query-referrers (store-path path))
              "Return the list of path that refer to PATH."
@@ -624,6 +726,66 @@ MIN-FREED bytes have been collected.  Return the paths that were
 collected, and the number of bytes freed."
   (run-gc server (gc-action delete-specific) paths min-freed))
 
+(define (import-paths server port)
+  "Import the set of store paths read from PORT into SERVER's store.  An error
+is raised if the set of paths read from PORT is not signed (as per
+'export-path #:sign? #t'.)  Return the list of store paths imported."
+  (let ((s (nix-server-socket server)))
+    (write-int (operation-id import-paths) s)
+    (let loop ((done? (process-stderr server port)))
+      (or done? (loop (process-stderr server port))))
+    (read-store-path-list s)))
+
+(define* (export-path server path port #:key (sign? #t))
+  "Export PATH to PORT.  When SIGN? is true, sign it."
+  (let ((s (nix-server-socket server)))
+    (write-int (operation-id export-path) s)
+    (write-store-path path s)
+    (write-arg boolean sign? s)
+    (let loop ((done? (process-stderr server port)))
+      (or done? (loop (process-stderr server port))))
+    (= 1 (read-int s))))
+
+(define* (export-paths server paths port #:key (sign? #t))
+  "Export the store paths listed in PATHS to PORT, in topological order,
+signing them if SIGN? is true."
+  (define ordered
+    ;; Sort PATHS, but don't include their references.
+    (filter (cut member <> paths)
+            (topologically-sorted server paths)))
+
+  (let ((s (nix-server-socket server)))
+    (let loop ((paths ordered))
+      (match paths
+        (()
+         (write-int 0 port))
+        ((head tail ...)
+         (write-int 1 port)
+         (and (export-path server head port #:sign? sign?)
+              (loop tail)))))))
+
+(define* (register-path path
+                        #:key (references '()) deriver)
+  "Register PATH as a valid store file, with REFERENCES as its list of
+references, and DERIVER as its deriver (.drv that led to it.)  Return #t on
+success.
+
+Use with care as it directly modifies the store!  This is primarily meant to
+be used internally by the daemon's build hook."
+  ;; Currently this is implemented by calling out to the fine C++ blob.
+  (catch 'system-error
+    (lambda ()
+      (let ((pipe (open-pipe* OPEN_WRITE %guix-register-program)))
+        (and pipe
+             (begin
+               (format pipe "~a~%~a~%~a~%"
+                       path (or deriver "") (length references))
+               (for-each (cut format pipe "~a~%" <>) references)
+               (zero? (close-pipe pipe))))))
+    (lambda args
+      ;; Failed to run %GUIX-REGISTER-PROGRAM.
+      #f)))
+
 
 ;;;
 ;;; Store paths.
@@ -631,8 +793,7 @@ collected, and the number of bytes freed."
 
 (define %store-prefix
   ;; Absolute path to the Nix store.
-  (make-parameter (or (and=> (getenv "NIX_STORE_DIR") canonicalize-path)
-                      %store-directory)))
+  (make-parameter %store-directory))
 
 (define (store-path? path)
   "Return #t if PATH is a store path."
@@ -678,16 +839,16 @@ syntactically valid store path."
 (define (log-file store file)
   "Return the build log file for FILE, or #f if none could be found.  FILE
 must be an absolute store file name, or a derivation file name."
-  (define state-dir                               ; XXX: factorize
-    (or (getenv "NIX_STATE_DIR") %state-directory))
-
   (cond ((derivation-path? file)
-         (let* ((base (basename file))
-                (log  (string-append (dirname state-dir) ; XXX: ditto
-                                     "/log/nix/drvs/"
-                                     (string-take base 2) "/"
-                                     (string-drop base 2) ".bz2")))
-           (and (file-exists? log) log)))
+         (let* ((base    (basename file))
+                (log     (string-append (dirname %state-directory) ; XXX
+                                        "/log/guix/drvs/"
+                                        (string-take base 2) "/"
+                                        (string-drop base 2)))
+                (log.bz2 (string-append log ".bz2")))
+           (cond ((file-exists? log.bz2) log.bz2)
+                 ((file-exists? log) log)
+                 (else #f))))
         (else
          (match (valid-derivers store file)
            ((derivers ...)

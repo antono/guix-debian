@@ -282,6 +282,7 @@ struct RestoreSink : ParseSink
     void createRegularFile(const Path & path)
     {
         Path p = dstPath + path;
+        fd.close();
         fd = open(p.c_str(), O_CREAT | O_EXCL | O_WRONLY, 0666);
         if (fd == -1) throw SysError(format("creating file `%1%'") % p);
     }
@@ -318,8 +319,7 @@ struct RestoreSink : ParseSink
     void createSymlink(const Path & path, const string & target)
     {
         Path p = dstPath + path;
-        if (symlink(target.c_str(), p.c_str()) == -1)
-            throw SysError(format("creating symlink `%1%'") % p);
+        nix::createSymlink(target, p);
     }
 };
 

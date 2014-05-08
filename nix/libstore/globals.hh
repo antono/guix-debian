@@ -25,6 +25,8 @@ struct Settings {
 
     string pack();
 
+    void unpack(const string & pack);
+
     SettingsMap getOverrides();
 
     /* The directory where we store sources and derived files. */
@@ -144,6 +146,12 @@ struct Settings {
        chroot. */
     StringSet dirsInChroot;
 
+    /* Set of ssh connection strings for the ssh substituter */
+    Strings sshSubstituterHosts;
+
+    /* Whether to use the ssh substituter at all */
+    bool useSshSubstituter;
+
     /* Whether to impersonate a Linux 2.6 machine on newer kernels. */
     bool impersonateLinux26;
 
@@ -152,6 +160,10 @@ struct Settings {
 
     /* Whether to compress logs. */
     bool compressLog;
+
+    /* Maximum number of bytes a builder can write to stdout/stderr
+       before being killed (0 means no limit). */
+    unsigned long maxLogSize;
 
     /* Whether to cache build failures. */
     bool cacheFailure;
@@ -179,12 +191,19 @@ struct Settings {
        (to prevent them from being GCed). */
     bool envKeepDerivations;
 
+    /* Whether to lock the Nix client and worker to the same CPU. */
+    bool lockCPU;
+
+    /* Whether to show a stack trace if Nix evaluation fails. */
+    bool showTrace;
+
 private:
     SettingsMap settings, overrides;
 
     void get(string & res, const string & name);
     void get(bool & res, const string & name);
     void get(StringSet & res, const string & name);
+    void get(Strings & res, const string & name);
     template<class N> void get(N & res, const string & name);
 };
 

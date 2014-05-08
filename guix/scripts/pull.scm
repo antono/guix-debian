@@ -41,105 +41,14 @@
   "Return a derivation that unpacks TARBALL into STORE and compiles Scheme
 files."
   (define builder
-    `(begin
-       (use-modules (guix build utils)
-                    (system base compile)
-                    (ice-9 ftw)
-                    (ice-9 match)
-                    (srfi srfi-1)
-                    (srfi srfi-11)
-                    (srfi srfi-26))
+    '(begin
+       (use-modules (guix build pull))
 
-       (setvbuf (current-output-port) _IOLBF)
-       (setvbuf (current-error-port) _IOLBF)
-
-       (let ((out     (assoc-ref %outputs "out"))
-             (tar     (assoc-ref %build-inputs "tar"))
-             (gzip    (assoc-ref %build-inputs "gzip"))
-             (gcrypt  (assoc-ref %build-inputs "gcrypt"))
-             (tarball (assoc-ref %build-inputs "tarball")))
-
-         (define* (compile-file* file #:key output-file (opts '()))
-           ;; Like 'compile-file', but remove any (guix …) and (gnu …) modules
-           ;; created during the process as an ugly workaround for
-           ;; <http://bugs.gnu.org/15602> (FIXME).  This ensures correctness,
-           ;; but is overly conservative and very slow.
-
-           (define (module-directory+file module)
-             ;; Return the directory for MODULE, like the 'dir-hint' in
-             ;; boot-9.scm.
-             (match (module-name module)
-               ((beginning ... last)
-                (values (string-concatenate
-                         (map (lambda (elt)
-                                (string-append (symbol->string elt)
-                                               file-name-separator-string))
-                              beginning))
-                        (symbol->string last)))))
-
-           (define (clear-module-tree! root)
-             ;; Delete all the modules under ROOT.
-             (hash-for-each (lambda (name module)
-                              (module-remove! root name)
-                              (let-values (((dir name)
-                                            (module-directory+file module)))
-                                (set-autoloaded! dir name #f))
-                              (clear-module-tree! module))
-                            (module-submodules root))
-             (hash-clear! (module-submodules root)))
-
-           (compile-file file #:output-file output-file #:opts opts)
-
-           (for-each (compose clear-module-tree! resolve-module)
-                     '((guix) (gnu))))
-
-         (setenv "PATH" (string-append tar "/bin:" gzip "/bin"))
-
-         (system* "tar" "xvf" tarball)
-         (match (scandir "." (lambda (name)
-                               (and (not (member name '("." "..")))
-                                    (file-is-directory? name))))
-           ((dir)
-            (chdir dir))
-           (x
-            (error "tarball did not produce a single source directory" x)))
-
-         (format #t "copying and compiling Guix to `~a'...~%" out)
-
-         ;; Copy everything under guix/ and gnu/ plus guix.scm.
-         (copy-recursively "guix" (string-append out "/guix"))
-         (copy-recursively "gnu" (string-append out "/gnu"))
-         (copy-file "guix.scm" (string-append out "/guix.scm"))
-
-         ;; Add a fake (guix config) module to allow the other modules to be
-         ;; compiled.  The user's (guix config) is the one that will be used.
-         (copy-file "guix/config.scm.in"
-                    (string-append out "/guix/config.scm"))
-         (substitute* (string-append out "/guix/config.scm")
-           (("@LIBGCRYPT@")
-            (string-append gcrypt "/lib/libgcrypt")))
-
-         ;; Augment the search path so Scheme code can be compiled.
-         (set! %load-path (cons out %load-path))
-         (set! %load-compiled-path (cons out %load-compiled-path))
-
-         ;; Compile the .scm files.
-         (for-each (lambda (file)
-                     (when (string-suffix? ".scm" file)
-                       (let ((go (string-append (string-drop-right file 4)
-                                                ".go")))
-                         (format (current-error-port)
-                                 "compiling '~a'...~%" file)
-                         (compile-file* file
-                                        #:output-file go
-                                        #:opts
-                                        %auto-compilation-options))))
-
-                   (find-files out "\\.scm"))
-
-         ;; Remove the "fake" (guix config).
-         (delete-file (string-append out "/guix/config.scm"))
-         (delete-file (string-append out "/guix/config.go")))))
+       (build-guix (assoc-ref %outputs "out")
+                   (assoc-ref %build-inputs "tarball")
+                   #:tar (assoc-ref %build-inputs "tar")
+                   #:gzip (assoc-ref %build-inputs "gzip")
+                   #:gcrypt (assoc-ref %build-inputs "gcrypt"))))
 
   (build-expression->derivation store "guix-latest" builder
                                 #:inputs
@@ -148,7 +57,8 @@ files."
                                   ("gcrypt" ,(package-derivation store
                                                                  libgcrypt))
                                   ("tarball" ,tarball))
-                                #:modules '((guix build utils))))
+                                #:modules '((guix build pull)
+                                            (guix build utils))))
 
 
 ;;;

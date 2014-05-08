@@ -48,6 +48,8 @@ struct RunningSubstituter
     Pid pid;
     AutoCloseFD to, from, error;
     FdSource fromBuf;
+    bool disabled;
+    RunningSubstituter() : disabled(false) { };
 };
 
 
@@ -148,7 +150,7 @@ public:
 
     Paths importPaths(bool requireSignature, Source & source);
 
-    void buildPaths(const PathSet & paths, bool repair = false);
+    void buildPaths(const PathSet & paths, BuildMode buildMode);
 
     void ensurePath(const Path & path);
 
@@ -175,7 +177,7 @@ public:
 
     /* Register the validity of a path, i.e., that `path' exists, that
        the paths referenced by it exists, and in the case of an output
-       path of a derivation, that it has been produced by a succesful
+       path of a derivation, that it has been produced by a successful
        execution of the derivation (or something equivalent).  Also
        register the hash of the file system contents of the path.  The
        hash must be a SHA-256 hash. */
@@ -302,6 +304,10 @@ private:
     void checkDerivationOutputs(const Path & drvPath, const Derivation & drv);
 
     void optimisePath_(OptimiseStats & stats, const Path & path);
+
+    // Internal versions that are not wrapped in retry_sqlite.
+    bool isValidPath_(const Path & path);
+    void queryReferrers_(const Path & path, PathSet & referrers);
 };
 
 
@@ -316,24 +322,12 @@ typedef set<Inode> InodesSeen;
    - the permissions are set of 444 or 555 (i.e., read-only with or
      without execute permission; setuid bits etc. are cleared)
    - the owner and group are set to the Nix user and group, if we're
-     in a setuid Nix installation. */
+     running as root. */
 void canonicalisePathMetaData(const Path & path, uid_t fromUid, InodesSeen & inodesSeen);
 void canonicalisePathMetaData(const Path & path, uid_t fromUid);
 
 void canonicaliseTimestampAndPermissions(const Path & path);
 
 MakeError(PathInUse, Error);
-
-/* Whether we are root. */
-bool amPrivileged();
-
-/* Recursively change the ownership of `path' to the current uid. */
-void getOwnership(const Path & path);
-
-/* Like deletePath(), but changes the ownership of `path' using the
-   setuid wrapper if necessary (and possible). */
-void deletePathWrapped(const Path & path, unsigned long long & bytesFreed);
-
-void deletePathWrapped(const Path & path);
 
 }

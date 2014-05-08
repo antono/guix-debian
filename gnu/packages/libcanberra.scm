@@ -25,8 +25,8 @@
   #:use-module (gnu packages gstreamer)
   #:use-module (gnu packages gtk)
   #:use-module (gnu packages linux)
-  #:use-module (gnu packages oggvorbis)
-  #:use-module (gnu packages pkg-config))
+  #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages xiph))
 
 (define-public libcanberra
   (package
@@ -47,8 +47,9 @@
        ("gstreamer" ,gstreamer)
        ("gtk+" ,gtk+)
        ("libtool" ,libtool)
-       ("libvorbis" ,libvorbis)
-       ("pkg-config" ,pkg-config)))
+       ("libvorbis" ,libvorbis)))
+    (native-inputs
+     `(("pkg-config" ,pkg-config)))
     (home-page "http://0pointer.de/lennart/projects/libcanberra/")
     (synopsis
      "Implementation of the XDG Sound Theme and Name Specifications")

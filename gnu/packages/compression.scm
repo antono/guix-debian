@@ -1,6 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
+;;; Copyright © 2014 Mark H Weaver <mhw@netris.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -100,7 +101,7 @@ file; as a result, it is often used in conjunction with \"tar\", resulting in
          '(lambda* (#:key outputs #:allow-other-keys)
             (with-directory-excursion (assoc-ref outputs "out")
               (mkdir "share")
-              (rename-file "man" "share"))))
+              (rename-file "man" "share/man"))))
         (build-shared-lib
          ;; Build a shared library.
          '(lambda* (#:key inputs #:allow-other-keys)
@@ -279,7 +280,7 @@ archiving.  Lzip is a clean implementation of the LZMA algorithm.")
          'patch-source-shebangs 'unpatch-source-shebang
          ;; revert the patch-shebang phase on a script which is
          ;; in fact test data
-         (lambda* (#:key #:allow-other-keys)
+         (lambda _
            (substitute* "tests/shar-1.ok"
              (((which "sh")) "/bin/sh")))
          %standard-phases)))

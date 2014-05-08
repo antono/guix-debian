@@ -1,5 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
+;;; Copyright © 2014 Mark H Weaver <mhw@netris.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -26,14 +27,17 @@
 (define-public file
   (package
    (name "file")
-   (version "5.12")
+   (version "5.18")
    (source (origin
             (method url-fetch)
             (uri (string-append "ftp://ftp.astron.com/pub/file/file-"
                    version ".tar.gz"))
             (sha256 (base32
-                     "08ix4xrvan0k80n0l5lqfmc4azjv5lyhvhwdxny4r09j5smhv78r"))))
+                     "01xz106biz6x4h5ilymg5v3367djvgnfp4lm87132cjqdmqgn6b5"))))
    (build-system gnu-build-system)
+   (native-inputs
+    ;; This package depends upon a native install of itself.
+     (if (%current-target-system) `(("file" ,file)) '() ))
    (synopsis "file, a file type guesser")
    (description
     "The file command is a file type guesser, a command-line tool that tells

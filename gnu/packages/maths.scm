@@ -1,6 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2013 Nikita Karetnikov <nikita@karetnikov.org>
+;;; Copyright © 2014 John Darrington <jmd@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -26,35 +27,46 @@
   #:use-module (guix build-system cmake)
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages compression)
+  #:use-module (gnu packages curl)
+  #:use-module (gnu packages elf)
+  #:use-module (gnu packages fltk)
   #:use-module (gnu packages fontutils)
   #:use-module (gnu packages gettext)
   #:use-module (gnu packages gcc)
+  #:use-module (gnu packages gd)
+  #:use-module (gnu packages ghostscript)
   #:use-module (gnu packages gtk)
+  #:use-module (gnu packages less)
+  #:use-module (gnu packages xorg)
+  #:use-module (gnu packages gl)
   #:use-module (gnu packages multiprecision)
+  #:use-module (gnu packages pcre)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
   #:use-module (gnu packages readline)
+  #:use-module (gnu packages texinfo)
+  #:use-module (gnu packages texlive)
   #:use-module (gnu packages xml))
 
 (define-public units
   (package
    (name "units")
-   (version "2.02")
+   (version "2.11")
    (source (origin
             (method url-fetch)
             (uri (string-append "mirror://gnu/units/units-" version
                                 ".tar.gz"))
             (sha256 (base32
-                     "16jfji9g1zc99agd5dcinajinhcxr4dgq2lrbc9md69ir5qgld1b"))))
+                     "1gjs3wc212aaiq4r76hx9nl1h3fa39n0ljwl9420d6ixl3rdmdjk"))))
    (build-system gnu-build-system)
    (synopsis "Conversion between thousands of scales")
    (description
-    "GNU Units converts between measured quantities between units of
-measure.  It can handle scale changes through adaptive usage of standard
-scale prefixes (micro-, kilo-, etc.).  It can also handle nonlinear
-conversions such as Fahrenheit to Celsius.  Its interpreter is powerful
-enough to be used effectively as a scientific calculator.")
+    "GNU Units converts numeric quantities between units of measure.  It
+can handle scale changes through adaptive usage of standard scale prefixes
+(micro-, kilo-, etc.).  It can also handle nonlinear conversions such as
+Fahrenheit to Celsius.  Its interpreter is powerful enough to be used
+effectively as a scientific calculator.")
    (license license:gpl3+)
    (home-page "http://www.gnu.org/software/units/")))
 
@@ -98,7 +110,7 @@ numbers.")
 (define-public glpk
   (package
     (name "glpk")
-    (version "4.52.1")
+    (version "4.54")
     (source
      (origin
       (method url-fetch)
@@ -106,7 +118,7 @@ numbers.")
                           version ".tar.gz"))
       (sha256
        (base32
-        "0nz9ngmx23c8gbjr8l8ygnfaanxj2mwbl8awpg630bgrkxdnhc9j"))))
+        "18gr2anv8gyps6j9f22k7li6w07glvww666sdqblvlq2hh3whwmb"))))
     (build-system gnu-build-system)
     (inputs
      `(("gmp" ,gmp)))
@@ -125,7 +137,7 @@ LP/MIP solver is included in the package.")
 (define-public pspp
   (package
     (name "pspp")
-    (version "0.8.1")
+    (version "0.8.2")
     (source
      (origin
       (method url-fetch)
@@ -133,8 +145,7 @@ LP/MIP solver is included in the package.")
                           version ".tar.gz"))
       (sha256
        (base32
-        "0qhxsdbwxd3cn1shc13wxvx2lg32lp4z6sz24kv3jz7p5xfi8j7x"))
-      (patches (list (search-patch "pspp-tests.patch")))))
+        "1w7h3dglgx0jlq1wb605b8pgfsk2vr1q2q2rj7bsajh9ihbcsixr"))))
     (build-system gnu-build-system)
     (inputs
      `(("cairo" ,cairo)
@@ -164,7 +175,7 @@ output in text, PostScript, PDF or HTML.")
 (define-public lapack
   (package
     (name "lapack")
-    (version "3.4.2")
+    (version "3.5.0")
     (source
      (origin
       (method url-fetch)
@@ -172,34 +183,169 @@ output in text, PostScript, PDF or HTML.")
                           version ".tgz"))
       (sha256
        (base32
-        "1w7sf8888m7fi2kyx1fzgbm22193l8c2d53m8q1ibhvfy6m5v9k0"))
-      (snippet
-       ;; Remove non-free files.
-       ;; See <http://icl.cs.utk.edu/lapack-forum/archives/lapack/msg01383.html>.
-       '(for-each (lambda (file)
-                    (format #t "removing '~a'~%" file)
-                    (delete-file file))
-                  '("lapacke/example/example_DGESV_rowmajor.c"
-                    "lapacke/example/example_ZGESV_rowmajor.c"
-                    "DOCS/psfig.tex")))))
+        "0lk3f97i9imqascnlf6wr5mjpyxqcdj73pgj97dj2mgvyg9z1n4s"))))
     (build-system cmake-build-system)
     (home-page "http://www.netlib.org/lapack/")
+    (native-inputs `(("patchelf" ,patchelf))) ;for augment-rpath
     (inputs `(("fortran" ,gfortran-4.8)
               ("python" ,python-2)))
     (arguments
      `(#:modules ((guix build cmake-build-system)
                   (guix build utils)
+                  (guix build rpath)
                   (srfi srfi-1))
+       #:imported-modules ((guix build cmake-build-system)
+                           (guix build gnu-build-system)
+                           (guix build utils)
+                           (guix build rpath))
+       #:configure-flags '("-DBUILD_SHARED_LIBS:BOOL=YES")
        #:phases (alist-cons-before
                  'check 'patch-python
                  (lambda* (#:key inputs #:allow-other-keys)
                    (let ((python (assoc-ref inputs "python")))
                      (substitute* "lapack_testing.py"
                        (("/usr/bin/env python") python))))
-                 %standard-phases)))
+                 (alist-cons-after
+                  'strip 'add-libs-to-runpath
+                  (lambda* (#:key inputs outputs #:allow-other-keys)
+                    (let* ((out     (assoc-ref outputs "out"))
+                           (fortran (assoc-ref inputs "fortran"))
+                           (libc    (assoc-ref inputs "libc"))
+                           (rpaths  `(,(string-append fortran "/lib64")
+                                      ,(string-append fortran "/lib")
+                                      ,(string-append libc "/lib")
+                                      ,(string-append out "/lib"))))
+                      ;; Set RUNPATH for all libraries
+                      (with-directory-excursion out
+                        (for-each
+                         (lambda (lib)
+                           (let ((lib-rpaths (file-rpath lib)))
+                             (for-each
+                              (lambda (dir)
+                                (or (member dir lib-rpaths)
+                                    (augment-rpath lib dir)))
+                              rpaths)))
+                         (find-files "lib" ".*so$")))))
+                  %standard-phases))))
     (synopsis "Library for numerical linear algebra")
     (description
      "LAPACK is a Fortran 90 library for solving the most commonly occurring
 problems in numerical linear algebra.")
     (license (license:bsd-style "file://LICENSE"
                                 "See LICENSE in the distribution."))))
+
+(define-public gnuplot
+  (package
+    (name "gnuplot")
+    (version "4.6.3")
+    (source
+     (origin
+      (method url-fetch)
+      (uri (string-append "mirror://sourceforge/gnuplot/gnuplot/"
+                                version "/gnuplot-" version ".tar.gz"))
+      (sha256
+       (base32
+        "1xd7gqdhlk7k1p9yyqf9vkk811nadc7m4si0q3nb6cpv4pxglpyz"))))
+    (build-system gnu-build-system)
+    (inputs `(("readline" ,readline)
+              ("cairo" ,cairo)
+              ("pango" ,pango)
+              ("gd" ,gd)))
+    (native-inputs `(("texlive" ,texlive)
+                     ("pkg-config" ,pkg-config)))
+    (home-page "http://www.gnuplot.info")
+    (synopsis "Command-line driven graphing utility")
+    (description "Gnuplot is a portable command-line driven graphing
+utility. It was originally created to allow scientists and students to
+visualize mathematical functions and data interactively, but has grown to
+support many non-interactive uses such as web scripting. It is also used as a
+plotting engine by third-party applications like Octave.")
+    ;;  X11 Style with the additional restriction that derived works may only be
+    ;;  distributed as patches to the original.
+    (license (license:fsf-free
+	      "http://gnuplot.cvs.sourceforge.net/gnuplot/gnuplot/Copyright"))))
+
+(define-public hdf5
+  (package
+    (name "hdf5")
+    (version "1.8.12")
+    (source
+     (origin
+      (method url-fetch)
+      (uri (string-append "http://www.hdfgroup.org/ftp/HDF5/current/src/hdf5-"
+                          version ".tar.bz2"))
+      (sha256
+       (base32 "0f9n0v3p3lwc7564791a39c6cn1d3dbrn7d1j3ikqsi27a8hy23d"))))
+    (build-system gnu-build-system)
+    (arguments
+     `(#:phases
+        (alist-cons-before
+         'configure 'patch-configure
+         (lambda _
+           (substitute* "configure"
+             (("/bin/mv") "mv")))
+         %standard-phases)))
+    (outputs '("out" "bin" "lib" "include"))
+    (home-page "http://www.hdfgroup.org")
+    (synopsis "Management suite for  extremely large and complex data")
+    (description "HDF5 is a suite that makes possible the management of
+extremely large and complex data collections.")
+    (license (license:x11-style
+              "http://www.hdfgroup.org/ftp/HDF5/current/src/unpacked/COPYING"))))
+
+
+;; For a fully featured Octave, users  are strongly recommended also to install
+;; the following packages: texinfo, less, ghostscript, gnuplot.
+(define-public octave
+  (package
+    (name "octave")
+    (version "3.8.0")
+    (source
+     (origin
+      (method url-fetch)
+      (uri (string-append "mirror://gnu/octave/octave-"
+			  version ".tar.gz"))
+      (sha256
+       (base32
+	"0ks9pr154syw0vb3jn6xsnrkkrbvf9y7i7gaxa28rz6ngxbxvq9l"))))
+    (build-system gnu-build-system)
+    (inputs
+     `(("lapack" ,lapack)
+       ("readline" ,readline)
+       ("glpk" ,glpk)
+       ("curl" ,curl)
+       ("pcre" ,pcre)
+       ("fltk" ,fltk)
+       ("fontconfig" ,fontconfig)
+       ("freetype" ,freetype)
+       ("hdf5-lib" ,hdf5 "lib")
+       ("hdf5-include" ,hdf5 "include")
+       ("libxft" ,libxft)
+       ("mesa" ,mesa)
+       ("zlib" ,zlib)))
+    (native-inputs
+     `(("gfortran" ,gfortran-4.8)
+       ("pkg-config" ,pkg-config)
+       ("perl" ,perl)
+       ;; The following inputs are not actually used in the build process.  However, the
+       ;; ./configure gratuitously tests for their existence and assumes that programs not
+       ;; present at build time are also not, and can never be, available at run time!
+       ;; If these inputs are therefore not present, support for them will be built out.
+       ;; However, Octave will still run without them, albeit without the features they
+       ;; provide.
+       ("less" ,less)
+       ("texinfo" ,texinfo)
+       ("ghostscript" ,ghostscript)
+       ("gnuplot" ,gnuplot)))
+    (arguments
+     `(#:configure-flags (list (string-append "--with-shell="
+			    (assoc-ref %build-inputs "bash")
+			    "/bin/sh"))))
+    (home-page "http://www.gnu.org/software/octave/")
+    (synopsis "High-level language for numerical computation")
+    (description "GNU Octave is a high-level interpreted language that is specialized
+for numerical computations.  It can be used for both linear and non-linear
+applications and it provides great support for visualizing results.  Work may
+be performed both at the interactive command-line as well as via script
+files.")
+    (license license:gpl3+)))

@@ -1,5 +1,5 @@
 # GNU Guix --- Functional package management for GNU
-# Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+# Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 #
 # This file is part of GNU Guix.
 #
@@ -25,7 +25,8 @@ CLEANFILES += $(BUILT_SOURCES)
 
 noinst_LIBRARIES = libformat.a libutil.a libstore.a
 
-AM_CXXFLAGS = -Wall
+# Use '-std=c++0x' for 'std::shared_ptr'.
+AM_CXXFLAGS = -Wall -std=c++0x
 
 libformat_a_SOURCES =				\
   nix/boost/format/free_funcs.cc		\
@@ -33,10 +34,7 @@ libformat_a_SOURCES =				\
   nix/boost/format/format_implementation.cc
 
 libformat_headers =				\
-  nix/boost/weak_ptr.hpp			\
   nix/boost/throw_exception.hpp			\
-  nix/boost/checked_delete.hpp			\
-  nix/boost/shared_ptr.hpp			\
   nix/boost/format.hpp				\
   nix/boost/assert.hpp				\
   nix/boost/format/macros_default.hpp		\
@@ -46,16 +44,14 @@ libformat_headers =				\
   nix/boost/format/group.hpp			\
   nix/boost/format/feed_args.hpp		\
   nix/boost/format/internals_fwd.hpp		\
-  nix/boost/format/internals.hpp		\
-  nix/boost/detail/workaround.hpp		\
-  nix/boost/detail/shared_count.hpp		\
-  nix/boost/enable_shared_from_this.hpp
+  nix/boost/format/internals.hpp
 
 libformat_a_CPPFLAGS =				\
   -I$(top_srcdir)/nix
 
 libutil_a_SOURCES =				\
   nix/libutil/archive.cc			\
+  nix/libutil/affinity.cc			\
   nix/libutil/serialise.cc			\
   nix/libutil/util.cc				\
   nix/libutil/xml-writer.cc			\
@@ -63,6 +59,7 @@ libutil_a_SOURCES =				\
   nix/libutil/gcrypt-hash.cc
 
 libutil_headers =				\
+  nix/libutil/affinity.hh			\
   nix/libutil/hash.hh				\
   nix/libutil/serialise.hh			\
   nix/libutil/xml-writer.hh			\
@@ -110,14 +107,14 @@ libstore_a_CPPFLAGS =				\
   -I$(top_builddir)/nix/libstore		\
   -DNIX_STORE_DIR=\"$(storedir)\"		\
   -DNIX_DATA_DIR=\"$(datadir)\"			\
-  -DNIX_STATE_DIR=\"$(localstatedir)/nix\"	\
-  -DNIX_LOG_DIR=\"$(localstatedir)/log/nix\"	\
-  -DNIX_CONF_DIR=\"$(sysconfdir)/nix\"		\
+  -DNIX_STATE_DIR=\"$(localstatedir)/guix\"	\
+  -DNIX_LOG_DIR=\"$(localstatedir)/log/guix\"	\
+  -DNIX_CONF_DIR=\"$(sysconfdir)/guix\"		\
   -DNIX_LIBEXEC_DIR=\"$(libexecdir)\"		\
   -DNIX_BIN_DIR=\"$(bindir)\"			\
-  -DOPENSSL_PATH="\"openssl\""
+  -DOPENSSL_PATH="\"guix-authenticate\""
 
-libstore_a_CXXFLAGS =				\
+libstore_a_CXXFLAGS = $(AM_CXXFLAGS)		\
   $(SQLITE3_CFLAGS) $(LIBGCRYPT_CFLAGS)
 
 bin_PROGRAMS = guix-daemon
@@ -153,16 +150,6 @@ guix_register_LDADD =				\
   $(SQLITE3_LIBS) $(LIBGCRYPT_LIBS)
 
 
-libexec_PROGRAMS = nix-setuid-helper
-nix_setuid_helper_SOURCES =			\
-  nix/nix-setuid-helper/nix-setuid-helper.cc
-
-nix_setuid_helper_CPPFLAGS =			\
-  $(libutil_a_CPPFLAGS)
-
-nix_setuid_helper_LDADD =			\
-  libutil.a libformat.a
-
 noinst_HEADERS =						\
   $(libformat_headers) $(libutil_headers) $(libstore_headers)	\
   $(guix_daemon_headers)
@@ -179,6 +166,18 @@ nix/libstore/schema.sql.hh: nix/libstore/schema.sql
 nodist_pkglibexec_SCRIPTS =			\
   nix/scripts/list-runtime-roots		\
   nix/scripts/substitute-binary
+
+if BUILD_DAEMON_OFFLOAD
+
+nodist_pkglibexec_SCRIPTS +=			\
+  nix/scripts/offload
+
+endif BUILD_DAEMON_OFFLOAD
+
+
+# XXX: It'd be better to hide it in $(pkglibexecdir).
+nodist_libexec_SCRIPTS =			\
+  nix/scripts/guix-authenticate
 
 EXTRA_DIST +=					\
   nix/sync-with-upstream			\

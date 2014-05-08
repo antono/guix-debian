@@ -4,6 +4,7 @@
 #include "serialise.hh"
 #include "worker-protocol.hh"
 #include "archive.hh"
+#include "affinity.hh"
 #include "globals.hh"
 
 #include <cstring>
@@ -25,8 +26,13 @@ using namespace nix;
    that lack it, we only notice the disconnection the next time we try
    to write to the client.  So if you have a builder that never
    generates output on stdout/stderr, the daemon will never notice
-   that the client has disconnected until the builder terminates. */
-#ifdef O_ASYNC
+   that the client has disconnected until the builder terminates.
+
+   GNU/Hurd does have O_ASYNC, but its Unix-domain socket translator
+   (pflocal) does not implement F_SETOWN.  See
+   <http://lists.gnu.org/archive/html/bug-guix/2013-07/msg00021.html> for
+   details.*/
+#if defined O_ASYNC && !defined __GNU__
 #define HAVE_HUP_NOTIFICATION
 #ifndef SIGPOLL
 #define SIGPOLL SIGIO
@@ -288,8 +294,14 @@ static void performOp(bool trusted, unsigned int clientVersion,
 #endif
 
     case wopIsValidPath: {
-        Path path = readStorePath(from);
+        /* 'readStorePath' could raise an error leading to the connection
+           being closed.  To be able to recover from an invalid path error,
+           call 'startWork' early, and do 'assertStorePath' afterwards so
+           that the 'Error' exception handler doesn't close the
+           connection.  */
+        Path path = readString(from);
         startWork();
+        assertStorePath(path);
         bool result = store->isValidPath(path);
         stopWork();
         writeInt(result, to);
@@ -531,10 +543,10 @@ static void performOp(bool trusted, unsigned int clientVersion,
     case wopSetOptions: {
         settings.keepFailed = readInt(from) != 0;
         settings.keepGoing = readInt(from) != 0;
-        settings.tryFallback = readInt(from) != 0;
+        settings.set("build-fallback", readInt(from) ? "true" : "false");
         verbosity = (Verbosity) readInt(from);
-        settings.maxBuildJobs = readInt(from);
-        settings.maxSilentTime = readInt(from);
+        settings.set("build-max-jobs", int2String(readInt(from)));
+        settings.set("build-max-silent-time", int2String(readInt(from)));
         if (GET_PROTOCOL_MINOR(clientVersion) >= 2)
             settings.useBuildHook = readInt(from) != 0;
         if (GET_PROTOCOL_MINOR(clientVersion) >= 4) {
@@ -543,20 +555,21 @@ static void performOp(bool trusted, unsigned int clientVersion,
             settings.printBuildTrace = readInt(from) != 0;
         }
         if (GET_PROTOCOL_MINOR(clientVersion) >= 6)
-            settings.buildCores = readInt(from);
+            settings.set("build-cores", int2String(readInt(from)));
         if (GET_PROTOCOL_MINOR(clientVersion) >= 10)
-            settings.useSubstitutes = readInt(from) != 0;
+            settings.set("build-use-substitutes", readInt(from) ? "true" : "false");
         if (GET_PROTOCOL_MINOR(clientVersion) >= 12) {
             unsigned int n = readInt(from);
             for (unsigned int i = 0; i < n; i++) {
                 string name = readString(from);
                 string value = readString(from);
-                if (name == "build-timeout")
-                    string2Int(value, settings.buildTimeout);
+                if (name == "build-timeout" || name == "use-ssh-substituter")
+                    settings.set(name, value);
                 else
                     settings.set(trusted ? name : "untrusted-" + name, value);
             }
         }
+        settings.update();
         startWork();
         stopWork();
         break;
@@ -666,6 +679,9 @@ static void processConnection(bool trusted)
     to.flush();
     unsigned int clientVersion = readInt(from);
 
+    if (GET_PROTOCOL_MINOR(clientVersion) >= 14 && readInt(from))
+        setAffinityTo(readInt(from));
+
     bool reserveSpace = true;
     if (GET_PROTOCOL_MINOR(clientVersion) >= 11)
         reserveSpace = readInt(from) != 0;
@@ -686,7 +702,7 @@ static void processConnection(bool trusted)
 #endif
 
         /* Open the store. */
-        store = boost::shared_ptr<StoreAPI>(new LocalStore(reserveSpace));
+        store = std::shared_ptr<StoreAPI>(new LocalStore(reserveSpace));
 
         stopWork();
         to.flush();
@@ -713,7 +729,7 @@ static void processConnection(bool trusted)
         try {
             performOp(trusted, clientVersion, from, to, op);
         } catch (Error & e) {
-            /* If we're not in a state were we can send replies, then
+            /* If we're not in a state where we can send replies, then
                something went wrong processing the input of the
                client.  This can happen especially if I/O errors occur
                during addTextToStore() / importPath().  If that
@@ -722,6 +738,10 @@ static void processConnection(bool trusted)
             if (!errorAllowed) printMsg(lvlError, format("error processing client input: %1%") % e.msg());
             stopWork(false, e.msg(), GET_PROTOCOL_MINOR(clientVersion) >= 8 ? e.status : 0);
             if (!errorAllowed) break;
+        } catch (std::bad_alloc & e) {
+            if (canSendStderr)
+                stopWork(false, "Nix daemon out of memory", GET_PROTOCOL_MINOR(clientVersion) >= 8 ? 1 : 0);
+            throw;
         }
 
         to.flush();
@@ -884,7 +904,7 @@ static void daemonLoop()
                     processConnection(trusted);
 
                 } catch (std::exception & e) {
-                    writeToStderr("child error: " + string(e.what()) + "\n");
+                    writeToStderr("unexpected Nix daemon error: " + string(e.what()) + "\n");
                 }
                 exit(0);
             }

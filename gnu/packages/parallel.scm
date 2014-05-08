@@ -27,7 +27,7 @@
 (define-public parallel
   (package
     (name "parallel")
-    (version "20131122")
+    (version "20140322")
     (source
      (origin
       (method url-fetch)
@@ -35,9 +35,9 @@
                           version ".tar.bz2"))
       (sha256
        (base32
-        "1l19grs8nimkninig4h0hfmnykm41j0amcvav6ic4wfd33v0lppg"))))
+        "1zk95pbdbx7dhcg8z168zg8i4r36b39rim6dffxlr6kghlch6sdl"))))
     (build-system gnu-build-system)
-    (inputs `(("perl" ,perl))) 
+    (inputs `(("perl" ,perl)))
     (home-page "http://www.gnu.org/software/parallel/")
     (synopsis "Build and execute command lines in parallel")
     (description

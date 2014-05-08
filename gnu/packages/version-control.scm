@@ -1,8 +1,9 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013 Nikita Karetnikov <nikita@karetnikov.org>
 ;;; Copyright © 2013 Cyril Roelandt <tipecaml@gmail.com>
-;;; Copyright © 2013 Ludovic Courtès <ludo@gnu.org>
-;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
+;;; Copyright © 2013, 2014 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013, 2014 Andreas Enge <andreas@enge.fr>
+;;; Copyright © 2014 Mark H Weaver <mhw@netris.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -26,16 +27,18 @@
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system python)
   #:use-module (guix build utils)
-  #:use-module (gnu packages gettext)
   #:use-module (gnu packages apr)
   #:use-module (gnu packages curl)
   #:use-module (gnu packages ed)
+  #:use-module (gnu packages gettext)
+;;   #:use-module (gnu packages gnutls)
   #:use-module (gnu packages nano)
   #:use-module (gnu packages openssl)
   #:use-module (gnu packages perl)
+  #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
   #:use-module (gnu packages sqlite)
-  #:use-module (gnu packages system)
+  #:use-module (gnu packages admin)
   #:use-module (gnu packages xml)
   #:use-module (gnu packages emacs)
   #:use-module (gnu packages compression)
@@ -61,8 +64,14 @@
      `(("gettext" ,gnu-gettext)))
     (arguments
      `(#:tests? #f ; no test target
-       #:python ,python-2)) ; Python 3 apparently not yet supported, see
+       #:python ,python-2   ; Python 3 apparently not yet supported, see
                             ; https://answers.launchpad.net/bzr/+question/229048
+       #:phases (alist-cons-after
+                 'unpack 'fix-mandir
+                 (lambda _
+                   (substitute* "setup.py"
+                     (("man/man1") "share/man/man1")))
+                 %standard-phases)))
     (home-page "https://gnu.org/software/bazaar")
     (synopsis "Version control system supporting both distributed and centralized workflows")
     (description
@@ -83,10 +92,12 @@ as well as the classic centralized workflow.")
              (base32
               "156bwqqgaw65rsvbb4wih5jfg94bxyf6p16mdwf0ky3f4ln55s2i"))))
    (build-system gnu-build-system)
+   (native-inputs
+    `(("native-perl" ,perl)
+      ("gettext" ,gnu-gettext)))
    (inputs
     `(("curl" ,curl)
       ("expat" ,expat)
-      ("gettext" ,gnu-gettext)
       ("openssl" ,openssl)
       ("perl" ,perl)
       ("python" ,python-2) ; CAVEAT: incompatible with python-3 according to INSTALL
@@ -113,15 +124,13 @@ as well as the classic centralized workflow.")
                                              "/bin/wish8.6")) ; XXX
 
       #:phases
-       (alist-replace
-        'configure
-        (lambda* (#:key #:allow-other-keys #:rest args)
-          (let ((configure (assoc-ref %standard-phases 'configure)))
-            (and (apply configure args)
-                 (substitute* "Makefile"
-                   (("/bin/sh") (which "sh"))
-                   (("/usr/bin/perl") (which "perl"))
-                   (("/usr/bin/python") (which "python"))))))
+       (alist-cons-after
+        'configure 'patch-makefile-shebangs
+        (lambda _
+          (substitute* "Makefile"
+            (("/bin/sh") (which "sh"))
+            (("/usr/bin/perl") (which "perl"))
+            (("/usr/bin/python") (which "python"))))
         (alist-cons-after
          'install 'split
          (lambda* (#:key inputs outputs #:allow-other-keys)
@@ -136,7 +145,9 @@ as well as the classic centralized workflow.")
                   (git-cit  (string-append out "/libexec/git-core/git-citool"))
                   (git-cit* (string-append gui "/libexec/git-core/git-citool"))
                   (git-svn  (string-append out "/libexec/git-core/git-svn"))
-                  (git-svn* (string-append svn "/libexec/git-core/git-svn")))
+                  (git-svn* (string-append svn "/libexec/git-core/git-svn"))
+                  (git-sm   (string-append out
+                                           "/libexec/git-core/git-submodule")))
              (mkdir-p (string-append gui "/bin"))
              (mkdir-p (string-append gui "/libexec/git-core"))
              (mkdir-p (string-append svn "/libexec/git-core"))
@@ -162,6 +173,12 @@ as well as the classic centralized workflow.")
                            `("LD_LIBRARY_PATH" ":" prefix
                              (,(string-append (assoc-ref inputs "subversion")
                                               "/lib"))))
+
+             ;; Tell 'git-submodule' where Perl is.
+             (wrap-program git-sm
+                           `("PATH" ":" prefix
+                             (,(string-append (assoc-ref inputs "perl")
+                                              "/bin"))))
 
              ;; Tell 'git' to look for core programs in the user's profile.
              ;; This allows user to install other outputs of this package and
@@ -206,17 +223,77 @@ It efficiently handles projects of any size
 and offers an easy and intuitive interface.")
     (license gpl2+)))
 
+(define-public neon
+  (package
+    (name "neon")
+    (version "0.30.0")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "http://www.webdav.org/neon/neon-"
+                                 version ".tar.gz"))
+             (sha256
+              (base32
+               "1hlhg5w505jxdvaf7bq17057f6a48dry981g7lp2gwrhbp5wyqi9"))))
+    (build-system gnu-build-system)
+    (native-inputs
+     `(("perl" ,perl)
+       ("pkg-config" ,pkg-config)))
+    (inputs
+     `(("libxml2" ,libxml2)
+       ("openssl" ,openssl)
+       ("zlib" ,zlib)))
+    (arguments
+     `(;; FIXME: Add tests once reverse address lookup is fixed in glibc, see
+       ;; https://sourceware.org/bugzilla/show_bug.cgi?id=16475
+       #:tests? #f
+       #:configure-flags '("--enable-shared"
+                           ;; requires libgnutils-config, deprecated
+                           ;; in gnutls 2.8.
+                           ; "--with-ssl=gnutls")))
+                           "--with-ssl=openssl")))
+    (home-page "http://www.webdav.org/neon/")
+    (synopsis "HTTP and WebDAV client library")
+    (description "Neon is an HTTP and WebDAV client library, with a
+C interface.  Features:
+High-level wrappers for common HTTP and WebDAV operations (GET, MOVE,
+DELETE, etc.);
+low-level interface to the HTTP request/response engine, allowing the use
+of arbitrary HTTP methods, headers, etc.;
+authentication support including Basic and Digest support, along with
+GSSAPI-based Negotiate on Unix, and SSPI-based Negotiate/NTLM on Win32;
+SSL/TLS support using OpenSSL or GnuTLS, exposing an abstraction layer for
+verifying server certificates, handling client certificates, and examining
+certificate properties, smartcard-based client certificates are also
+supported via a PKCS#11 wrapper interface;
+abstract interface to parsing XML using libxml2 or expat, and wrappers for
+simplifying handling XML HTTP response bodies;
+WebDAV metadata support, wrappers for PROPFIND and PROPPATCH to simplify
+property manipulation.")
+    (license gpl2+))) ; for documentation and tests; source under lgpl2.0+
+
+(define-public neon-0.29.6
+  (package (inherit neon)
+    (name "neon")
+    (version "0.29.6")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "http://www.webdav.org/neon/neon-"
+                                 version ".tar.gz"))
+             (sha256
+              (base32
+               "0hzbjqdx1z8zw0vmbknf159wjsxbcq8ii0wgwkqhxj3dimr0nr4w"))))))
+
 (define-public subversion
   (package
     (name "subversion")
-    (version "1.7.8")
+    (version "1.7.14")
     (source (origin
              (method url-fetch)
              (uri (string-append "http://archive.apache.org/dist/subversion/subversion-"
                                  version ".tar.bz2"))
              (sha256
               (base32
-               "11inl9n1riahfnbk1fax0dysm2swakzhzhpmm2zvga6fikcx90zw"))))
+               "038jbcpwm083abp0rvk0fhnx65kp9mz1qvzs3f83ig8fxcvqzb64"))))
     (build-system gnu-build-system)
     (arguments
      '(#:phases (alist-cons-after
@@ -240,11 +317,13 @@ and offers an easy and intuitive interface.")
                                   (system* "make" "install")))))))
                  %standard-phases)))
     (native-inputs
-      ;; For the Perl bindings.
-      `(("swig" ,swig)))
+      `(("pkg-config" ,pkg-config)
+        ;; For the Perl bindings.
+        ("swig" ,swig)))
     (inputs
       `(("apr" ,apr)
         ("apr-util" ,apr-util)
+        ("neon" ,neon-0.29.6)
         ("perl" ,perl)
         ("python" ,python-2) ; incompatible with Python 3 (print syntax)
         ("sqlite" ,sqlite)

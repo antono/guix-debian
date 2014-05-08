@@ -1,5 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013, 2014 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2014 Mark H Weaver <mhw@netris.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -33,11 +34,17 @@
   #:use-module (gnu packages perl)
   #:use-module (gnu packages readline)
   #:use-module (gnu packages texinfo)
+  #:use-module (gnu packages compression)
+  #:use-module (gnu packages glib)
+  #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages flex)
+  #:use-module (gnu packages bdb)
   #:use-module ((guix licenses)
-                #:select (gpl2+ gpl3+ lgpl3+))
+                #:select (gpl2 gpl2+ gpl3+ lgpl2.1+ lgpl3+))
   #:use-module (guix packages)
   #:use-module (guix download)
-  #:use-module (guix build-system gnu))
+  #:use-module (guix build-system gnu)
+  #:use-module (srfi srfi-1))
 
 (define-public mailutils
   (package
@@ -79,7 +86,11 @@
        ("guile" ,guile-2.0)
        ("gnutls" ,gnutls)
        ("ncurses" ,ncurses)
-       ("readline" ,readline)
+
+       ;; With Readline 6.3, examples/pop3client.c fails to build because it
+       ;; uses the now undefined 'CPPFunction' type.
+       ("readline" ,readline-6.2)
+
        ("linux-pam" ,linux-pam)
        ("libtool" ,libtool)
        ("gdbm" ,gdbm)))
@@ -131,14 +142,18 @@ aliasing facilities to work just as they would on normal mail.")
 (define-public mutt
   (package
     (name "mutt")
-    (version "1.5.21")
+    (version "1.5.23")
     (source (origin
              (method url-fetch)
-             (uri (string-append "ftp://ftp.mutt.org/mutt/devel/mutt-"
-                                 version ".tar.gz"))
+             (uri (list ;; Temporarily put bitbucket first, because
+                        ;; ftp.mutt.org has been down for a while.
+                        (string-append "https://bitbucket.org/mutt/mutt/downloads/mutt-"
+                                       version ".tar.gz")
+                        (string-append "ftp://ftp.mutt.org/mutt/devel/mutt-"
+                                       version ".tar.gz")))
              (sha256
               (base32
-               "1864cwz240gh0zy56fb47qqzwyf6ghg01037rb4p2kqgimpg6h91"))))
+               "0dzx4qk50pjfsb6cs5jahng96a52k12f7pm0sc78iqdrawg71w1s"))))
     (build-system gnu-build-system)
     (inputs
      `(("cyrus-sasl" ,cyrus-sasl)
@@ -162,3 +177,80 @@ aliasing facilities to work just as they would on normal mail.")
      "Mutt is a small but very powerful text-based mail client for Unix
 operating systems.")
     (license gpl2+)))
+
+(define-public gmime
+  (package
+    (name "gmime")
+    (version "2.6.19")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://gnome/sources/gmime/"
+                                  (string-join (take (string-split version #\.)
+                                                     2)
+                                               ".")
+                                  "/gmime-" version ".tar.xz"))
+              (sha256
+               (base32
+                "0jm1fgbjgh496rsc0il2y46qd4bqq2ln9168p4zzh68mk4ml1yxg"))))
+    (build-system gnu-build-system)
+    (native-inputs
+     `(("pkg-config" ,pkg-config)
+       ("gnupg" ,gnupg)))               ; for tests only
+    (inputs `(("glib" ,glib)
+              ("gpgme" ,gpgme)
+              ("zlib" ,zlib)))
+    (arguments
+     `(#:phases
+       (alist-cons-after
+        'unpack 'patch-paths-in-tests
+        (lambda _
+          ;; The test programs run several programs using 'system'
+          ;; with hard-coded paths.  Here we patch them all.  We also
+          ;; change "gpg" to "gpg2".
+          (substitute* (find-files "tests" "\\.c$")
+            (("(system *\\(\")(/[^ ]*)" all pre prog-path)
+             (let* ((base (basename prog-path))
+                    (prog (which (if (string=? base "gpg") "gpg2" base))))
+              (string-append pre (or prog (error "not found: " base)))))))
+        %standard-phases)))
+    (home-page "http://spruce.sourceforge.net/gmime/")
+    (synopsis "MIME message parser and creator library")
+    (description
+     "GMime provides a core library and set of utilities which may be used for
+the creation and parsing of messages using the Multipurpose Internet Mail
+Extension (MIME).")
+    (license (list lgpl2.1+ gpl2+ gpl3+))))
+
+(define-public bogofilter
+  (package
+    (name "bogofilter")
+    (version "1.2.4")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://sourceforge/bogofilter/bogofilter-"
+                                  version "/bogofilter-"
+                                  version ".tar.bz2"))
+              (sha256
+               (base32
+                "1d56n2m9inm8gnzm88aa27xl2a7sp7aff3484vmflpqkinjqf0p1"))))
+    (build-system gnu-build-system)
+    (arguments
+     '(#:phases (alist-cons-before
+                 'check 'pre-check
+                 (lambda _
+                   (substitute* "src/tests/t.frame"
+                     (("GREP=/bin/grep")
+                      (string-append "GREP=" (which "grep") "\n"))))
+                 %standard-phases)))
+    (native-inputs `(("flex" ,flex)))
+    (inputs `(("bdb" ,bdb)))
+    (home-page "http://bogofilter.sourceforge.net/")
+    (synopsis "Mail classifier based on a Bayesian filter")
+    (description
+     "Bogofilter is a mail filter that classifies mail as spam or ham
+ (non-spam) by a statistical analysis of the message's header and
+content (body).  The program is able to learn from the user's classifications
+and corrections.  It is based on a Bayesian filter.")
+    (license gpl2)))
+
+;;; mail.scm ends here
