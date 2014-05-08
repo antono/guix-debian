@@ -5,8 +5,7 @@
 
 #include <string>
 #include <map>
-
-#include <boost/shared_ptr.hpp>
+#include <memory>
 
 
 namespace nix {
@@ -96,6 +95,9 @@ struct ValidPathInfo
 };
 
 typedef list<ValidPathInfo> ValidPathInfos;
+
+
+enum BuildMode { bmNormal, bmRepair, bmCheck };
 
 
 class StoreAPI 
@@ -190,7 +192,7 @@ public:
        output paths can be created by running the builder, after
        recursively building any sub-derivations. For inputs that are
        not derivations, substitute them. */
-    virtual void buildPaths(const PathSet & paths, bool repair = false) = 0;
+    virtual void buildPaths(const PathSet & paths, BuildMode buildMode = bmNormal) = 0;
 
     /* Ensure that a path is valid.  If it is not currently valid, it
        may be made valid by running a substitute (if defined for the
@@ -334,12 +336,12 @@ Paths topoSortPaths(StoreAPI & store, const PathSet & paths);
 
 /* For now, there is a single global store API object, but we'll
    purify that in the future. */
-extern boost::shared_ptr<StoreAPI> store;
+extern std::shared_ptr<StoreAPI> store;
 
 
 /* Factory method: open the Nix database, either through the local or
    remote implementation. */
-boost::shared_ptr<StoreAPI> openStore(bool reserveSpace = true);
+std::shared_ptr<StoreAPI> openStore(bool reserveSpace = true);
 
 
 /* Display a set of paths in human-readable form (i.e., between quotes

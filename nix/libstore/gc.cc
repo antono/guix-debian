@@ -2,8 +2,6 @@
 #include "misc.hh"
 #include "local-store.hh"
 
-#include <boost/shared_ptr.hpp>
-
 #include <functional>
 #include <queue>
 #include <algorithm>
@@ -21,8 +19,6 @@ namespace nix {
 static string gcLockName = "gc.lock";
 static string tempRootsDir = "temproots";
 static string gcRootsDir = "gcroots";
-
-static const int defaultGcLevel = 1000;
 
 
 /* Acquire the global GC lock.  This is used to prevent new Nix
@@ -55,7 +51,7 @@ int LocalStore::openGCLock(LockType lockType)
 }
 
 
-void createSymlink(const Path & link, const Path & target)
+static void makeSymlink(const Path & link, const Path & target)
 {
     /* Create directories up to `gcRoot'. */
     createDirs(dirOf(link));
@@ -63,9 +59,7 @@ void createSymlink(const Path & link, const Path & target)
     /* Create the new symlink. */
     Path tempLink = (format("%1%.tmp-%2%-%3%")
         % link % getpid() % rand()).str();
-    if (symlink(target.c_str(), tempLink.c_str()) == -1)
-        throw SysError(format("symlinking `%1%' to `%2%'")
-            % tempLink % target);
+    createSymlink(target, tempLink);
 
     /* Atomically replace the old one. */
     if (rename(tempLink.c_str(), link.c_str()) == -1)
@@ -85,7 +79,7 @@ void LocalStore::addIndirectRoot(const Path & path)
     string hash = printHash32(hashString(htSHA1, path));
     Path realRoot = canonPath((format("%1%/%2%/auto/%3%")
         % settings.nixStateDir % gcRootsDir % hash).str());
-    createSymlink(realRoot, path);
+    makeSymlink(realRoot, path);
 }
 
 
@@ -106,7 +100,7 @@ Path addPermRoot(StoreAPI & store, const Path & _storePath,
            point to the Nix store. */
         if (pathExists(gcRoot) && (!isLink(gcRoot) || !isInStore(readLink(gcRoot))))
             throw Error(format("cannot create symlink `%1%'; already exists") % gcRoot);
-        createSymlink(gcRoot, storePath);
+        makeSymlink(gcRoot, storePath);
         store.addIndirectRoot(gcRoot);
     }
 
@@ -121,7 +115,7 @@ Path addPermRoot(StoreAPI & store, const Path & _storePath,
                     % gcRoot % rootsDir);
         }
 
-        createSymlink(gcRoot, storePath);
+        makeSymlink(gcRoot, storePath);
     }
 
     /* Check that the root can be found by the garbage collector.
@@ -228,7 +222,7 @@ struct RemoveTempRoots
 static RemoveTempRoots autoRemoveTempRoots __attribute__((unused));
 
 
-typedef boost::shared_ptr<AutoCloseFD> FDPtr;
+typedef std::shared_ptr<AutoCloseFD> FDPtr;
 typedef list<FDPtr> FDs;
 
 
@@ -258,8 +252,7 @@ static void readTempRoots(PathSet & tempRoots, FDs & fds)
            only succeed if the owning process has died.  In that case
            we don't care about its temporary roots. */
         if (lockFile(*fd, ltWrite, false)) {
-            printMsg(lvlError, format("removing stale temporary roots file `%1%'")
-                % path);
+            printMsg(lvlError, format("removing stale temporary roots file `%1%'") % path);
             unlink(path.c_str());
             writeFull(*fd, (const unsigned char *) "d", 1);
             continue;
@@ -290,46 +283,47 @@ static void readTempRoots(PathSet & tempRoots, FDs & fds)
 }
 
 
-static void findRoots(StoreAPI & store, const Path & path,
-    bool recurseSymlinks, bool deleteStale, Roots & roots)
+static void foundRoot(StoreAPI & store,
+    const Path & path, const Path & target, Roots & roots)
+{
+    Path storePath = toStorePath(target);
+    if (store.isValidPath(storePath))
+        roots[path] = storePath;
+    else
+        printMsg(lvlInfo, format("skipping invalid root from `%1%' to `%2%'") % path % storePath);
+}
+
+
+static void findRoots(StoreAPI & store, const Path & path, Roots & roots)
 {
     try {
 
-        struct stat st;
-        if (lstat(path.c_str(), &st) == -1)
-            throw SysError(format("statting `%1%'") % path);
-
-        printMsg(lvlVomit, format("looking at `%1%'") % path);
+        struct stat st = lstat(path);
 
         if (S_ISDIR(st.st_mode)) {
             Strings names = readDirectory(path);
             foreach (Strings::iterator, i, names)
-                findRoots(store, path + "/" + *i, recurseSymlinks, deleteStale, roots);
+                findRoots(store, path + "/" + *i, roots);
         }
 
         else if (S_ISLNK(st.st_mode)) {
-            Path target = absPath(readLink(path), dirOf(path));
+            Path target = readLink(path);
+            if (isInStore(target))
+                foundRoot(store, path, target, roots);
 
-            if (isInStore(target)) {
-                debug(format("found root `%1%' in `%2%'")
-                    % target % path);
-                Path storePath = toStorePath(target);
-                if (store.isValidPath(storePath))
-                    roots[path] = storePath;
-                else
-                    printMsg(lvlInfo, format("skipping invalid root from `%1%' to `%2%'")
-                        % path % storePath);
-            }
-
-            else if (recurseSymlinks) {
-                if (pathExists(target))
-                    findRoots(store, target, false, deleteStale, roots);
-                else if (deleteStale) {
-                    printMsg(lvlInfo, format("removing stale link from `%1%' to `%2%'") % path % target);
-                    /* Note that we only delete when recursing, i.e.,
-                       when we are still in the `gcroots' tree.  We
-                       never delete stuff outside that tree. */
-                    unlink(path.c_str());
+            /* Handle indirect roots. */
+            else {
+                target = absPath(target, dirOf(path));
+                if (!pathExists(target)) {
+                    if (isInDir(path, settings.nixStateDir + "/" + gcRootsDir + "/auto")) {
+                        printMsg(lvlInfo, format("removing stale link from `%1%' to `%2%'") % path % target);
+                        unlink(path.c_str());
+                    }
+                } else {
+                    struct stat st2 = lstat(target);
+                    if (!S_ISLNK(st2.st_mode)) return;
+                    Path target2 = readLink(target);
+                    if (isInStore(target2)) foundRoot(store, target, target2, roots);
                 }
             }
         }
@@ -346,18 +340,16 @@ static void findRoots(StoreAPI & store, const Path & path,
 }
 
 
-static Roots findRoots(StoreAPI & store, bool deleteStale)
-{
-    Roots roots;
-    Path rootsDir = canonPath((format("%1%/%2%") % settings.nixStateDir % gcRootsDir).str());
-    findRoots(store, rootsDir, true, deleteStale, roots);
-    return roots;
-}
-
-
 Roots LocalStore::findRoots()
 {
-    return nix::findRoots(*this, false);
+    Roots roots;
+
+    /* Process direct roots in {gcroots,manifests,profiles}. */
+    nix::findRoots(*this, settings.nixStateDir + "/" + gcRootsDir, roots);
+    nix::findRoots(*this, settings.nixStateDir + "/manifests", roots);
+    nix::findRoots(*this, settings.nixStateDir + "/profiles", roots);
+
+    return roots;
 }
 
 
@@ -417,7 +409,7 @@ bool LocalStore::isActiveTempFile(const GCState & state,
 void LocalStore::deleteGarbage(GCState & state, const Path & path)
 {
     unsigned long long bytesFreed;
-    deletePathWrapped(path, bytesFreed);
+    deletePath(path, bytesFreed);
     state.results.bytesFreed += bytesFreed;
 }
 
@@ -637,7 +629,7 @@ void LocalStore::collectGarbage(const GCOptions & options, GCResults & results)
     /* Find the roots.  Since we've grabbed the GC lock, the set of
        permanent roots cannot increase now. */
     printMsg(lvlError, format("finding garbage collector roots..."));
-    Roots rootMap = options.ignoreLiveness ? Roots() : nix::findRoots(*this, true);
+    Roots rootMap = options.ignoreLiveness ? Roots() : findRoots();
 
     foreach (Roots::iterator, i, rootMap) state.roots.insert(i->second);
 
@@ -736,6 +728,7 @@ void LocalStore::collectGarbage(const GCOptions & options, GCResults & results)
 
     /* Allow other processes to add to the store from here on. */
     fdGCLock.close();
+    fds.clear();
 
     /* Delete the trash directory. */
     printMsg(lvlInfo, format("deleting `%1%'") % state.trashDir);

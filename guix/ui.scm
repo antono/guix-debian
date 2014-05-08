@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2013 Mark H Weaver <mhw@netris.org>
 ;;; Copyright © 2013 Nikita Karetnikov <nikita@karetnikov.org>
 ;;;
@@ -31,6 +31,7 @@
   #:use-module (srfi srfi-19)
   #:use-module (srfi srfi-26)
   #:use-module (srfi srfi-34)
+  #:use-module (srfi srfi-35)
   #:use-module (srfi srfi-37)
   #:autoload   (ice-9 ftw)  (scandir)
   #:use-module (ice-9 match)
@@ -42,6 +43,7 @@
             show-version-and-exit
             show-bug-report-information
             string->number*
+            size->number
             show-what-to-build
             call-with-error-handling
             with-error-handling
@@ -138,7 +140,7 @@ messages."
   "Display version information for COMMAND and `(exit 0)'."
   (simple-format #t "~a (~a) ~a~%"
                  command %guix-package-name %guix-version)
-  (display (_ "Copyright (C) 2013 the Guix authors
+  (display (_ "Copyright (C) 2014 the Guix authors
 License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
 This is free software: you are free to change and redistribute it.
 There is NO WARRANTY, to the extent permitted by law.
@@ -158,6 +160,38 @@ General help using GNU software: <http://www.gnu.org/gethelp/>"))
   "Like `string->number', but error out with an error message on failure."
   (or (string->number str)
       (leave (_ "~a: invalid number~%") str)))
+
+(define (size->number str)
+  "Convert STR, a storage measurement representation such as \"1024\" or
+\"1MiB\", to a number of bytes.  Raise an error if STR could not be
+interpreted."
+  (define unit-pos
+    (string-rindex str char-set:digit))
+
+  (define unit
+    (and unit-pos (substring str (+ 1 unit-pos))))
+
+  (let* ((numstr (if unit-pos
+                     (substring str 0 (+ 1 unit-pos))
+                     str))
+         (num    (string->number numstr)))
+    (unless num
+      (leave (_ "invalid number: ~a~%") numstr))
+
+    ((compose inexact->exact round)
+     (* num
+        (match unit
+          ("KiB" (expt 2 10))
+          ("MiB" (expt 2 20))
+          ("GiB" (expt 2 30))
+          ("TiB" (expt 2 40))
+          ("KB"  (expt 10 3))
+          ("MB"  (expt 10 6))
+          ("GB"  (expt 10 9))
+          ("TB"  (expt 10 12))
+          (""    1)
+          (_
+           (leave (_ "unknown unit: ~a~%") unit)))))))
 
 (define (call-with-error-handling thunk)
   "Call THUNK within a user-friendly error handler."
@@ -186,13 +220,16 @@ General help using GNU software: <http://www.gnu.org/gethelp/>"))
             ((nix-protocol-error? c)
              ;; FIXME: Server-provided error messages aren't i18n'd.
              (leave (_ "build failed: ~a~%")
-                    (nix-protocol-error-message c))))
+                    (nix-protocol-error-message c)))
+            ((message-condition? c)
+             ;; Normally '&message' error conditions have an i18n'd message.
+             (leave (_ "~a~%") (gettext (condition-message c)))))
     ;; Catch EPIPE and the likes.
     (catch 'system-error
       thunk
-      (lambda args
-        (leave (_ "~a~%")
-               (strerror (system-error-errno args)))))))
+      (lambda (key proc format-string format-args . rest)
+        (leave (_ "~a: ~a~%") proc
+               (apply format #f format-string format-args))))))
 
 (define (read/eval str)
   "Read and evaluate STR, raising an error if something goes wrong."
@@ -404,7 +441,11 @@ WIDTH columns."
   (format port "location: ~a~%"
           (or (and=> (package-location p) location->string)
               (_ "unknown")))
-  (format port "home-page: ~a~%" (package-home-page p))
+
+  ;; Note: Starting from version 1.6 or recutils, hyphens are not allowed in
+  ;; field identifiers.
+  (format port "homepage: ~a~%" (package-home-page p))
+
   (format port "license: ~a~%"
           (match (package-license p)
             (((? license? licenses) ...)
@@ -554,13 +595,17 @@ reporting."
        (command-files)))
 
 (define (show-guix-help)
+  (define (internal? command)
+    (member command '("substitute-binary" "authenticate" "offload")))
+
   (format #t (_ "Usage: guix COMMAND ARGS...
 Run COMMAND with ARGS.\n"))
   (newline)
   (format #t (_ "COMMAND must be one of the sub-commands listed below:\n"))
   (newline)
   ;; TODO: Display a synopsis of each command.
-  (format #t "~{   ~a~%~}" (sort (commands) string<?))
+  (format #t "~{   ~a~%~}" (sort (remove internal? (commands))
+                                 string<?))
   (show-bug-report-information))
 
 (define program-name

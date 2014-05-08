@@ -1,5 +1,5 @@
 # GNU Guix --- Functional package management for GNU
-# Copyright © 2013 Ludovic Courtès <ludo@gnu.org>
+# Copyright © 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 #
 # This file is part of GNU Guix.
 #
@@ -29,6 +29,33 @@ rm -rf "$new_store"
 exit_hook=":"
 trap "chmod -R +w $new_store ; rm -rf $new_store $closure ; \$exit_hook" EXIT
 
+#
+# Registering items in the current store---i.e., without '--prefix'.
+#
+
+new_file="$NIX_STORE_DIR/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-guix-register-$$"
+echo "Fake store file to test registration." > "$new_file"
+
+# Register the file with zero references and no deriver.
+guix-register <<EOF
+$new_file
+
+0
+EOF
+
+# Make sure it's valid, and delete it.
+guile -c "
+   (use-modules (guix store))
+   (define s (open-connection))
+   (exit (and (valid-path? s \"$new_file\")
+              (null? (references s \"$new_file\"))
+              (pair? (delete-paths s (list \"$new_file\")))))"
+
+
+#
+# Registering items in a new store, with '--prefix'.
+#
+
 mkdir -p "$new_store/$storedir"
 new_store_dir="`cd "$new_store/$storedir" ; pwd`"
 new_store="`cd "$new_store" ; pwd`"
@@ -57,8 +84,8 @@ guix-register --prefix "$new_store" "$closure"
 NIX_IGNORE_SYMLINK_STORE=1
 NIX_STORE_DIR="$new_store_dir"
 NIX_STATE_DIR="$new_store$localstatedir"
-NIX_LOG_DIR="$new_store$localstatedir/log/nix"
-NIX_DB_DIR="$new_store$localstatedir/nix/db"
+NIX_LOG_DIR="$new_store$localstatedir/log/guix"
+NIX_DB_DIR="$new_store$localstatedir/guix/db"
 
 export NIX_IGNORE_SYMLINK_STORE NIX_STORE_DIR NIX_STATE_DIR	\
   NIX_LOG_DIR NIX_DB_DIR

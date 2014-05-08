@@ -21,6 +21,7 @@
   #:use-module (guix download)
   #:use-module (guix build-system gnu)
   #:use-module ((guix licenses) #:select (gpl2+))
+  #:use-module (gnu packages)
   #:use-module (gnu packages xorg)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages readline)
@@ -37,12 +38,11 @@
                                  version ".tar.xz"))
              (sha256
               (base32
-               "0v4mh8d3vsh5xbbycfdl3g8zfygi1rkslh1x7k5hi1d05bfq3cdr"))))
+               "0v4mh8d3vsh5xbbycfdl3g8zfygi1rkslh1x7k5hi1d05bfq3cdr"))
+             (patches (list (search-patch "ratpoison-shell.patch")))))
     (build-system gnu-build-system)
     (inputs
-     `(("perl" ,perl)
-       ("pkg-config" ,pkg-config)
-       ("libXi" ,libxi)
+     `(("libXi" ,libxi)
        ("readline" ,readline)
        ("xextproto" ,xextproto)
        ("libXtst" ,libxtst)
@@ -53,6 +53,9 @@
        ("libXt" ,libxt)
        ("inputproto" ,inputproto)
        ("libX11" ,libx11)))
+    (native-inputs
+      `(("perl" ,perl)
+        ("pkg-config" ,pkg-config)))
     (home-page "http://www.nongnu.org/ratpoison/")
     (synopsis "A simple mouse-free tiling window manager")
     (description

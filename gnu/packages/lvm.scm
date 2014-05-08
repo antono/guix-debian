@@ -38,7 +38,7 @@
              (base32
               "0r6q6z8ip6q5qgkzng0saljassp4912k6i21ra10vq7pzrc0l0vi"))))
    (build-system gnu-build-system)
-   (inputs
+   (native-inputs
      `(("pkg-config" ,pkg-config)
        ("procps" ,procps)))
    (arguments
@@ -46,14 +46,12 @@
       #:configure-flags
        `(,(string-append "--with-confdir=" (assoc-ref %outputs "out") "/etc"))
       #:phases
-       (alist-replace
-        'configure
-        (lambda* (#:key #:allow-other-keys #:rest args)
-          (let ((configure (assoc-ref %standard-phases 'configure)))
-            (substitute* "make.tmpl.in"
-              (("/bin/sh") (which "sh"))
-              (("CC \\?=") "CC =")) ; force CC argument to be set from configure
-            (apply configure args)))
+       (alist-cons-before
+        'configure 'patch-make-tmpl
+        (lambda _
+          (substitute* "make.tmpl.in"
+            (("/bin/sh") (which "sh"))
+            (("CC \\?=") "CC ="))) ; force CC argument to be set from configure
          %standard-phases)))
    (synopsis "logical volume management")
    (description

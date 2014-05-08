@@ -12,6 +12,10 @@
 #include <fcntl.h>
 #include <limits.h>
 
+#ifdef __APPLE__
+#include <sys/syscall.h>
+#endif
+
 #include "util.hh"
 
 
@@ -21,22 +25,22 @@ extern char * * environ;
 namespace nix {
 
 
-BaseError::BaseError(const format & f, unsigned int status)
+BaseError::BaseError(const FormatOrString & fs, unsigned int status)
     : status(status)
 {
-    err = f.str();
+    err = fs.s;
 }
 
 
-BaseError & BaseError::addPrefix(const format & f)
+BaseError & BaseError::addPrefix(const FormatOrString & fs)
 {
-    prefix_ = f.str() + prefix_;
+    prefix_ = fs.s + prefix_;
     return *this;
 }
 
 
-SysError::SysError(const format & f)
-    : Error(format("%1%: %2%") % f.str() % strerror(errno))
+SysError::SysError(const FormatOrString & fs)
+    : Error(format("%1%: %2%") % fs.s % strerror(errno))
     , errNo(errno)
 {
 }
@@ -145,6 +149,15 @@ string baseNameOf(const Path & path)
     if (pos == string::npos)
         throw Error(format("invalid file name `%1%'") % path);
     return string(path, pos + 1);
+}
+
+
+bool isInDir(const Path & path, const Path & dir)
+{
+    return path[0] == '/'
+        && string(path, 0, dir.size()) == dir
+        && path.size() >= dir.size() + 2
+        && path[dir.size()] == '/';
 }
 
 
@@ -268,34 +281,6 @@ void writeLine(int fd, string s)
 }
 
 
-static void _computePathSize(const Path & path,
-    unsigned long long & bytes, unsigned long long & blocks)
-{
-    checkInterrupt();
-
-    struct stat st = lstat(path);
-
-    bytes += st.st_size;
-    blocks += st.st_blocks;
-
-    if (S_ISDIR(st.st_mode)) {
-        Strings names = readDirectory(path);
-
-        for (Strings::iterator i = names.begin(); i != names.end(); ++i)
-            _computePathSize(path + "/" + *i, bytes, blocks);
-    }
-}
-
-
-void computePathSize(const Path & path,
-    unsigned long long & bytes, unsigned long long & blocks)
-{
-    bytes = 0;
-    blocks = 0;
-    _computePathSize(path, bytes, blocks);
-}
-
-
 static void _deletePath(const Path & path, unsigned long long & bytesFreed)
 {
     checkInterrupt();
@@ -338,25 +323,6 @@ void deletePath(const Path & path, unsigned long long & bytesFreed)
         format("recursively deleting path `%1%'") % path);
     bytesFreed = 0;
     _deletePath(path, bytesFreed);
-}
-
-
-void makePathReadOnly(const Path & path)
-{
-    checkInterrupt();
-
-    struct stat st = lstat(path);
-
-    if (!S_ISLNK(st.st_mode) && (st.st_mode & S_IWUSR)) {
-        if (chmod(path.c_str(), st.st_mode & ~S_IWUSR) == -1)
-            throw SysError(format("making `%1%' read-only") % path);
-    }
-
-    if (S_ISDIR(st.st_mode)) {
-        Strings names = readDirectory(path);
-        for (Strings::iterator i = names.begin(); i != names.end(); ++i)
-            makePathReadOnly(path + "/" + *i);
-    }
 }
 
 
@@ -420,6 +386,13 @@ Paths createDirs(const Path & path)
 }
 
 
+void createSymlink(const Path & target, const Path & link)
+{
+    if (symlink(target.c_str(), link.c_str()))
+        throw SysError(format("creating symlink from `%1%' to `%2%'") % link % target);
+}
+
+
 LogType logType = ltPretty;
 Verbosity verbosity = lvlInfo;
 
@@ -444,14 +417,14 @@ static string escVerbosity(Verbosity level)
 }
 
 
-void Nest::open(Verbosity level, const format & f)
+void Nest::open(Verbosity level, const FormatOrString & fs)
 {
     if (level <= verbosity) {
         if (logType == ltEscapes)
             std::cerr << "\033[" << escVerbosity(level) << "p"
-                      << f.str() << "\n";
+                      << fs.s << "\n";
         else
-            printMsg_(level, f);
+            printMsg_(level, fs);
         nest = true;
         nestingLevel++;
     }
@@ -469,7 +442,7 @@ void Nest::close()
 }
 
 
-void printMsg_(Verbosity level, const format & f)
+void printMsg_(Verbosity level, const FormatOrString & fs)
 {
     checkInterrupt();
     if (level > verbosity) return;
@@ -479,15 +452,15 @@ void printMsg_(Verbosity level, const format & f)
             prefix += "|   ";
     else if (logType == ltEscapes && level != lvlInfo)
         prefix = "\033[" + escVerbosity(level) + "s";
-    string s = (format("%1%%2%\n") % prefix % f.str()).str();
+    string s = (format("%1%%2%\n") % prefix % fs.s).str();
     writeToStderr(s);
 }
 
 
-void warnOnce(bool & haveWarned, const format & f)
+void warnOnce(bool & haveWarned, const FormatOrString & fs)
 {
     if (!haveWarned) {
-        printMsg(lvlError, format("warning: %1%") % f.str());
+        printMsg(lvlError, format("warning: %1%") % fs.s);
         haveWarned = true;
     }
 }
@@ -616,8 +589,8 @@ AutoCloseFD::AutoCloseFD(int fd)
 
 AutoCloseFD::AutoCloseFD(const AutoCloseFD & fd)
 {
-    /* Copying a AutoCloseFD isn't allowed (who should get to close
-       it?).  But as a edge case, allow copying of closed
+    /* Copying an AutoCloseFD isn't allowed (who should get to close
+       it?).  But as an edge case, allow copying of closed
        AutoCloseFDs.  This is necessary due to tiresome reasons
        involving copy constructor use on default object values in STL
        containers (like when you do `map[value]' where value isn't in
@@ -790,6 +763,7 @@ void Pid::kill()
 
 int Pid::wait(bool block)
 {
+    assert(pid != -1);
     while (1) {
         int status;
         int res = waitpid(pid, &status, block ? 0 : WNOHANG);
@@ -841,7 +815,16 @@ void killUser(uid_t uid)
                 throw SysError("setting uid");
 
             while (true) {
+#ifdef __APPLE__
+                /* OSX's kill syscall takes a third parameter that, among other
+                   things, determines if kill(-1, signo) affects the calling
+                   process. In the OSX libc, it's set to true, which means
+                   "follow POSIX", which we don't want here
+                 */
+                if (syscall(SYS_kill, -1, SIGKILL, false) == 0) break;
+#else
                 if (kill(-1, SIGKILL) == 0) break;
+#endif
                 if (errno == ESRCH) break; /* no more processes */
                 if (errno != EINTR)
                     throw SysError(format("cannot kill processes for uid `%1%'") % uid);
@@ -945,19 +928,6 @@ void closeOnExec(int fd)
 }
 
 
-void setuidCleanup()
-{
-    /* Don't trust the environment. */
-    environ = 0;
-
-    /* Make sure that file descriptors 0, 1, 2 are open. */
-    for (int fd = 0; fd <= 2; ++fd) {
-        struct stat st;
-        if (fstat(fd, &st) == -1) abort();
-    }
-}
-
-
 #if HAVE_VFORK
 pid_t (*maybeVfork)() = vfork;
 #else
@@ -1057,14 +1027,6 @@ string statusToString(int status)
 bool statusOk(int status)
 {
     return WIFEXITED(status) && WEXITSTATUS(status) == 0;
-}
-
-
-string int2String(int n)
-{
-    std::ostringstream str;
-    str << n;
-    return str.str();
 }
 
 

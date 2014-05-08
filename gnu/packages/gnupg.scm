@@ -1,6 +1,8 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
+;;; Copyright © 2014 Eric Bavier <bavier@member.fsf.org>
+;;; Copyright © 2014 Mark H Weaver <mhw@netris.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -27,6 +29,10 @@
   #:use-module (gnu packages readline)
   #:use-module ((gnu packages compression)
                 #:renamer (symbol-prefix-proc 'guix:))
+  #:use-module (gnu packages gtk)
+  #:use-module (gnu packages glib)
+  #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages ncurses)
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix build-system gnu))
@@ -57,17 +63,28 @@ Daemon and possibly more in the future.")
 (define-public libgcrypt
   (package
     (name "libgcrypt")
-    (version "1.5.3")
+    (version "1.6.1")
     (source (origin
              (method url-fetch)
              (uri (string-append "mirror://gnupg/libgcrypt/libgcrypt-"
                                  version ".tar.bz2"))
              (sha256
               (base32
-               "1lar8y3lh61zl5flljpz540d78g99h4d5idfwrfw8lm3gm737xdw"))))
+               "0w10vhpj1r5nq7qm6jp21p1v1vhf37701cw8yilygzzqd7mfzhx1"))))
     (build-system gnu-build-system)
     (propagated-inputs
      `(("libgpg-error" ,libgpg-error)))
+    (native-inputs
+     ;; Needed here for the 'gpg-error' program.
+     `(("libgpg-error" ,libgpg-error)))
+    (arguments
+     ;; The '--with-gpg-error-prefix' argument is needed because otherwise
+     ;; 'configure' uses 'gpg-error-config' to determine the '-L' flag, and
+     ;; the 'gpg-error-config' it runs is the native one---i.e., the wrong one.
+     `(#:configure-flags
+       (list (string-append "--with-gpg-error-prefix="
+                            (assoc-ref %build-inputs "libgpg-error")))))
+    (outputs '("out" "debug"))
     (home-page "http://gnupg.org/")
     (synopsis "Cryptographic function library")
     (description
@@ -76,6 +93,18 @@ standard cryptographic building blocks such as symmetric ciphers, hash
 algorithms, public key algorithms, large integer functions and random number
 generation.")
     (license lgpl2.0+)))
+
+(define-public libgcrypt-1.5
+  (package (inherit libgcrypt)
+    (version "1.5.3")
+    (source
+     (origin
+      (method url-fetch)
+      (uri (string-append "mirror://gnupg/libgcrypt/libgcrypt-"
+                          version ".tar.bz2"))
+      (sha256
+       (base32
+        "1lar8y3lh61zl5flljpz540d78g99h4d5idfwrfw8lm3gm737xdw"))))))
 
 (define-public libassuan
   (package
@@ -118,6 +147,15 @@ provided.")
     (build-system gnu-build-system)
     (propagated-inputs
      `(("libgpg-error" ,libgpg-error)))
+    (native-inputs
+     `(("libgpg-error" ,libgpg-error)))
+    (arguments
+     `(#:configure-flags
+       (list ,@(if (%current-target-system)
+                   '("CC_FOR_BUILD=gcc")
+                   '())
+             (string-append "--with-gpg-error-prefix="
+                            (assoc-ref %build-inputs "libgpg-error")))))
     (home-page "http://www.gnupg.org")
     (synopsis
      "Libksba is a CMS and X.509 access library under development")
@@ -153,13 +191,11 @@ specifications are building blocks of S/MIME and TLS.")
        ("readline" ,readline)))
    (arguments
     `(#:phases
-       (alist-replace
-        'configure
-        (lambda* (#:key #:allow-other-keys #:rest args)
-         (let ((configure (assoc-ref %standard-phases 'configure)))
-           (substitute* "tests/openpgp/Makefile.in"
-             (("/bin/sh") (which "bash")))
-           (apply configure args)))
+       (alist-cons-before
+        'configure 'patch-config-files
+        (lambda _
+          (substitute* "tests/openpgp/Makefile.in"
+            (("/bin/sh") (which "bash"))))
        %standard-phases)))
     (home-page "http://gnupg.org/")
     (synopsis "GNU Privacy Guard")
@@ -171,6 +207,31 @@ servers.  It includes several libraries: libassuan (IPC between GnuPG
 components), libgpg-error (centralized GnuPG error values), and libskba
 (working with X.509 certificates and CMS data).")
     (license gpl3+)))
+
+(define-public gnupg-1
+  (package (inherit gnupg)
+    (version "1.4.16")
+    (source
+     (origin
+      (method url-fetch)
+      (uri (string-append "mirror://gnupg/gnupg/gnupg-" version
+                          ".tar.bz2"))
+      (sha256
+       (base32
+        "0bsa1yqa3ybhvmc4ys73amdpcmckrlq1fsxjl2980cxada778fvv"))))
+    (inputs
+     `(("zlib" ,guix:zlib)
+       ("bzip2" ,guix:bzip2)
+       ("curl" ,curl)
+       ("readline" ,readline)
+       ("libgpg-error" ,libgpg-error)))
+    (arguments
+     `(#:phases (alist-cons-after
+                 'unpack 'patch-check-sh
+                 (lambda _
+                   (substitute* "checks/Makefile.in"
+                     (("/bin/sh") (which "bash"))))
+                 %standard-phases)))))
 
 (define-public gpgme
   (package
@@ -185,10 +246,12 @@ components), libgpg-error (centralized GnuPG error values), and libskba
        (base32
         "15h429h6pd67iiv580bjmwbkadpxsdppw0xrqpcm4dvm24jc271d"))))
     (build-system gnu-build-system)
+    (propagated-inputs
+     ;; Needs to be propagated because gpgme.h includes gpg-error.h.
+     `(("libgpg-error" ,libgpg-error)))
     (inputs
      `(("gnupg" ,gnupg)
-       ("libassuan" ,libassuan)
-       ("libgpg-error" ,libgpg-error)))
+       ("libassuan" ,libassuan)))
     (home-page "http://www.gnupg.org/related_software/gpgme/")
     (synopsis "library providing simplified access to GnuPG functionality")
     (description
@@ -221,12 +284,10 @@ and every application benefits from this.")
    (arguments
     `(#:tests? #f
       #:phases
-       (alist-replace
+       (alist-delete
         'configure
-        (lambda* (#:key #:allow-other-keys) #t)
-       (alist-replace
+       (alist-delete
         'build
-        (lambda* (#:key #:allow-other-keys) #t)
        (alist-replace
         'install
         (lambda* (#:key inputs outputs #:allow-other-keys)
@@ -269,13 +330,9 @@ PGP keysigning parties.")
    (arguments
     `(#:tests? #f
       #:phases
-      (alist-replace
-       'unpack
-       (lambda* (#:key #:allow-other-keys #:rest args)
-         (let ((unpack (assoc-ref %standard-phases 'unpack)))
-           (apply unpack args)
-           ;; remove spurious symlink
-           (delete-file "keyanalyze/pgpring/depcomp")))
+      (alist-cons-after
+       'unpack 'remove-spurious-links
+       (lambda _ (delete-file "keyanalyze/pgpring/depcomp"))
       (alist-replace
        'configure
        (lambda* (#:key outputs #:allow-other-keys)
@@ -357,3 +414,60 @@ including tools for signing keys, keyring analysis, and party preparation.
    ;; http://packages.debian.org/changelogs/pool/main/s/signing-party/current/copyright
    (license gpl2)
    (home-page "http://pgp-tools.alioth.debian.org/")))
+
+(define-public pinentry
+  (package
+    (name "pinentry")
+    (version "0.8.3")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://gnupg/pinentry/pinentry-"
+                                  version ".tar.bz2"))
+              (sha256
+               (base32
+                "1bd047crf7xb8g61mval8v6qww98rddlsw2dz6j8h8qbnl4hp2sn"))))
+    (build-system gnu-build-system)
+    (inputs
+     `(("ncurses" ,ncurses)
+       ("gtk+" ,gtk+-2)
+       ("glib" ,glib)))
+    (native-inputs
+     `(("pkg-config" ,pkg-config)))
+    (home-page "http://gnupg.org/aegypten2/")
+    (synopsis "GnuPG's interface to passphrase input")
+    (description
+     "Pinentry provides a console and a GTK+ GUI that allows users to
+enter a passphrase when `gpg' or `gpg2' is run and needs it.")
+    (license gpl2+)))
+
+(define-public paperkey
+  (package
+    (name "paperkey")
+    (version "1.3")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "http://www.jabberwocky.com/"
+                                  "software/paperkey/paperkey-"
+                                  version ".tar.gz"))
+              (sha256
+               (base32
+                "1yybj8bj68v4lxwpn596b6ismh2fyixw5vlqqg26byrn4d9dfmsv"))))
+    (build-system gnu-build-system)
+    (arguments
+     `(#:phases
+       (alist-cons-before
+        'check 'patch-check-scripts
+        (lambda _
+          (substitute* '("checks/roundtrip.sh"
+                         "checks/roundtrip-raw.sh")
+            (("/bin/echo") "echo")))
+        %standard-phases)))
+    (home-page "http://www.jabberwocky.com/software/paperkey/")
+    (synopsis "Backup OpenPGP keys to paper")
+    (description
+     "Paperkey extracts the secret bytes from an OpenPGP (GnuPG, PGP, etc) key
+for printing with paper and ink, which have amazingly long retention
+qualities.  To reconstruct a secret key, you re-enter those
+bytes (whether by hand, OCR, QR code, or the like) and paperkey can use
+them to transform your existing public key into a secret key.")
+    (license gpl2+)))

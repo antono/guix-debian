@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -21,30 +21,30 @@
   #:use-module (guix build-system gnu)
   #:use-module (guix download)
   #:use-module ((guix licenses) #:select (fsf-free))
-  #:use-module (gnu packages libjpeg)
+  #:use-module (gnu packages algebra)
   #:use-module (gnu packages compression)
+  #:use-module (gnu packages fontutils)
+  #:use-module (gnu packages ghostscript)
   #:use-module (gnu packages graphviz)
-  #:use-module (gnu packages xorg)
-  #:use-module (gnu packages xml)
   #:use-module (gnu packages gtk)
   #:use-module (gnu packages libpng)
   #:use-module (gnu packages libtiff)
   #:use-module (gnu packages libjpeg)
-  #:use-module (gnu packages ghostscript)
-  #:use-module (gnu packages fontutils)
-  #:use-module (gnu packages pkg-config))
+  #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages xml)
+  #:use-module (gnu packages xorg))
 
 (define-public imagemagick
   (package
     (name "imagemagick")
-    (version "6.8.6-9")
+    (version "6.8.8-10")
     (source (origin
              (method url-fetch)
              (uri (string-append "mirror://imagemagick/ImageMagick-"
                                  version ".tar.xz"))
              (sha256
               (base32
-               "1bpj8676mph5cvyjsdgf27i6yg2iw9iskk5c69mvpxkyawgjw1vg"))))
+               "0crdazi2f1qj1ppb01f0mhqjw5q3afswgw49fa1m100bxmqpf77k"))))
     (build-system gnu-build-system)
     (arguments
      `(#:phases (alist-cons-before
@@ -64,9 +64,11 @@
                                        doc "/share/doc/"
                                        ,name "-" ,version "\n")))))
                  %standard-phases)))
-    ;; TODO: Add Jasper, LCMS, etc.
-    (inputs `(("graphviz" ,graphviz)
+    ;; TODO: Add Jasper etc.
+    (inputs `(("fftw" ,fftw)
+              ("graphviz" ,graphviz)
               ("ghostscript" ,ghostscript)
+              ("lcms" ,lcms)
               ("libx11" ,libx11)
               ("zlib" ,zlib)
               ("libxml2" ,libxml2)
@@ -76,8 +78,8 @@
               ("pango" ,pango)
               ("freetype" ,freetype)
               ("bzip2" ,bzip2)
-              ("xz" ,xz)
-              ("pkg-config" ,pkg-config)))
+              ("xz" ,xz)))
+    (native-inputs `(("pkg-config" ,pkg-config)))
     (outputs '("out"
                "doc"))                          ; 26 MiB of HTML documentation
     (home-page "http://www.imagemagick.org/")

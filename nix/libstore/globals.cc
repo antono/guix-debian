@@ -41,11 +41,11 @@ Settings::Settings()
     syncBeforeRegistering = false;
     useSubstitutes = true;
     useChroot = false;
-    dirsInChroot.insert("/dev");
-    dirsInChroot.insert("/dev/pts");
+    useSshSubstituter = false;
     impersonateLinux26 = false;
     keepLog = true;
     compressLog = true;
+    maxLogSize = 0;
     cacheFailure = false;
     pollInterval = 5;
     checkRootReachability = false;
@@ -53,6 +53,8 @@ Settings::Settings()
     gcKeepDerivations = true;
     autoOptimiseStore = false;
     envKeepDerivations = false;
+    lockCPU = getEnv("NIX_AFFINITY_HACK", "1") == "1";
+    showTrace = false;
 }
 
 
@@ -67,15 +69,6 @@ void Settings::processEnvironment()
     nixLibexecDir = canonPath(getEnv("NIX_LIBEXEC_DIR", NIX_LIBEXEC_DIR));
     nixBinDir = canonPath(getEnv("NIX_BIN_DIR", NIX_BIN_DIR));
     nixDaemonSocketFile = canonPath(nixStateDir + DEFAULT_SOCKET_PATH);
-
-    string subs = getEnv("NIX_SUBSTITUTERS", "default");
-    if (subs == "default") {
-        if (getEnv("NIX_OTHER_STORES") != "")
-            substituters.push_back(nixLibexecDir + "/nix/substituters/copy-from-other-stores.pl");
-        substituters.push_back(nixLibexecDir + "/nix/substituters/download-using-manifests.pl");
-        substituters.push_back(nixLibexecDir + "/nix/substituters/download-from-binary-cache.pl");
-    } else
-        substituters = tokenizeString<Strings>(subs, ":");
 }
 
 
@@ -138,6 +131,7 @@ void Settings::update()
     get(impersonateLinux26, "build-impersonate-linux-26");
     get(keepLog, "build-keep-log");
     get(compressLog, "build-compress-log");
+    get(maxLogSize, "build-max-log-size");
     get(cacheFailure, "build-cache-failure");
     get(pollInterval, "build-poll-interval");
     get(checkRootReachability, "gc-check-reachability");
@@ -145,6 +139,22 @@ void Settings::update()
     get(gcKeepDerivations, "gc-keep-derivations");
     get(autoOptimiseStore, "auto-optimise-store");
     get(envKeepDerivations, "env-keep-derivations");
+    get(sshSubstituterHosts, "ssh-substituter-hosts");
+    get(useSshSubstituter, "use-ssh-substituter");
+
+    string subs = getEnv("NIX_SUBSTITUTERS", "default");
+    if (subs == "default") {
+        substituters.clear();
+#if 0
+        if (getEnv("NIX_OTHER_STORES") != "")
+            substituters.push_back(nixLibexecDir + "/nix/substituters/copy-from-other-stores.pl");
+#endif
+        substituters.push_back(nixLibexecDir + "/nix/substituters/download-using-manifests.pl");
+        substituters.push_back(nixLibexecDir + "/nix/substituters/download-from-binary-cache.pl");
+        if (useSshSubstituter)
+            substituters.push_back(nixLibexecDir + "/nix/substituters/download-via-ssh");
+    } else
+        substituters = tokenizeString<Strings>(subs, ":");
 }
 
 
@@ -176,6 +186,13 @@ void Settings::get(StringSet & res, const string & name)
     res.insert(ss.begin(), ss.end());
 }
 
+void Settings::get(Strings & res, const string & name)
+{
+    SettingsMap::iterator i = settings.find(name);
+    if (i == settings.end()) return;
+    res = tokenizeString<Strings>(i->second);
+}
+
 
 template<class N> void Settings::get(N & res, const string & name)
 {
@@ -200,13 +217,24 @@ string Settings::pack()
 }
 
 
+void Settings::unpack(const string & pack) {
+    Strings lines = tokenizeString<Strings>(pack, "\n");
+    foreach (Strings::iterator, i, lines) {
+        string::size_type eq = i->find('=');
+        if (eq == string::npos)
+            throw Error("illegal option name/value");
+        set(i->substr(0, eq), i->substr(eq + 1));
+    }
+}
+
+
 Settings::SettingsMap Settings::getOverrides()
 {
     return overrides;
 }
 
 
-const string nixVersion = NIX_VERSION;
+const string nixVersion = PACKAGE_VERSION;
 
 
 }

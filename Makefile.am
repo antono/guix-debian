@@ -1,5 +1,5 @@
 # GNU Guix --- Functional package management for GNU
-# Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+# Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 # Copyright © 2013 Andreas Enge <andreas@enge.fr>
 #
 # This file is part of GNU Guix.
@@ -28,10 +28,14 @@ include gnu-system.am
 
 MODULES =					\
   guix/base32.scm				\
+  guix/base64.scm				\
   guix/records.scm				\
   guix/hash.scm					\
+  guix/pk-crypto.scm				\
+  guix/pki.scm					\
   guix/utils.scm				\
   guix/download.scm				\
+  guix/git-download.scm				\
   guix/monads.scm				\
   guix/profiles.scm				\
   guix/serialization.scm			\
@@ -49,9 +53,12 @@ MODULES =					\
   guix/http-client.scm				\
   guix/gnupg.scm				\
   guix/store.scm				\
+  guix/svn-download.scm				\
   guix/ui.scm					\
   guix/build/download.scm			\
   guix/build/cmake-build-system.scm		\
+  guix/build/git.scm				\
+  guix/build/gnome.scm				\
   guix/build/gnu-build-system.scm		\
   guix/build/gnu-dist.scm			\
   guix/build/linux-initrd.scm			\
@@ -59,20 +66,32 @@ MODULES =					\
   guix/build/python-build-system.scm		\
   guix/build/utils.scm				\
   guix/build/union.scm				\
+  guix/build/pull.scm				\
   guix/build/rpath.scm				\
+  guix/build/svn.scm				\
   guix/packages.scm				\
   guix/snix.scm					\
   guix/scripts/download.scm			\
   guix/scripts/build.scm			\
+  guix/scripts/archive.scm			\
   guix/scripts/import.scm			\
   guix/scripts/package.scm			\
   guix/scripts/gc.scm				\
   guix/scripts/hash.scm				\
   guix/scripts/pull.scm				\
   guix/scripts/substitute-binary.scm		\
+  guix/scripts/authenticate.scm			\
   guix/scripts/refresh.scm			\
+  guix/scripts/system.scm			\
   guix.scm					\
   $(GNU_SYSTEM_MODULES)
+
+if BUILD_DAEMON_OFFLOAD
+
+MODULES +=					\
+  guix/scripts/offload.scm
+
+endif BUILD_DAEMON_OFFLOAD
 
 # Because of the autoload hack in (guix build download), we must build it
 # first to avoid errors on systems where (gnutls) is unavailable.
@@ -104,7 +123,11 @@ clean-go:
 
 SCM_TESTS =					\
   tests/base32.scm				\
+  tests/base64.scm				\
   tests/hash.scm				\
+  tests/pk-crypto.scm				\
+  tests/pki.scm					\
+  tests/substitute-binary.scm			\
   tests/builders.scm				\
   tests/derivations.scm				\
   tests/ui.scm					\
@@ -124,7 +147,9 @@ SH_TESTS =					\
   tests/guix-download.sh			\
   tests/guix-gc.sh				\
   tests/guix-hash.sh				\
-  tests/guix-package.sh
+  tests/guix-package.sh				\
+  tests/guix-archive.sh				\
+  tests/guix-authenticate.sh
 
 if BUILD_DAEMON
 
@@ -152,6 +177,8 @@ tests/guix-gc.log:							\
   $(patsubst %.sh,%.log,$(filter-out tests/guix-gc.sh,$(SH_TESTS)))	\
   $(SCM_TESTS:%.scm=%.log)
 
+# Public key used to sign substitutes from hydra.gnu.org.
+dist_pkgdata_DATA = hydra.gnu.org.pub
 
 EXTRA_DIST =					\
   HACKING					\
@@ -159,6 +186,7 @@ EXTRA_DIST =					\
   TODO						\
   .dir-locals.el				\
   build-aux/hydra/gnu-system.scm		\
+  build-aux/hydra/demo-os.scm			\
   build-aux/hydra/guix.scm			\
   build-aux/check-available-binaries.scm	\
   build-aux/download.scm			\
@@ -168,10 +196,20 @@ EXTRA_DIST =					\
   srfi/srfi-64.scm				\
   srfi/srfi-64.upstream.scm			\
   tests/test.drv				\
+  tests/signing-key.pub				\
+  tests/signing-key.sec				\
   build-aux/config.rpath			\
   bootstrap					\
   release.nix					\
   $(TESTS)
+
+if !BUILD_DAEMON_OFFLOAD
+
+EXTRA_DIST +=					\
+  guix/scripts/offload.scm
+
+endif !BUILD_DAEMON_OFFLOAD
+
 
 CLEANFILES =					\
   $(GOBJECTS)					\
@@ -233,7 +271,7 @@ gen-ChangeLog:
 	  mv $(distdir)/cl-t $(distdir)/ChangeLog;	\
 	fi
 
-# Make sure we're not shipping a file that embeds a local /nix/store file name.
+# Make sure we're not shipping a file that embeds a local /gnu/store file name.
 assert-no-store-file-names:
 	if grep -r --exclude=*.texi --exclude=*.info				\
 	     "$(storedir)/[a-z0-9]{32}-" $(distdir) ;				\

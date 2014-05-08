@@ -18,7 +18,7 @@
 
 (define-module (gnu packages icu4c)
   #:use-module (gnu packages)
-  #:use-module (gnu packages patchelf)
+  #:use-module (gnu packages elf)
   #:use-module (gnu packages perl)
   #:use-module (guix licenses)
   #:use-module (guix packages)
@@ -28,7 +28,7 @@
 (define-public icu4c
   (package
    (name "icu4c")
-   (version "50.1.1")
+   (version "52.1")
    (source (origin
             (method url-fetch)
             (uri (string-append "http://download.icu-project.org/files/icu4c/"
@@ -37,7 +37,7 @@
                    (string-map (lambda (x) (if (char=? x #\.) #\_ x)) version)
                    "-src.tgz"))
             (sha256 (base32
-                     "13yz0kk6zsgj94idnlr3vbg8iph5z4ly4b4xrd5wfja7q3ijdx56"))))
+                     "14l0kl17nirc34frcybzg0snknaks23abhdxkmsqg3k9sil5wk9g"))))
    (build-system gnu-build-system)
    (inputs
     `(("patchelf" ,patchelf)
@@ -51,21 +51,17 @@
                           (guix build utils)
                           (guix build rpath))
       #:phases
-      (alist-replace
-       'unpack
-       (lambda* (#:key source #:allow-other-keys)
-        (and (zero? (system* "tar" "xvf" source))
-             (chdir "icu/source")))
-       (alist-replace
-        'configure
-        (lambda* (#:key #:allow-other-keys #:rest args)
-         (let ((configure (assoc-ref %standard-phases 'configure)))
-           ;; patch out two occurrences of /bin/sh from configure script
-           ;; that might have disappeared in a release later than 50.1.1
-           (substitute* "configure"
-             (("`/bin/sh")
-             (string-append "`" (which "bash"))))
-           (apply configure args)))
+      (alist-cons-after
+       'unpack 'chdir-to-source
+       (lambda _ (chdir "source"))
+       (alist-cons-before
+        'configure 'patch-configure
+        (lambda _
+          ;; patch out two occurrences of /bin/sh from configure script
+          ;; that might have disappeared in a release later than 52.1
+          (substitute* "configure"
+            (("`/bin/sh")
+             (string-append "`" (which "bash")))))
        (alist-cons-after
         'strip 'add-lib-to-runpath
         (lambda* (#:key outputs #:allow-other-keys)

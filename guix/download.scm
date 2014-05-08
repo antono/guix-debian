@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
 ;;;
 ;;; This file is part of GNU Guix.
@@ -108,7 +108,10 @@
        "ftp://gd.tuwien.ac.at/pub/infosys/servers/http/apache/dist/"
        "http://apache.belnet.be/"
        "http://mirrors.ircam.fr/pub/apache/"
-       "http://apache-mirror.rbc.ru/pub/apache/")
+       "http://apache-mirror.rbc.ru/pub/apache/"
+
+       ;; As a last resort, try the archive.
+       "http://archive.apache.org/dist/")
       (xorg               ; from http://www.x.org/wiki/Releases/Download
        "http://www.x.org/releases/" ; main mirrors
        "ftp://mirror.csclub.uwaterloo.ca/x.org/" ; North America
@@ -239,7 +242,11 @@ must be a list of symbol/URL-list pairs."
                                               (guix build utils)
                                               (guix ftp-client))
                                   #:guile-for-build guile-for-build
-                                  #:env-vars env-vars)))
+                                  #:env-vars env-vars
+
+                                  ;; In general, offloading downloads is not a
+                                  ;; good idea.
+                                  #:local-build? #t)))
 
 (define* (download-to-store store url #:optional (name (basename url))
                             #:key (log (current-error-port)))
@@ -248,8 +255,9 @@ omitted.  Write progress reports to LOG."
   (define uri
     (string->uri url))
 
-  (if (memq (uri-scheme uri) '(file #f))
-      (add-to-store store name #f "sha256" (uri-path uri))
+  (if (or (not uri) (memq (uri-scheme uri) '(file #f)))
+      (add-to-store store name #f "sha256"
+                    (if uri (uri-path uri) url))
       (call-with-temporary-output-file
        (lambda (temp port)
          (let ((result

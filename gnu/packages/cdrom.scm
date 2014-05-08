@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
 ;;;
 ;;; This file is part of GNU Guix.
@@ -27,9 +27,9 @@
   #:use-module (gnu packages compression)
   #:use-module (gnu packages gettext)
   #:use-module (gnu packages gtk)
-  #:use-module (gnu packages help2man)
+  #:use-module (gnu packages man)
   #:use-module (gnu packages ncurses)
-  #:use-module (gnu packages patchelf)
+  #:use-module (gnu packages elf)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages readline)
   #:use-module (gnu packages which))
@@ -68,20 +68,21 @@ caching facility provided by the library.")
 (define-public libcdio
   (package
     (name "libcdio")
-    (version "0.90")
+    (version "0.92")
     (source (origin
              (method url-fetch)
              (uri (string-append "mirror://gnu/libcdio/libcdio-"
                                  version ".tar.gz"))
              (sha256
               (base32
-               "0kpp6gr5sjr30pb9klncc37fhkw0wi6r41d2fmvmw17cbj176zmg"))))
+               "1b9zngn8nnxb1yyngi1kwi73nahp4lsx59j17q1bahzz58svydik"))))
     (build-system gnu-build-system)
     (inputs
+       `(("ncurses" ,ncurses)
+         ("libcddb" ,libcddb)))
+    (native-inputs
      `(("help2man" ,help2man)
-       ("ncurses" ,ncurses)
-       ("pkg-config" ,pkg-config)
-       ("libcddb" ,libcddb)))
+       ("pkg-config" ,pkg-config)))
     (home-page "http://www.gnu.org/software/libcdio/")
     (synopsis "CD Input and Control library")
     (description
@@ -97,14 +98,14 @@ extraction from CDs.")
 (define-public xorriso
   (package
     (name "xorriso")
-    (version "1.3.2")
+    (version "1.3.6.pl01")
     (source (origin
              (method url-fetch)
              (uri (string-append "mirror://gnu/xorriso/xorriso-"
                                  version ".tar.gz"))
              (sha256
               (base32
-               "1z04580nkkziy2flbxjjx0q6vp9p7vcp7yp0agx2aqz3l1vjcwhf"))))
+               "07bm20kb4f6q5pbkxhy7w8ggw2gxkrq45cda2kbh6wgphs5z2h7q"))))
     (build-system gnu-build-system)
     (inputs
      `(("acl" ,acl)
@@ -182,12 +183,16 @@ reconstruction capability.")
                "0pm039a78h7m9vvjmmjfkl05ii6qdmfhvbypxjbc7j5w82y66is4"))))
     (build-system gnu-build-system)
     (inputs
+     `(("gtk+" ,gtk+-2)))
+    (native-inputs
      `(("gettext" ,gnu-gettext)
-       ("gtk+" ,gtk+-2)
        ("pkg-config" ,pkg-config)
        ("which" ,which)))
     (arguments
-     `(#:tests? #f)) ; no check target
+     `(;; Parallel builds appear to be unsafe, see
+       ;; <http://hydra.gnu.org/build/49331/nixlog/1/raw>.
+       #:parallel-build? #f
+       #:tests? #f)) ; no check target
     (home-page "http://dvdisaster.net/en/index.html")
     (synopsis "error correcting codes for optical media images")
     (description "Optical media (CD,DVD,BD) keep their data only for a

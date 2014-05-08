@@ -1,5 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013 Cyril Roelandt <tipecaml@gmail.com>
+;;; Copyright © 2014 Raimon Grau <raimonster@gmail.com>
+;;; Copyright © 2014 Mark H Weaver <mhw@netris.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -48,8 +50,10 @@
                   'install
                   (lambda* (#:key outputs #:allow-other-keys)
                     (let ((out (assoc-ref outputs "out")))
-                      (zero? (system
-                              (string-append "make install INSTALL_TOP=" out)))))
+                      (zero? (system* "make" "install"
+                                      (string-append "INSTALL_TOP=" out)
+                                      (string-append "INSTALL_MAN=" out
+                                                     "/share/man/man1")))))
                   (alist-delete 'configure %standard-phases)))))
     (home-page "http://www.lua.org/")
     (synopsis "An embeddable scripting language.")
@@ -60,4 +64,28 @@ based on associative arrays and extensible semantics. Lua is dynamically typed,
 runs by interpreting bytecode for a register-based virtual machine, and has
 automatic memory management with incremental garbage collection, making it ideal
 for configuration, scripting, and rapid prototyping.")
+    (license x11)))
+
+(define-public luajit
+  (package
+    (name "luajit")
+    (version "2.0.3")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "http://luajit.org/download/LuaJIT-"
+                                  version ".tar.gz"))
+              (sha256
+               (base32 "0ydxpqkmsn2c341j4r2v6r5r0ig3kbwv3i9jran3iv81s6r6rgjm"))))
+    (build-system gnu-build-system)
+    (arguments
+     '(#:tests? #f                      ;luajit is distributed without tests
+       #:phases (alist-delete 'configure %standard-phases)
+       #:make-flags (list (string-append "PREFIX=" (assoc-ref %outputs "out")))))
+    (home-page "http://www.luajit.org/")
+    (synopsis "Just in time compiler for Lua programming language version 5.1")
+    (description
+     "LuaJIT is a Just-In-Time Compiler (JIT) for the Lua
+programming language.  Lua is a powerful, dynamic and light-weight programming
+language.  It may be embedded or used as a general-purpose, stand-alone
+language.")
     (license x11)))

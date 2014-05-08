@@ -27,18 +27,17 @@
 (define-public xnee
   (package
     (name "xnee")
-    (version "3.16")
+    (version "3.18")
     (source (origin
              (method url-fetch)
              (uri (string-append "mirror://gnu/xnee/xnee-"
                                  version ".tar.gz"))
              (sha256
               (base32
-               "1zkn66zpnbxryrb76cc3r2via6216868l1xsnl3vdymbsy23sf87"))))
+               "0j6b27ry0w765040089ppwwdl313xfgn31yh3fpqy4gk0jv23m94"))))
     (build-system gnu-build-system)
     (inputs
      `(("recordproto" ,recordproto)
-       ("pkg-config" ,pkg-config)
        ("inputproto" ,inputproto)
        ("libxi" ,libxi)
        ("libxtst" ,libxtst)
@@ -46,6 +45,8 @@
        ("libxext" ,libxext)
        ("xproto" ,xproto)
        ("libx11" ,libx11)))
+    (native-inputs
+      `(("pkg-config" ,pkg-config)))
     (home-page "http://www.gnu.org/software/xnee/")
     (synopsis "Record, replay and distribute user actions under X11")
     (description

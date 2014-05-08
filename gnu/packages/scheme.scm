@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -26,7 +26,7 @@
   #:use-module (gnu packages multiprecision)
   #:use-module (gnu packages emacs)
   #:use-module (gnu packages texinfo)
-  #:use-module (gnu packages patchelf)
+  #:use-module (gnu packages elf)
   #:use-module (gnu packages which)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages avahi)
@@ -116,14 +116,14 @@ features an integrated Emacs-like editor and a large runtime library.")
 (define-public bigloo
   (package
     (name "bigloo")
-    (version "4.0b")
+    (version "4.1a")
     (source (origin
              (method url-fetch)
              (uri (string-append "ftp://ftp-sop.inria.fr/indes/fp/Bigloo/bigloo"
                                  version ".tar.gz"))
              (sha256
               (base32
-               "1fck2h48f0bvh8fl437cagmp0syfxy9lqacy1zwsis20fc76jvzi"))
+               "170q7nh08n4v20xl81fxb0xcdxphqqacfa643hsa8i2ar6pki04c"))
              (patches (list (search-patch "bigloo-gc-shebangs.patch")))))
     (build-system gnu-build-system)
     (arguments
@@ -163,6 +163,9 @@ features an integrated Emacs-like editor and a large runtime library.")
                      (zero?
                       (system* "./configure"
                                (string-append "--prefix=" out)
+                               ;; FIXME: Currently fails, see
+                               ;; <http://article.gmane.org/gmane.lisp.scheme.bigloo/6126>.
+                               ;; "--customgc=no" ; use our libgc
                                (string-append"--mv=" (which "mv"))
                                (string-append "--rm=" (which "rm"))))))
                  (alist-cons-after
@@ -194,8 +197,7 @@ features usually presented by traditional programming languages
 but not offered by Scheme and functional programming.  Bigloo
 compiles Scheme modules.  It delivers small and fast stand alone
 binary executables.  Bigloo enables full connections between
-Scheme and C programs, between Scheme and Java programs, and
-between Scheme and C# programs.")
+Scheme and C programs and between Scheme and Java programs.")
     (license gpl2+)))
 
 (define-public hop
@@ -219,7 +221,7 @@ between Scheme and C# programs.")
           (let ((out (assoc-ref outputs "out")))
             (zero?
              (system* "./configure"
-                      (string-append"--prefix=" out)))))
+                      (string-append "--prefix=" out)))))
         (alist-cons-after
          'strip 'patch-rpath
          (lambda* (#:key outputs #:allow-other-keys)

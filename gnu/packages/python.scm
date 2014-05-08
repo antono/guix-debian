@@ -1,7 +1,8 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013 Nikita Karetnikov <nikita@karetnikov.org>
-;;; Copyright © 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
+;;; Copyright © 2014 Mark H Weaver <mhw@netris.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -20,16 +21,19 @@
 
 (define-module (gnu packages python)
   #:use-module ((guix licenses)
-                #:select (bsd-3 bsd-style psfl x11 gpl2+ lgpl2.1+))
+                #:select (bsd-3 bsd-style psfl x11 x11-style
+                          gpl2 gpl2+ lgpl2.1+))
   #:use-module ((guix licenses) #:select (zlib)
                                 #:renamer (symbol-prefix-proc 'license:))
   #:use-module (gnu packages)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages gdbm)
   #:use-module (gnu packages icu4c)
+  #:use-module (gnu packages libffi)
   #:use-module (gnu packages readline)
   #:use-module (gnu packages openssl)
-  #:use-module (gnu packages patchelf)
+  #:use-module (gnu packages elf)
+  #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages sqlite)
   #:use-module (guix packages)
   #:use-module (guix download)
@@ -41,15 +45,17 @@
 (define-public python-2
   (package
     (name "python")
-    (version "2.7.5")
+    (version "2.7.6")
     (source
      (origin
       (method url-fetch)
-      (uri (string-append "http://www.python.org/ftp/python/"
+      (uri (string-append "https://www.python.org/ftp/python/"
                           version "/Python-" version ".tar.xz"))
+      (patches (list (search-patch "python-libffi-mips-n32-fix.patch")))
+      (patch-flags '("-p0"))
       (sha256
        (base32
-        "1c8xan2dlsqfq8q82r3mhl72v3knq3qyn71fjq89xikx2smlqg7k"))))
+        "18gnpyh071dxa0rv3silrz92jw9qpblswzwv4gzqcwxzz20qxmhz"))))
     (build-system gnu-build-system)
     (arguments
      `(#:tests? #f
@@ -98,10 +104,12 @@
        #:configure-flags
         (let ((bz2 (assoc-ref %build-inputs "bzip2"))
               (gdbm (assoc-ref %build-inputs "gdbm"))
+              (libffi (assoc-ref %build-inputs "libffi"))
               (openssl (assoc-ref %build-inputs "openssl"))
               (readline (assoc-ref %build-inputs "readline"))
               (zlib (assoc-ref %build-inputs "zlib")))
          (list "--enable-shared"                  ; allow embedding
+               "--with-system-ffi"                ; build ctypes
                (string-append "CPPFLAGS="
                 "-I" bz2 "/include "
                 "-I" gdbm "/include "
@@ -111,6 +119,7 @@
                (string-append "LDFLAGS="
                 "-L" bz2 "/lib "
                 "-L" gdbm "/lib "
+                "-L" libffi "/lib "
                 "-L" openssl "/lib "
                 "-L" readline "/lib "
                 "-L" zlib "/lib")))
@@ -133,14 +142,33 @@
              (with-directory-excursion out
                (for-each (cut augment-rpath <> lib)
                          (find-files "bin" ".*")))))
-         %standard-phases)))
+         (alist-cons-before
+          'configure 'patch-lib-shells
+          (lambda _
+            ;; Filter for existing files, since some may not exist in all
+            ;; versions of python that are built with this recipe.
+            (substitute* (filter file-exists?
+                                 '("Lib/subprocess.py"
+                                   "Lib/popen2.py"
+                                   "Lib/distutils/tests/test_spawn.py"
+                                   "Lib/test/test_subprocess.py"))
+              (("/bin/sh") (which "sh"))))
+          (alist-cons-before
+           'check 'pre-check
+           (lambda _
+             ;; 'Lib/test/test_site.py' needs a valid $HOME
+             (setenv "HOME" (getcwd)))
+           %standard-phases)))))
     (inputs
      `(("bzip2" ,bzip2)
        ("gdbm" ,gdbm)
+       ("libffi" ,libffi)                         ; for ctypes
        ("openssl" ,openssl)
        ("readline" ,readline)
        ("zlib" ,zlib)
        ("patchelf" ,patchelf)))                   ; for (guix build rpath)
+    (native-inputs
+     `(("pkg-config" ,pkg-config)))
     (native-search-paths
      (list (search-path-specification
             (variable "PYTHONPATH")
@@ -160,15 +188,25 @@ data types.")
 
 (define-public python
   (package (inherit python-2)
-    (version "3.3.2")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "http://www.python.org/ftp/python/"
-                          version "/Python-" version ".tar.xz"))
-      (sha256
-       (base32
-        "0hsbwqjnhr85a2w252c8d3yj8d9i5sy8s6a6cfk6zqqhp3234nvl"))))
+    (version "3.3.5")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "https://www.python.org/ftp/python/"
+                                  version "/Python-" version ".tar.xz"))
+              (patches (list (search-patch "python-fix-tests.patch")
+                             (search-patch "python-libffi-mips-n32-fix.patch")))
+              (patch-flags '("-p0"))
+              (sha256
+               (base32
+                "1rdncc7g8g6f3lfdg33rli1yffbiq8z283xy4f5ksl1l8i49psdb"))))
+    (arguments
+     (let ((args `(#:modules ((guix build gnu-build-system)
+                              (guix build utils)
+                             (srfi srfi-1)
+                              (srfi srfi-26))
+                   ,@(package-arguments python-2))))
+       (substitute-keyword-arguments args
+         ((#:tests? _) #t))))
     (native-search-paths
      (list (search-path-specification
             (variable "PYTHONPATH")
@@ -323,24 +361,28 @@ datetime module, available in Python 2.3+.")
 (define-public python2-pysqlite
   (package
     (name "python2-pysqlite")
-    (version "2.6.3")
+    (version "2.6.3a")                            ; see below
     (source
      (origin
       (method url-fetch)
-      (uri (string-append "http://pysqlite.googlecode.com/files/pysqlite-"
-                          version ".tar.gz"))
+      ;; During the switch from code.google.com to pypi.python.org, the 2.6.3
+      ;; tarball was modified, but the version number was kept:
+      ;; <https://lists.gnu.org/archive/html/guix-devel/2014-02/msg00077.html>.
+      ;; Here we want to refer to the pypi-hosted 2.6.3 tarball.
+      (uri (string-append
+            "https://pypi.python.org/packages/source/p/pysqlite/pysqlite-"
+            "2.6.3" ".tar.gz"))
       (sha256
        (base32
-        "0nsqqfp072rgqbls100rdvbzkjkin7li3kprhfxlfqvzf608hlqd"))))
+        "13djzgnbi71znjjyaw4nybg6smilgszcid646j5qav7mdchkb77y"))))
     (build-system python-build-system)
     (inputs
      `(("sqlite" ,sqlite)))
     (arguments
      `(#:python ,python-2 ; incompatible with Python 3
        #:tests? #f)) ; no test target
-    (home-page "http://labix.org/python-dateutil")
-    (synopsis
-     "SQLite bindings for Python.")
+    (home-page "https://pypi.python.org/pypi/pysqlite")
+    (synopsis "SQLite bindings for Python")
     (description
      "Pysqlite provides SQLite bindings for Python that comply to the
 Database API 2.0T.")
@@ -500,6 +542,55 @@ recording and playback via diversions, and dynamic, chainable filters.  The
 system is highly configurable via command line options and embedded
 commands.")
     (license lgpl2.1+)))
+
+(define-public python2-element-tree
+  (package
+    (name "python2-element-tree")
+    (version "1.2.6")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append
+                    "http://effbot.org/media/downloads/elementtree-"
+                    version "-20050316.tar.gz"))
+              (sha256
+               (base32
+                "016bphqnlg0l4vslahhw4r0aanw95bpypy65r1i1acyb2wj5z7dj"))))
+    (build-system python-build-system)
+    (arguments
+     `(#:python ,python-2                       ; seems to be part of Python 3
+       #:tests? #f))                            ; no 'test' sub-command
+    (synopsis "Toolkit for XML processing in Python")
+    (description
+     "ElementTree is a Python library supporting lightweight XML processing.")
+    (home-page "http://effbot.org/zone/element-index.htm")
+    (license (x11-style "http://docs.python.org/2/license.html"
+                        "Like \"CWI LICENSE AGREEMENT FOR PYTHON \
+0.9.0 THROUGH 1.2\"."))))
+
+(define-public python2-pybugz
+  (package
+    (name "python2-pybugz")
+    (version "0.6.11")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append
+                    "http://bits.liquidx.net/projects/pybugz/pybugz-"
+                    version ".tar.gz"))
+              (sha256
+               (base32
+                "17ni00p08gp5lkxlrrcnvi3x09fmajnlbz4da03qcgl9q21ym4jd"))))
+    (build-system python-build-system)
+    (arguments
+     `(#:python ,python-2                         ; SyntaxError with Python 3
+       #:tests? #f))                              ; no 'test' sub-command
+    (inputs `(("element-tree" ,python2-element-tree)))
+    (synopsis "Python and command-line interface to Bugzilla")
+    (description
+     "PyBugz is a Python library and command-line tool to query the Bugzilla
+bug tracking system.  It is meant as an aid to speed up interaction with the
+bug tracker.")
+    (home-page "http://www.liquidx.net/pybugz/")
+    (license gpl2)))
 
 (define-public scons
   (package

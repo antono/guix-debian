@@ -1,5 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
+;;; Copyright © 2014 Mark H Weaver <mhw@netris.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -42,15 +43,15 @@
     (inputs `(("bzip2" ,bzip2)))
     (arguments
      `(#:tests? #f ; no test target
-       #:make-flags '("generic_gcc")
-       #:phases
-        (alist-replace
-         'configure
-         (lambda* (#:key outputs #:allow-other-keys)
-           (let* ((out (assoc-ref outputs "out")))
-             (copy-file "unix/Makefile" "Makefile")
-             (substitute* "Makefile" (("/usr/local") out))))
-        %standard-phases)))
+       #:make-flags (let ((out (assoc-ref %outputs "out")))
+                      (list "-f" "unix/Makefile"
+                            (string-append "prefix=" out)
+                            (string-append "MANDIR=" out "/share/man/man1")))
+       #:phases (alist-replace
+                 'build
+                 (lambda* (#:key (make-flags '()) #:allow-other-keys)
+                   (zero? (apply system* "make" "generic_gcc" make-flags)))
+                 (alist-delete 'configure %standard-phases))))
     (home-page "http://www.info-zip.org/Zip.html")
     (synopsis "Zip compression and file packing utility")
     (description
@@ -89,7 +90,9 @@ Compression ratios of 2:1 to 3:1 are common for text files.")
          (lambda* (#:key inputs outputs #:allow-other-keys)
            (let* ((out (assoc-ref outputs "out")))
              (copy-file "unix/Makefile" "Makefile")
-             (substitute* "Makefile" (("/usr/local") out))))
+             (substitute* "Makefile"
+               (("/usr/local") out)
+               (("/man/") "/share/man/"))))
         %standard-phases)))
     (home-page "http://www.info-zip.org/UnZip.html")
     (synopsis "Unzip decompression and file extraction utility")
@@ -118,12 +121,13 @@ UnZip recreates the stored directory structure by default.")
        (base32
         "0nsjqxw017hiyp524p9316283jlf5piixc1091gkimhz38zh7f51"))))
     (build-system gnu-build-system)
-    (inputs `(("perl" ,perl)     ; for the documentation
-              ("pkg-config" ,pkg-config)
-              ("python" ,python-2) ; for the documentation; Python 3 not supported,
-                ; http://forums.gentoo.org/viewtopic-t-863161-start-0.html
-              ("zip" ,zip) ; to create test files
-              ("zlib" ,zlib)))
+    (inputs
+     `(("zlib" ,zlib)))
+    (native-inputs `(("perl" ,perl)     ; for the documentation
+                     ("pkg-config" ,pkg-config)
+                     ("python" ,python-2) ; for the documentation; Python 3 not supported,
+                                        ; http://forums.gentoo.org/viewtopic-t-863161-start-0.html
+                     ("zip" ,zip))) ; to create test files
     (arguments
      `(#:parallel-tests? #f)) ; since test files are created on the fly
     (home-page "http://zziplib.sourceforge.net/")

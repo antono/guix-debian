@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -36,6 +36,7 @@
   #:use-module (gnu packages linux)
   #:use-module (gnu packages samba)
   #:use-module (gnu packages xorg)
+  #:use-module (gnu packages gl)
   #:use-module (gnu packages sdl)
   #:use-module (gnu packages perl))
 
@@ -43,15 +44,14 @@
   ;; This is QEMU without GUI support.
   (package
     (name "qemu-headless")
-    (version "1.6.1")
+    (version "1.7.1")
     (source (origin
              (method url-fetch)
              (uri (string-append "http://wiki.qemu-project.org/download/qemu-"
                                  version ".tar.bz2"))
              (sha256
               (base32
-               "152jc18mjs543k8ggbcwgra8d0zw81z0lcc1r0iq4iqhm926ywzw"))
-             (patches (list (search-patch "qemu-make-4.0.patch")))))
+               "1x5y06zhp0gc97g1sb98vf7dkawg63xywv0mbnpfnbi20jh452fn"))))
     (build-system gnu-build-system)
     (arguments
      '(#:phases (alist-replace
@@ -72,6 +72,8 @@
                      (zero?
                       (system* "./configure"
                                (string-append "--cc=" (which "gcc"))
+                               "--disable-debug-info" ; save build space
+                               "--enable-virtfs"      ; just to be sure
                                (string-append "--prefix=" out)
                                (string-append "--smbd=" samba
                                               "/sbin/smbd")))))
@@ -95,22 +97,23 @@
     (inputs                                       ; TODO: Add optional inputs.
      `(;; ("libaio" ,libaio)
        ("glib" ,glib)
-       ("python" ,python-2) ; incompatible with Python 3 according to error message
        ("ncurses" ,ncurses)
        ("libpng" ,libpng)
        ("libjpeg" ,libjpeg-8)
        ("pixman" ,pixman)
        ;; ("vde2" ,vde2)
        ("util-linux" ,util-linux)
+       ("libcap" ,libcap)           ; virtfs support requires libcap & libattr
+       ("libattr" ,attr)
        ;; ("pciutils" ,pciutils)
-       ("pkg-config" ,pkg-config)
        ("alsa-lib" ,alsa-lib)
        ("zlib" ,zlib)
        ("attr" ,attr)
        ("samba" ,samba)))                         ; an optional dependency
-    (native-inputs `(("texinfo" ,texinfo)
+    (native-inputs `(("pkg-config" ,pkg-config)
+                     ("python" ,python-2) ; incompatible with Python 3 according to error message
+                     ("texinfo" ,texinfo)
                      ("perl" ,perl)))
-
     (home-page "http://www.qemu-project.org")
     (synopsis "Machine emulator and virtualizer (without GUI)")
     (description
@@ -132,6 +135,9 @@ server and embedded PowerPC, and S390 guests.")
 (define-public qemu/smb-shares
   ;; A patched QEMU where `-net smb' yields two shares instead of one: one for
   ;; the store, and another one for exchanges with the host.
+
+  ;; TODO: Use 9p/-virtfs instead of this SMB hack:
+  ;; <http://wiki.qemu.org/Documentation/9psetup>.
   (package (inherit qemu-headless)
     (name "qemu-with-multiple-smb-shares")
     (source (origin (inherit (package-source qemu-headless))

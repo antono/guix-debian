@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
+;;; Copyright © 2013, 2014 Andreas Enge <andreas@enge.fr>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -21,46 +21,56 @@
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix build-system gnu)
-  #:use-module (gnu packages)
   #:use-module (gnu packages algebra)
   #:use-module (gnu packages compression)
+  #:use-module (gnu packages elf)
   #:use-module (gnu packages fontutils)
-  #:use-module (gnu packages oggvorbis)
   #:use-module (gnu packages openssl)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
+  #:use-module (gnu packages xiph)
   #:use-module (gnu packages yasm))
 
 (define-public ffmpeg
   (package
     (name "ffmpeg")
-    (version "2.1.1")
+    (version "2.1.4")
     (source (origin
              (method url-fetch)
              (uri (string-append "http://www.ffmpeg.org/releases/ffmpeg-"
                                  version ".tar.bz2"))
              (sha256
               (base32
-               "1qnspbpwa6cflsb6mkm84ay4nfx60ism6d7lgvnasidck9dmxydy"))
-             ;; from upstream, drop with next release
-             (patches (list (search-patch "ffmpeg-check.patch")))))
+               "00c1k84amgkc7vk5xkrg7z99q7jbfhbz3qk854cxnc38d2ynrd3z"))))
     (build-system gnu-build-system)
     (inputs
-     `(("bc" ,bc)
-       ("bzip2" ,bzip2)
-       ("fontconfig" ,fontconfig)
+     `(("fontconfig" ,fontconfig)
        ("freetype" ,freetype)
+       ("opus" ,opus)
        ("libtheora" ,libtheora)
        ("libvorbis" ,libvorbis)
+       ("patchelf" ,patchelf)
+       ("speex" ,speex)
+       ("zlib", zlib)))
+    (native-inputs
+     `(("bc" ,bc)
+       ("bzip2" ,bzip2)
        ("perl" ,perl)
        ("pkg-config" ,pkg-config)
        ("python" ,python-2) ; scripts use interpreter python2
        ("speex" ,speex)
-       ("yasm" ,yasm)
-       ("zlib", zlib)))
+       ("yasm" ,yasm)))
     (arguments
-     `(#:phases
+     `(#:test-target "fate"
+       #:modules ((guix build gnu-build-system)
+                  (guix build utils)
+                  (guix build rpath)
+                  (srfi srfi-26))
+       #:imported-modules ((guix build gnu-build-system)
+                           (guix build utils)
+                           (guix build rpath))
+       #:phases
          (alist-replace
           'configure
           ;; configure does not work followed by "SHELL=..." and
@@ -98,7 +108,6 @@
 ;;   --enable-libopencore-amrwb enable AMR-WB decoding via libopencore-amrwb [no]
 ;;   --enable-libopencv       enable video filtering via libopencv [no]
 ;;   --enable-libopenjpeg     enable JPEG 2000 de/encoding via OpenJPEG [no]
-;;   --enable-libopus         enable Opus decoding via libopus [no]
 ;;   --enable-libpulse        enable Pulseaudio input via libpulse [no]
 ;;   --enable-libquvi         enable quvi input via libquvi [no]
 ;;   --enable-librtmp         enable RTMP[E] support via librtmp [no]
@@ -133,6 +142,7 @@
                       "--enable-fontconfig"
                       ;; "--enable-gnutls" ; causes test failures
                       "--enable-libfreetype"
+                      "--enable-libopus"
                       "--enable-libspeex"
                       "--enable-libtheora"
                       "--enable-libvorbis"
@@ -166,7 +176,16 @@
                       "--disable-mipsdspr1"
                       "--disable-mipsdspr2"
                       "--disable-mipsfpu"))))
-          %standard-phases)))
+       (alist-cons-after
+        'strip 'add-lib-to-runpath
+        (lambda* (#:key outputs #:allow-other-keys)
+          (let* ((out (assoc-ref outputs "out"))
+                 (lib (string-append out "/lib")))
+            ;; Add LIB to the RUNPATH of all the executables.
+            (with-directory-excursion out
+              (for-each (cut augment-rpath <> lib)
+                        (find-files "bin" ".*")))))
+          %standard-phases))))
     (home-page "http://www.ffmpeg.org/")
     (synopsis "Audio and video framework")
     (description "FFmpeg is a complete, cross-platform solution to record,

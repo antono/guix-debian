@@ -1,6 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013 Andreas Enge <andreas@enge.fr>
+;;; Copyright © 2012, 2013, 2014 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2014 Mark H Weaver <mhw@netris.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -26,7 +27,8 @@
   #:use-module (guix licenses)
   #:use-module (guix packages)
   #:use-module (guix download)
-  #:use-module (guix build-system gnu))
+  #:use-module (guix build-system gnu)
+  #:use-module (guix utils))
 
 
 (define-public mpfrcx
@@ -81,14 +83,14 @@ solve the shortest vector problem.")
 (define-public pari-gp
   (package
    (name "pari-gp")
-   (version "2.5.5")
+   (version "2.7.0")
    (source (origin
             (method url-fetch)
             (uri (string-append
                   "http://pari.math.u-bordeaux.fr/pub/pari/unix/pari-"
                   version ".tar.gz"))
             (sha256 (base32
-                     "058nw1fhggy7idii4f124ami521lv3izvngs9idfz964aks8cvvn"))))
+                     "1hk7lmq09crr9jvia8nxzhvbwf8mw62xk456i96jg8dljh0r9sgz"))))
    (build-system gnu-build-system)
    (inputs `(("gmp" ,gmp)
              ("perl" ,perl)
@@ -101,17 +103,10 @@ solve the shortest vector problem.")
       #:phases
       (alist-replace
        'configure
-       (lambda* (#:key inputs outputs #:allow-other-keys)
-         (let ((out (assoc-ref outputs "out"))
-               (readline (assoc-ref inputs "readline"))
-               (gmp (assoc-ref inputs "gmp")))
+       (lambda* (#:key outputs #:allow-other-keys)
+         (let ((out (assoc-ref outputs "out")))
            (zero?
-            (system* "./Configure"
-                     (string-append "--prefix=" out)
-                     (string-append "--with-readline=" readline)
-                     (string-append "--with-gmp=" gmp)))))
-       ;; FIXME: readline and gmp will be detected automatically in the next
-       ;; stable release
+            (system* "./Configure" (string-append "--prefix=" out)))))
        %standard-phases)))
    (synopsis "PARI/GP, a computer algebra system for number theory")
    (description
@@ -128,15 +123,16 @@ PARI is also available as a C library to allow for faster computations.")
 (define-public gp2c
   (package
    (name "gp2c")
-   (version "0.0.8")
+   (version "0.0.8pl1")
    (source (origin
             (method url-fetch)
             (uri (string-append
                   "http://pari.math.u-bordeaux.fr/pub/pari/GP2C/gp2c-"
                   version ".tar.gz"))
             (sha256 (base32
-                     "03fgiwy2si264g3zfgw2yi6i2l8szl5m106zgwk77sddshk20b34"))))
+                     "0r1xrshgx0db2snmacwvg5r99fhd9rpblcfs86pfsp23hnjxj9i0"))))
    (build-system gnu-build-system)
+   (native-inputs `(("perl" ,perl)))
    (inputs `(("pari-gp" ,pari-gp)))
    (arguments
     '(#:configure-flags
@@ -168,8 +164,8 @@ GP2C, the GP to C compiler, translates GP scripts to PARI programs.")
               (base32
                "0cqf5jkwx6awgd2xc2a0mkpxilzcfmhncdcfg7c9439wgkqxkxjf"))))
     (build-system gnu-build-system)
-    (inputs `(("readline" ,readline)
-              ("flex" ,flex)))
+    (inputs `(("readline" ,readline)))
+    (native-inputs `(("flex" ,flex)))
     (arguments
      '(#:phases
        (alist-replace 'configure
@@ -179,8 +175,14 @@ GP2C, the GP to C compiler, translates GP scripts to PARI programs.")
                         (let ((out (assoc-ref outputs "out")))
                           (setenv "CONFIG_SHELL" (which "bash"))
                           (zero?
-                           (system* "./configure"
-                                    (string-append "--prefix=" out)))))
+                           (system*
+                            "./configure"
+                            (string-append "--prefix=" out)
+                            ;; By default, man and info pages are put in
+                            ;; PREFIX/{man,info}, but we want them in
+                            ;; PREFIX/share/{man,info}.
+                            (string-append "--mandir=" out "/share/man")
+                            (string-append "--infodir=" out "/share/info")))))
                       %standard-phases)))
     (home-page "http://www.gnu.org/software/bc/")
     (synopsis "Arbitrary precision numeric processing language")
@@ -224,3 +226,14 @@ transform (DFT) in one or more dimensions, of arbitrary input size, and of
 both real and complex data (as well as of even/odd data---i.e. the discrete
 cosine/ sine transforms or DCT/DST).")
     (license gpl2+)))
+
+(define-public fftwf
+  (package (inherit fftw)
+    (name "fftwf")
+    (arguments
+     (substitute-keyword-arguments (package-arguments fftw)
+       ((#:configure-flags cf)
+        `(cons "--enable-float" ,cf))))
+    (description
+     (string-append (package-description fftw)
+                    "  Single-precision version."))))

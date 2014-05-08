@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -196,10 +196,16 @@ which is not available during bootstrap."
   "Fetch data from URI and write it to FILE.  Return FILE on success."
 
   (define post-2.0.7?
-    (or (string>? (major-version) "2")
-        (string>? (minor-version) "0")
-        (string>? (micro-version) "7")
+    (or (> (string->number (major-version)) 2)
+        (> (string->number (minor-version)) 0)
+        (> (string->number (micro-version)) 7)
         (string>? (version) "2.0.7")))
+
+  (define headers
+    ;; Some web sites, such as http://dist.schmorp.de, would block you if
+    ;; there's no 'User-Agent' header, presumably on the assumption that
+    ;; you're a spammer.  So work around that.
+    '((User-Agent . "GNU Guile")))
 
   (let*-values (((connection)
                  (open-connection-for-uri uri))
@@ -210,11 +216,14 @@ which is not available during bootstrap."
                  ;; version.  So keep this compatibility hack for now.
                  (if post-2.0.7?
                      (http-get uri #:port connection #:decode-body? #f
-                               #:streaming? #t)
+                               #:streaming? #t
+                               #:headers headers)
                      (if (module-defined? (resolve-interface '(web client))
                                           'http-get*)
-                         (http-get* uri #:port connection #:decode-body? #f)
-                         (http-get uri #:port connection #:decode-body? #f))))
+                         (http-get* uri #:port connection #:decode-body? #f
+                                    #:headers headers)
+                         (http-get uri #:port connection #:decode-body? #f
+                                   #:extra-headers headers))))
                 ((code)
                  (response-code resp))
                 ((size)

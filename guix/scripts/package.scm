@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2013 Nikita Karetnikov <nikita@karetnikov.org>
 ;;; Copyright © 2013 Mark H Weaver <mhw@netris.org>
 ;;;
@@ -26,6 +26,7 @@
   #:use-module (guix profiles)
   #:use-module (guix utils)
   #:use-module (guix config)
+  #:use-module (guix scripts build)
   #:use-module ((guix build utils) #:select (directory-exists? mkdir-p))
   #:use-module ((guix ftp-client) #:select (ftp-open))
   #:use-module (ice-9 format)
@@ -41,7 +42,8 @@
   #:use-module ((gnu packages base) #:select (guile-final))
   #:use-module ((gnu packages bootstrap) #:select (%bootstrap-guile))
   #:use-module (guix gnu-maintenance)
-  #:export (guix-package))
+  #:export (specification->package+output
+            guix-package))
 
 (define %store
   (make-parameter #f))
@@ -56,7 +58,7 @@
          (cut string-append <> "/.guix-profile")))
 
 (define %profile-directory
-  (string-append (or (getenv "NIX_STATE_DIR") %state-directory) "/profiles/"
+  (string-append %state-directory "/profiles/"
                  (or (and=> (getenv "USER")
                             (cut string-append "per-user/" <>))
                      "default")))
@@ -176,7 +178,7 @@ packages that will/would be installed and removed."
   (match remove
     ((($ <manifest-entry> name version output path _) ..1)
      (let ((len    (length name))
-           (remove (map (cut format #f "  ~a-~a\t~a\t~a" <> <> <> <>)
+           (remove (map (cut format #f "   ~a-~a\t~a\t~a" <> <> <> <>)
                         name version output path)))
        (if dry-run?
            (format (current-error-port)
@@ -292,21 +294,24 @@ return its return value."
        (format (current-error-port) "  interrupted by signal ~a~%" SIGINT)
        #f))))
 
-(define newest-available-packages
-  (memoize find-newest-available-packages))
-
-(define (find-best-packages-by-name name version)
-  "If version is #f, return the list of packages named NAME with the highest
-version numbers; otherwise, return the list of packages named NAME and at
-VERSION."
-  (if version
-      (find-packages-by-name name version)
-      (match (vhash-assoc name (newest-available-packages))
-        ((_ version pkgs ...) pkgs)
-        (#f '()))))
+(define-syntax-rule (leave-on-EPIPE exp ...)
+  "Run EXP... in a context when EPIPE errors are caught and lead to 'exit'
+with successful exit code.  This is useful when writing to the standard output
+may lead to EPIPE, because the standard output is piped through 'head' or
+similar."
+  (catch 'system-error
+    (lambda ()
+      exp ...)
+    (lambda args
+      ;; We really have to exit this brutally, otherwise Guile eventually
+      ;; attempts to flush all the ports, leading to an uncaught EPIPE down
+      ;; the path.
+      (if (= EPIPE (system-error-errno args))
+          (primitive-_exit 0)
+          (apply throw args)))))
 
 (define* (specification->package+output spec #:optional (output "out"))
-  "Find the package and output specified by SPEC, or #f and #f; SPEC may
+  "Return the package and output specified by SPEC, or #f and #f; SPEC may
 optionally contain a version number and an output name, as in these examples:
 
   guile
@@ -342,7 +347,7 @@ version; if SPEC does not specify an output, return OUTPUT."
   "Return #t if there's a version of package NAME newer than CURRENT-VERSION,
 or if the newest available version is equal to CURRENT-VERSION but would have
 an output path different than CURRENT-PATH."
-  (match (vhash-assoc name (newest-available-packages))
+  (match (vhash-assoc name (find-newest-available-packages))
     ((_ candidate-version pkg . rest)
      (case (version-compare candidate-version current-version)
        ((>) #t)
@@ -412,8 +417,11 @@ current settings and report only settings not already effective."
     (define manifest-entry->package
       (match-lambda
        (($ <manifest-entry> name version)
-        (match (append (find-packages-by-name name version)
-                       (find-packages-by-name name))
+        ;; Use 'find-best-packages-by-name' and not 'find-packages-by-name';
+        ;; the former traverses the module tree only once and then allows for
+        ;; efficient access via a vhash.
+        (match (or (find-best-packages-by-name name version)
+                   (find-best-packages-by-name name #f))
           ((p _ ...) p)
           (_ #f)))))
 
@@ -456,6 +464,7 @@ ENTRIES, a list of manifest entries, in the context of PROFILE."
   ;; Alist of default option values.
   `((profile . ,%current-profile)
     (max-silent-time . 3600)
+    (verbosity . 0)
     (substitutes? . #t)))
 
 (define (show-help)
@@ -480,18 +489,9 @@ Install, remove, or upgrade PACKAGES in a single transaction.\n"))
   (display (_ "
   -d, --delete-generations[=PATTERN]
                          delete generations matching PATTERN"))
-  (newline)
   (display (_ "
   -p, --profile=PROFILE  use PROFILE instead of the user's default profile"))
-  (display (_ "
-  -n, --dry-run          show what would be done without actually doing it"))
-  (display (_ "
-      --fallback         fall back to building when the substituter fails"))
-  (display (_ "
-      --no-substitutes   build instead of resorting to pre-built substitutes"))
-  (display (_ "
-      --max-silent-time=SECONDS
-                         mark the build as failed after SECONDS of silence"))
+  (newline)
   (display (_ "
       --bootstrap        use the bootstrap Guile to build the profile"))
   (display (_ "
@@ -506,6 +506,8 @@ Install, remove, or upgrade PACKAGES in a single transaction.\n"))
   -A, --list-available[=REGEXP]
                          list available packages matching REGEXP"))
   (newline)
+  (show-build-options-help)
+  (newline)
   (display (_ "
   -h, --help             display this help and exit"))
   (display (_ "
@@ -515,78 +517,94 @@ Install, remove, or upgrade PACKAGES in a single transaction.\n"))
 
 (define %options
   ;; Specification of the command-line options.
-  (list (option '(#\h "help") #f #f
-                (lambda args
-                  (show-help)
-                  (exit 0)))
-        (option '(#\V "version") #f #f
-                (lambda args
-                  (show-version-and-exit "guix package")))
+  (cons* (option '(#\h "help") #f #f
+                 (lambda args
+                   (show-help)
+                   (exit 0)))
+         (option '(#\V "version") #f #f
+                 (lambda args
+                   (show-version-and-exit "guix package")))
 
-        (option '(#\i "install") #t #f
-                (lambda (opt name arg result)
-                  (alist-cons 'install arg result)))
-        (option '(#\e "install-from-expression") #t #f
-                (lambda (opt name arg result)
-                  (alist-cons 'install (read/eval-package-expression arg)
-                              result)))
-        (option '(#\r "remove") #t #f
-                (lambda (opt name arg result)
-                  (alist-cons 'remove arg result)))
-        (option '(#\u "upgrade") #f #t
-                (lambda (opt name arg result)
-                  (alist-cons 'upgrade arg result)))
-        (option '("roll-back") #f #f
-                (lambda (opt name arg result)
-                  (alist-cons 'roll-back? #t result)))
-        (option '(#\l "list-generations") #f #t
-                (lambda (opt name arg result)
-                  (cons `(query list-generations ,(or arg ""))
-                        result)))
-        (option '(#\d "delete-generations") #f #t
-                (lambda (opt name arg result)
-                  (alist-cons 'delete-generations (or arg "")
-                              result)))
-        (option '("search-paths") #f #f
-                (lambda (opt name arg result)
-                  (cons `(query search-paths) result)))
-        (option '(#\p "profile") #t #f
-                (lambda (opt name arg result)
-                  (alist-cons 'profile arg
-                              (alist-delete 'profile result))))
-        (option '(#\n "dry-run") #f #f
-                (lambda (opt name arg result)
-                  (alist-cons 'dry-run? #t result)))
-        (option '("fallback") #f #f
-                (lambda (opt name arg result)
-                  (alist-cons 'fallback? #t
-                              (alist-delete 'fallback? result))))
-        (option '("no-substitutes") #f #f
-                (lambda (opt name arg result)
-                  (alist-cons 'substitutes? #f
-                              (alist-delete 'substitutes? result))))
-        (option '("max-silent-time") #t #f
-                (lambda (opt name arg result)
-                  (alist-cons 'max-silent-time (string->number* arg)
-                              result)))
-        (option '("bootstrap") #f #f
-                (lambda (opt name arg result)
-                  (alist-cons 'bootstrap? #t result)))
-        (option '("verbose") #f #f
-                (lambda (opt name arg result)
-                  (alist-cons 'verbose? #t result)))
-        (option '(#\s "search") #t #f
-                (lambda (opt name arg result)
-                  (cons `(query search ,(or arg ""))
-                        result)))
-        (option '(#\I "list-installed") #f #t
-                (lambda (opt name arg result)
-                  (cons `(query list-installed ,(or arg ""))
-                        result)))
-        (option '(#\A "list-available") #f #t
-                (lambda (opt name arg result)
-                  (cons `(query list-available ,(or arg ""))
-                        result)))))
+         (option '(#\i "install") #f #t
+                 (lambda (opt name arg result arg-handler)
+                   (let arg-handler ((arg arg) (result result))
+                     (values (if arg
+                                 (alist-cons 'install arg result)
+                                 result)
+                             arg-handler))))
+         (option '(#\e "install-from-expression") #t #f
+                 (lambda (opt name arg result arg-handler)
+                   (values (alist-cons 'install (read/eval-package-expression arg)
+                                       result)
+                           #f)))
+         (option '(#\r "remove") #f #t
+                 (lambda (opt name arg result arg-handler)
+                   (let arg-handler ((arg arg) (result result))
+                     (values (if arg
+                                 (alist-cons 'remove arg result)
+                                 result)
+                             arg-handler))))
+         (option '(#\u "upgrade") #f #t
+                 (lambda (opt name arg result arg-handler)
+                   (let arg-handler ((arg arg) (result result))
+                     (values (alist-cons 'upgrade arg
+                                         ;; Delete any prior "upgrade all"
+                                         ;; command, or else "--upgrade gcc"
+                                         ;; would upgrade everything.
+                                         (delete '(upgrade . #f) result))
+                             arg-handler))))
+         (option '("roll-back") #f #f
+                 (lambda (opt name arg result arg-handler)
+                   (values (alist-cons 'roll-back? #t result)
+                           #f)))
+         (option '(#\l "list-generations") #f #t
+                 (lambda (opt name arg result arg-handler)
+                   (values (cons `(query list-generations ,(or arg ""))
+                                 result)
+                           #f)))
+         (option '(#\d "delete-generations") #f #t
+                 (lambda (opt name arg result arg-handler)
+                   (values (alist-cons 'delete-generations (or arg "")
+                                       result)
+                           #f)))
+         (option '("search-paths") #f #f
+                 (lambda (opt name arg result arg-handler)
+                   (values (cons `(query search-paths) result)
+                           #f)))
+         (option '(#\p "profile") #t #f
+                 (lambda (opt name arg result arg-handler)
+                   (values (alist-cons 'profile arg
+                                       (alist-delete 'profile result))
+                           #f)))
+         (option '(#\n "dry-run") #f #f
+                 (lambda (opt name arg result arg-handler)
+                   (values (alist-cons 'dry-run? #t result)
+                           #f)))
+         (option '("bootstrap") #f #f
+                 (lambda (opt name arg result arg-handler)
+                   (values (alist-cons 'bootstrap? #t result)
+                           #f)))
+         (option '("verbose") #f #f
+                 (lambda (opt name arg result arg-handler)
+                   (values (alist-cons 'verbose? #t result)
+                           #f)))
+         (option '(#\s "search") #t #f
+                 (lambda (opt name arg result arg-handler)
+                   (values (cons `(query search ,(or arg ""))
+                                 result)
+                           #f)))
+         (option '(#\I "list-installed") #f #t
+                 (lambda (opt name arg result arg-handler)
+                   (values (cons `(query list-installed ,(or arg ""))
+                                 result)
+                           #f)))
+         (option '(#\A "list-available") #f #t
+                 (lambda (opt name arg result arg-handler)
+                   (values (cons `(query list-available ,(or arg ""))
+                                 result)
+                           #f)))
+
+         %standard-build-options))
 
 (define (options->installable opts manifest)
   "Given MANIFEST, the current manifest, and OPTS, the result of 'args-fold',
@@ -708,6 +726,11 @@ removed from MANIFEST."
                (_ #f))
               options))
 
+(define (maybe-register-gc-root store profile)
+  "Register PROFILE as a GC root, unless it doesn't need it."
+  (unless (string=? profile %current-profile)
+    (add-indirect-root store (canonicalize-path profile))))
+
 
 ;;;
 ;;; Entry point.
@@ -717,11 +740,14 @@ removed from MANIFEST."
   (define (parse-options)
     ;; Return the alist of option values.
     (args-fold* args %options
-                (lambda (opt name arg result)
+                (lambda (opt name arg result arg-handler)
                   (leave (_ "~A: unrecognized option~%") name))
-                (lambda (arg result)
-                  (leave (_ "~A: extraneous argument~%") arg))
-                %default-options))
+                (lambda (arg result arg-handler)
+                  (if arg-handler
+                      (arg-handler arg result)
+                      (leave (_ "~A: extraneous argument~%") arg)))
+                %default-options
+                #f))
 
   (define (guile-missing?)
     ;; Return #t if %GUILE-FOR-BUILD is not available yet.
@@ -897,6 +923,7 @@ more information.~%"))
                               (let ((count (length entries)))
                                 (switch-symlinks name prof)
                                 (switch-symlinks profile name)
+                                (maybe-register-gc-root (%store) profile)
                                 (format #t (N_ "~a package in profile~%"
                                                "~a packages in profile~%"
                                                count)
@@ -938,15 +965,17 @@ more information.~%"))
                        profile))
                ((string-null? pattern)
                 (let ((numbers (generation-numbers profile)))
-                  (if (equal? numbers '(0))
-                      (exit 0)
-                      (for-each list-generation numbers))))
+                  (leave-on-EPIPE
+                   (if (equal? numbers '(0))
+                       (exit 0)
+                       (for-each list-generation numbers)))))
                ((matching-generations pattern profile)
                 =>
                 (lambda (numbers)
                   (if (null-list? numbers)
                       (exit 1)
-                      (for-each list-generation numbers))))
+                      (leave-on-EPIPE
+                       (for-each list-generation numbers)))))
                (else
                 (leave (_ "invalid syntax: ~a~%")
                        pattern)))
@@ -956,15 +985,16 @@ more information.~%"))
          (let* ((regexp    (and regexp (make-regexp regexp)))
                 (manifest  (profile-manifest profile))
                 (installed (manifest-entries manifest)))
-           (for-each (match-lambda
-                      (($ <manifest-entry> name version output path _)
-                       (when (or (not regexp)
-                                 (regexp-exec regexp name))
-                         (format #t "~a\t~a\t~a\t~a~%"
-                                 name (or version "?") output path))))
+           (leave-on-EPIPE
+            (for-each (match-lambda
+                       (($ <manifest-entry> name version output path _)
+                        (when (or (not regexp)
+                                  (regexp-exec regexp name))
+                          (format #t "~a\t~a\t~a\t~a~%"
+                                  name (or version "?") output path))))
 
-                     ;; Show most recently installed packages last.
-                     (reverse installed))
+                      ;; Show most recently installed packages last.
+                      (reverse installed)))
            #t))
 
         (('list-available regexp)
@@ -978,22 +1008,24 @@ more information.~%"))
                                         r)
                                     (cons p r))))
                             '())))
-           (for-each (lambda (p)
-                       (format #t "~a\t~a\t~a\t~a~%"
-                               (package-name p)
-                               (package-version p)
-                               (string-join (package-outputs p) ",")
-                               (location->string (package-location p))))
-                     (sort available
-                           (lambda (p1 p2)
-                             (string<? (package-name p1)
-                                       (package-name p2)))))
+           (leave-on-EPIPE
+            (for-each (lambda (p)
+                        (format #t "~a\t~a\t~a\t~a~%"
+                                (package-name p)
+                                (package-version p)
+                                (string-join (package-outputs p) ",")
+                                (location->string (package-location p))))
+                      (sort available
+                            (lambda (p1 p2)
+                              (string<? (package-name p1)
+                                        (package-name p2))))))
            #t))
 
         (('search regexp)
          (let ((regexp (make-regexp regexp regexp/icase)))
-           (for-each (cute package->recutils <> (current-output-port))
-                     (find-packages-by-description regexp))
+           (leave-on-EPIPE
+            (for-each (cute package->recutils <> (current-output-port))
+                      (find-packages-by-description regexp)))
            #t))
 
         (('search-paths)
@@ -1011,13 +1043,7 @@ more information.~%"))
     (or (process-query opts)
         (with-error-handling
           (parameterize ((%store (open-connection)))
-            (set-build-options (%store)
-                               #:print-build-trace #f
-                               #:fallback? (assoc-ref opts 'fallback?)
-                               #:use-substitutes?
-                               (assoc-ref opts 'substitutes?)
-                               #:max-silent-time
-                               (assoc-ref opts 'max-silent-time))
+            (set-build-options-from-command-line (%store) opts)
 
             (parameterize ((%guile-for-build
                             (package-derivation (%store)

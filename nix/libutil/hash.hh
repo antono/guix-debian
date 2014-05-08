@@ -91,7 +91,7 @@ HashType parseHashType(const string & s);
 string printHashType(HashType ht);
 
 
-union Ctx;
+struct Ctx;
 
 class HashSink : public BufferedSink
 {

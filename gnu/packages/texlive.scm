@@ -75,18 +75,19 @@
              ("libpng" ,libpng)
              ("libxaw" ,libxaw)
              ("libxt" ,libxt)
-             ("perl" ,perl)
              ("pixman" ,pixman)
              ("poppler" ,poppler)
-             ("pkg-config" ,pkg-config)
              ;; FIXME: Add interpreters fontforge and ruby,
              ;; once they are available.
-             ("python" ,python-2) ; incompatible with Python 3 (print syntax)
-             ("tcsh" ,tcsh)
              ("teckit" ,teckit)
              ("t1lib" ,t1lib)
              ("zlib" ,zlib)
              ("zziplib" ,zziplib)))
+   (native-inputs
+    `(("perl" ,perl)
+      ("pkg-config" ,pkg-config)
+      ("python" ,python-2) ; incompatible with Python 3 (print syntax)
+      ("tcsh" ,tcsh)))
    (outputs '("out" "data"))
    (arguments
     `(#:out-of-source? #t
@@ -114,13 +115,11 @@
          "--with-system-zlib"
          "--with-system-zziplib")
       #:phases
-       (alist-replace
-        'configure
-        (lambda* (#:key outputs #:allow-other-keys #:rest args)
-         (let ((configure (assoc-ref %standard-phases 'configure)))
-           (substitute* "utils/psutils/Makefile.in"
-             (("/usr/bin/env perl") (which "perl")))
-           (apply configure args)))
+       (alist-cons-before
+        'configure 'patch-perl-shebang
+        (lambda _
+          (substitute* "utils/psutils/Makefile.in"
+            (("/usr/bin/env perl") (which "perl"))))
        (alist-cons-after
         'install 'postinst
          (lambda* (#:key inputs outputs #:allow-other-keys #:rest args)

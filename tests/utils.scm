@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -26,6 +26,9 @@
   #:use-module (rnrs bytevectors)
   #:use-module (rnrs io ports)
   #:use-module (ice-9 match))
+
+(define temp-file
+  (string-append "t-utils-" (number->string (getpid))))
 
 (test-begin "utils")
 
@@ -139,6 +142,119 @@
                    (append pids1 pids2)))
            (equal? (get-bytevector-all decompressed) data)))))
 
+(test-assert "filtered-port, does not exist"
+  (let* ((file  (search-path %load-path "guix.scm"))
+         (input (open-file file "r0b")))
+    (let-values (((port pids)
+                  (filtered-port '("/does/not/exist") input)))
+      (any (compose (negate zero?) cdr waitpid)
+           pids))))
+
+(test-assert "compressed-port, decompressed-port, non-file"
+  (let ((data (call-with-input-file (search-path %load-path "guix.scm")
+                get-bytevector-all)))
+    (let*-values (((compressed pids1)
+                   (compressed-port 'xz (open-bytevector-input-port data)))
+                  ((decompressed pids2)
+                   (decompressed-port 'xz compressed)))
+      (and (every (compose zero? cdr waitpid)
+                  (append pids1 pids2))
+           (equal? (get-bytevector-all decompressed) data)))))
+
+(false-if-exception (delete-file temp-file))
+(test-assert "compressed-output-port + decompressed-port"
+  (let* ((file (search-path %load-path "guix/derivations.scm"))
+         (data (call-with-input-file file get-bytevector-all)))
+    (call-with-compressed-output-port 'xz (open-file temp-file "w0b")
+      (lambda (compressed)
+        (put-bytevector compressed data)))
+
+    (bytevector=? data
+                  (call-with-decompressed-port 'xz (open-file temp-file "r0b")
+                    get-bytevector-all))))
+
+(false-if-exception (delete-file temp-file))
+(test-equal "fcntl-flock wait"
+  42                                              ; the child's exit status
+  (let ((file (open-file temp-file "w0b")))
+    ;; Acquire an exclusive lock.
+    (fcntl-flock file 'write-lock)
+    (match (primitive-fork)
+      (0
+       (dynamic-wind
+         (const #t)
+         (lambda ()
+           ;; Reopen FILE read-only so we can have a read lock.
+           (let ((file (open-file temp-file "r0b")))
+             ;; Wait until we can acquire the lock.
+             (fcntl-flock file 'read-lock)
+             (primitive-exit (read file)))
+           (primitive-exit 1))
+         (lambda ()
+           (primitive-exit 2))))
+      (pid
+       ;; Write garbage and wait.
+       (display "hello, world!"  file)
+       (force-output file)
+       (sleep 1)
+
+       ;; Write the real answer.
+       (seek file 0 SEEK_SET)
+       (truncate-file file 0)
+       (write 42 file)
+       (force-output file)
+
+       ;; Unlock, which should let the child continue.
+       (fcntl-flock file 'unlock)
+
+       (match (waitpid pid)
+         ((_  . status)
+          (let ((result (status:exit-val status)))
+            (close-port file)
+            result)))))))
+
+(test-equal "fcntl-flock non-blocking"
+  EAGAIN                                          ; the child's exit status
+  (match (pipe)
+    ((input . output)
+     (match (primitive-fork)
+       (0
+        (dynamic-wind
+          (const #t)
+          (lambda ()
+            (close-port output)
+
+            ;; Wait for the green light.
+            (read-char input)
+
+            ;; Open FILE read-only so we can have a read lock.
+            (let ((file (open-file temp-file "w0")))
+              (catch 'flock-error
+                (lambda ()
+                  ;; This attempt should throw EAGAIN.
+                  (fcntl-flock file 'write-lock #:wait? #f))
+                (lambda (key errno)
+                  (primitive-exit (pk 'errno errno)))))
+            (primitive-exit -1))
+          (lambda ()
+            (primitive-exit -2))))
+       (pid
+        (close-port input)
+        (let ((file (open-file temp-file "w0")))
+          ;; Acquire an exclusive lock.
+          (fcntl-flock file 'write-lock)
+
+          ;; Tell the child to continue.
+          (write 'green-light output)
+          (force-output output)
+
+          (match (waitpid pid)
+            ((_  . status)
+             (let ((result (status:exit-val status)))
+               (fcntl-flock file 'unlock)
+               (close-port file)
+               result)))))))))
+
 ;; This is actually in (guix store).
 (test-equal "store-path-package-name"
   "bash-4.2-p24"
@@ -147,6 +263,8 @@
                   "/qvs2rj2ia5vci3wsdb7qvydrmacig4pg-bash-4.2-p24")))
 
 (test-end)
+
+(false-if-exception (delete-file temp-file))
 
 
 (exit (= (test-runner-fail-count (test-runner-current)) 0))
