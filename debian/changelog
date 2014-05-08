@@ -1,3 +1,9 @@
+guix (0.6-1) unstable; urgency=medium
+
+  * New upstream version.
+
+ -- Anton Vasiljev <self@antono.info>  Thu, 08 May 2014 21:50:11 +0300
+
 guix (0.5-1) unstable; urgency=medium
 
   * New upstream version.
