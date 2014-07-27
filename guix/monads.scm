@@ -55,11 +55,11 @@
             run-with-store
             text-file
             text-file*
+            interned-file
             package-file
+            origin->derivation
             package->derivation
-            built-derivations
-            derivation-expression
-            lower-inputs)
+            built-derivations)
   #:replace (imported-modules
              compiled-modules))
 
@@ -210,13 +210,15 @@ monadic value seeded by INIT."
 
 (define (mapm monad mproc lst)
   "Map MPROC over LST, a list of monadic values in MONAD, and return a monadic
-list."
-  (foldm monad
-         (lambda (item result)
-           (mlet monad ((item (mproc item)))
-             (return (cons item result))))
-         '()
-         (reverse lst)))
+list.  LST items are bound from left to right, so effects in MONAD are known
+to happen in that order."
+  (mlet monad ((result (foldm monad
+                              (lambda (item result)
+                                (mlet monad ((item (mproc item)))
+                                  (return (cons item result))))
+                              '()
+                              lst)))
+    (return (reverse result))))
 
 (define-inlinable (sequence monad lst)
   "Turn the list of monadic values LST into a monadic list of values, by
@@ -356,9 +358,22 @@ and store file names; the resulting store file holds references to all these."
        (lambda (port)
          (display ,(computed-text text inputs) port))))
 
+  ;; TODO: Rewrite using 'gexp->derivation'.
   (mlet %store-monad ((inputs (lower-inputs inputs)))
     (derivation-expression name (builder inputs)
                            #:inputs inputs)))
+
+(define* (interned-file file #:optional name
+                        #:key (recursive? #t))
+  "Return the name of FILE once interned in the store.  Use NAME as its store
+name, or the basename of FILE if NAME is omitted.
+
+When RECURSIVE? is true, the contents of FILE are added recursively; if FILE
+designates a flat file and RECURSIVE? is true, its contents are added, and its
+permission bits are kept."
+  (lambda (store)
+    (add-to-store store (or name (basename file))
+                  recursive? "sha256" file)))
 
 (define* (package-file package
                        #:optional file
@@ -376,7 +391,7 @@ OUTPUT directory of PACKAGE."
 (define (lower-inputs inputs)
   "Turn any package from INPUTS into a derivation; return the corresponding
 input list as a monadic value."
-  ;; XXX: Should probably be in (guix packages).
+  ;; XXX: This procedure is bound to disappear with 'derivation-expression'.
   (with-monad %store-monad
     (sequence %store-monad
               (map (match-lambda
@@ -390,10 +405,14 @@ input list as a monadic value."
                    inputs))))
 
 (define derivation-expression
+  ;; XXX: This procedure is superseded by 'gexp->derivation'.
   (store-lift build-expression->derivation))
 
 (define package->derivation
   (store-lift package-derivation))
+
+(define origin->derivation
+  (store-lift package-source-derivation))
 
 (define imported-modules
   (store-lift (@ (guix derivations) imported-modules)))
@@ -410,10 +429,15 @@ input list as a monadic value."
                          (system (%current-system)))
   "Run MVAL, a monadic value in the store monad, in STORE, an open store
 connection."
+  (define (default-guile)
+    ;; Lazily resolve 'guile-final'.  This module must not refer to (gnu …)
+    ;; modules directly, to avoid circular dependencies, hence this hack.
+    (module-ref (resolve-interface '(gnu packages base))
+                'guile-final))
+
   (parameterize ((%guile-for-build (or guile-for-build
                                        (package-derivation store
-                                                           (@ (gnu packages base)
-                                                              guile-final)
+                                                           (default-guile)
                                                            system)))
                  (%current-system system))
     (mval store)))

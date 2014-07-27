@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
+;;; Copyright © 2013, 2014 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2013 Nikita Karetnikov <nikita@karetnikov.org>
 ;;; Copyright © 2013 David Thompson <dthompson2@worcester.edu>
 ;;; Copyright © 2014 Sree Harsha Totakura <sreeharsha@totakura.in>
@@ -25,7 +25,8 @@
   #:use-module (gnu packages bison)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages curl)
-  #:use-module (gnu packages libpng)
+  #:use-module (gnu packages doxygen)
+  #:use-module (gnu packages image)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
   #:use-module (gnu packages linux)
@@ -48,14 +49,14 @@
 (define libogg
   (package
    (name "libogg")
-   (version "1.3.0")
+   (version "1.3.2")
    (source (origin
             (method url-fetch)
             (uri (string-append "http://downloads.xiph.org/releases/ogg/libogg-"
                                 version ".tar.xz"))
             (sha256
              (base32
-              "0jy79ffkl34vycnwfsj4svqsdg1lwy2l1rr49y8r4d44kh12a5r3"))))
+              "16z74q422jmprhyvy7c9x909li8cqzmvzyr8cgbm52xcsp6pqs1z"))))
    (build-system gnu-build-system)
    (synopsis "libogg, a library for manipulating the ogg multimedia format")
    (description
@@ -71,14 +72,14 @@ periodic timestamps for seeking.")
 (define libvorbis
   (package
    (name "libvorbis")
-   (version "1.3.3")
+   (version "1.3.4")
    (source (origin
             (method url-fetch)
             (uri (string-append "http://downloads.xiph.org/releases/vorbis/libvorbis-"
                                 version ".tar.xz"))
             (sha256
              (base32
-              "1gby6hapz9njx4l9g0pndyk4q83z5fgrgc30mfwfgx7bllspsk43"))))
+              "0wpk87jnhngcl3nc5i39flkycx1sjzilx8jjx4zc4p8r55ylj19g"))))
    (build-system gnu-build-system)
    (propagated-inputs `(("libogg" ,libogg)))
    (arguments `(#:configure-flags '("LDFLAGS=-lm")
@@ -191,16 +192,14 @@ OpenBSD's sndio.")
 (define flac
   (package
    (name "flac")
-   (version "1.2.1")
+   (version "1.3.0")
    (source (origin
             (method url-fetch)
             (uri (string-append "http://downloads.xiph.org/releases/flac/flac-"
-                                version ".tar.gz"))
+                                version ".tar.xz"))
             (sha256
              (base32
-              "1pry5lgzfg57pga1zbazzdd55fkgk3v5qy4axvrbny5lrr5s8dcn"))
-            (patches
-             (list (search-patch "flac-fix-memcmp-not-declared.patch")))))
+              "1p0hh190kqvpkbk1bbajd81jfbmkyl4fn2i7pggk2zppq6m68bgs"))))
    (build-system gnu-build-system)
    (arguments
     `(#:parallel-tests? #f
@@ -231,12 +230,13 @@ meaning that audio is compressed in FLAC without any loss in quality.")
              (base32
               "0s3vr2nxfxlf1k75iqpp4l78yf4gil3f0v778kvlngbchvaq23n4"))))
    (build-system gnu-build-system)
-   ;; FIXME: Add optional inputs doxygen (for documentation) and liboggz
+   (native-inputs `(("doxygen" ,doxygen)
+                    ("pkg-config" ,pkg-config)))
+   ;; FIXME: Add optional input liboggz
    (inputs `(("bison" ,bison)
              ("libogg" ,libogg)
              ("libpng" ,libpng)
-             ("pkg-config" ,pkg-config)
-             ("python" ,python-wrapper)
+("python" ,python-wrapper)
              ("zlib" ,zlib)))
    (synopsis "kate, a karaoke and text codec for embedding in ogg")
    (description

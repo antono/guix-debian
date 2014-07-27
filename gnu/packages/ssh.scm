@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
+;;; Copyright © 2013, 2014 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2014 Mark H Weaver <mhw@netris.org>
 ;;;
 ;;; This file is part of GNU Guix.
@@ -29,6 +29,10 @@
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages autotools)
   #:use-module (gnu packages texinfo)
+  #:use-module (gnu packages perl)
+  #:use-module (gnu packages ncurses)
+  #:autoload   (gnu packages protobuf) (protobuf)
+  #:autoload   (gnu packages boost) (boost)
   #:use-module (gnu packages which)
   #:use-module (gnu packages)
   #:use-module (guix packages)
@@ -49,39 +53,10 @@
                 "1jyaj9h1iglvn02hrvcchbx8ycjpj8b91h8mi459k7q5jp2xgd9b"))))
     (build-system cmake-build-system)
     (arguments
-     '(#:configure-flags '("-DWITH_GCRYPT=ON"
-
-                           ;; Leave a valid RUNPATH upon install.
-                           "-DCMAKE_SKIP_BUILD_RPATH=ON")
+     '(#:configure-flags '("-DWITH_GCRYPT=ON")
 
        ;; TODO: Add 'CMockery' and '-DWITH_TESTING=ON' for the test suite.
-       #:tests? #f
-
-       #:modules ((guix build cmake-build-system)
-                  (guix build utils)
-                  (guix build rpath))
-       #:imported-modules ((guix build gnu-build-system)
-                           (guix build cmake-build-system)
-                           (guix build utils)
-                           (guix build rpath))
-
-       #:phases (alist-cons-after
-                 'install 'augment-runpath
-                 (lambda* (#:key outputs #:allow-other-keys)
-                   ;; libssh_threads.so NEEDs libssh.so, so add $libdir to its
-                   ;; RUNPATH.
-                   (define (dereference file)
-                     (let ((target (false-if-exception (readlink file))))
-                       (if target
-                           (dereference target)
-                           file)))
-
-                   (let* ((out (assoc-ref outputs "out"))
-                          (lib (string-append out "/lib")))
-                     (with-directory-excursion lib
-                       (augment-rpath (dereference "libssh_threads.so")
-                                      lib))))
-                 %standard-phases)))
+       #:tests? #f))
     (inputs `(("zlib" ,zlib)
                ;; Link against an older gcrypt, because libssh tries to access
                ;; fields of 'gcry_thread_cbs' that are now private:
@@ -141,9 +116,11 @@ a server that supports the SSH-2 protocol.")
    (version "6.6p1")
    (source (origin
             (method url-fetch)
-            (uri (string-append
-                   "ftp://ftp.fr.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-"
-                   version ".tar.gz"))
+            (uri (let ((tail (string-append name "-" version ".tar.gz")))
+                   (list (string-append "ftp://ftp.fr.openbsd.org/pub/OpenBSD/OpenSSH/portable/"
+                                        tail)
+                         (string-append "ftp://ftp2.fr.openbsd.org/pub/OpenBSD/OpenSSH/portable/"
+                                        tail))))
             (sha256 (base32
                      "1fq3w86q05y5nn6z878wm312k0svaprw8k007188fd259dkg1ha8"))))
    (build-system gnu-build-system)
@@ -302,3 +279,65 @@ At the moment only plain text authentication is supported, should you require
 to use it with your HTTP proxy.  Digest based authentication may be supported
 in future and NTLM based authentication is most likey never be supported.")
     (license license:gpl2+)))
+
+(define-public mosh
+  (package
+    (name "mosh")
+    (version "1.2.4")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "http://mosh.mit.edu/mosh-"
+                                  version ".tar.gz"))
+              (sha256
+               (base32
+                "0inzfmqrab3n97m7rrmhd4xh3hjz0xva2sfl5m06w11668r0skg7"))))
+    (build-system gnu-build-system)
+    (arguments
+     '(#:phases (alist-cons-after
+                 'install 'wrap
+                 (lambda* (#:key outputs #:allow-other-keys)
+                   ;; Make sure 'mosh' can find 'mosh-client' and
+                   ;; 'mosh-server'.
+                   (let* ((out (assoc-ref outputs "out"))
+                          (bin (string-append out "/bin")))
+                     (wrap-program (string-append bin "/mosh")
+                                   `("PATH" ":" prefix (,bin)))))
+                 %standard-phases)))
+    (native-inputs
+     `(("pkg-config" ,pkg-config)))
+    (inputs
+     `(("openssl" ,openssl)
+       ("perl" ,perl)
+       ("perl-io-tty" ,perl-io-tty)
+       ("zlib" ,zlib)
+       ("ncurses" ,ncurses)
+       ("protobuf" ,protobuf)
+       ("boost-headers" ,boost)))
+    (home-page "http://mosh.mit.edu/")
+    (synopsis "Remote shell tolerant to intermittent connectivity")
+    (description
+     "Remote terminal application that allows roaming, supports intermittent
+connectivity, and provides intelligent local echo and line editing of user
+keystrokes.  Mosh is a replacement for SSH.  It's more robust and responsive,
+especially over Wi-Fi, cellular, and long-distance links.")
+    (license license:gpl3+)))
+
+(define-public dropbear
+  (package
+    (name "dropbear")
+    (version "2014.63")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append
+                    "http://matt.ucc.asn.au/" name "/releases/" name "-" version ".tar.bz2"))
+              (sha256
+               (base32 "1bjpbg2vi5f332q4bqxkidkjfxsqmnqvp4g1wyh8d99b8gg94nar"))))
+    (build-system gnu-build-system)
+    (arguments  `(#:tests? #f)) ; There is no "make check" or anything similar
+    (inputs `(("zlib" ,zlib)))
+    (synopsis "Small SSH server and client")
+    (description "Dropbear is a relatively small SSH server and
+client. It runs on a variety of POSIX-based platforms. Dropbear is
+particularly useful for embedded systems, such as wireless routers.")   
+    (home-page "https://matt.ucc.asn.au/dropbear/dropbear.html")
+    (license (license:x11-style "" "See file LICENSE."))))

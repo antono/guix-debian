@@ -1,0 +1,465 @@
+# English translations for guix package.
+# Copyright (C) 2014 Ludovic Courtès
+# This file is distributed under the same license as the guix package.
+# Automatically generated, 2014.
+#
+# All this catalog "translates" are quotation characters.
+# The msgids must be ASCII and therefore cannot contain real quotation
+# characters, only substitutes like grave accent (0x60), apostrophe (0x27)
+# and double quote (0x22). These substitutes look strange; see
+# http://www.cl.cam.ac.uk/~mgk25/ucs/quotes.html
+#
+# This catalog translates grave accent (0x60) and apostrophe (0x27) to
+# left single quotation mark (U+2018) and right single quotation mark (U+2019).
+# It also translates pairs of apostrophe (0x27) to
+# left single quotation mark (U+2018) and right single quotation mark (U+2019)
+# and pairs of quotation mark (0x22) to
+# left double quotation mark (U+201C) and right double quotation mark (U+201D).
+#
+# When output to an UTF-8 terminal, the quotation characters appear perfectly.
+# When output to an ISO-8859-1 terminal, the single quotation marks are
+# transliterated to apostrophes (by iconv in glibc 2.2 or newer) or to
+# grave/acute accent (by libiconv), and the double quotation marks are
+# transliterated to 0x22.
+# When output to an ASCII terminal, the single quotation marks are
+# transliterated to apostrophes, and the double quotation marks are
+# transliterated to 0x22.
+#
+# This catalog furthermore displays the text between the quotation marks in
+# bold face, assuming the VT100/XTerm escape sequences.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: guix 0.7\n"
+"Report-Msgid-Bugs-To: ludo@gnu.org\n"
+"POT-Creation-Date: 2014-07-24 22:50+0200\n"
+"PO-Revision-Date: 2014-07-24 22:50+0200\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: en@boldquot\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: gnu/packages/base.scm:65
+msgid "Hello, GNU world: An example GNU package"
+msgstr "Hello, GNU world: An example GNU package"
+
+#: gnu/packages/base.scm:67
+msgid ""
+"GNU Hello prints the message \"Hello, world!\" and then exits.  It\n"
+"serves as an example of standard GNU coding practices.  As such, it supports\n"
+"command-line arguments, multiple languages, and so on."
+msgstr ""
+"GNU Hello prints the message “[1mHello, world![0m” and then exits.  It\n"
+"serves as an example of standard GNU coding practices.  As such, it supports\n"
+"command-line arguments, multiple languages, and so on."
+
+#: gnu/packages/base.scm:85
+msgid "Print lines matching a pattern"
+msgstr "Print lines matching a pattern"
+
+#: gnu/packages/base.scm:87
+msgid ""
+"grep is a tool for finding text inside files.  Text is found by\n"
+"matching a pattern provided by the user in one or many files.  The pattern\n"
+"may be provided as a basic or extended regular expression, or as fixed\n"
+"strings.  By default, the matching text is simply printed to the screen,\n"
+"however the output can be greatly customized to include, for example, line\n"
+"numbers.  GNU grep offers many extensions over the standard utility,\n"
+"including, for example, recursive directory searching."
+msgstr ""
+"grep is a tool for finding text inside files.  Text is found by\n"
+"matching a pattern provided by the user in one or many files.  The pattern\n"
+"may be provided as a basic or extended regular expression, or as fixed\n"
+"strings.  By default, the matching text is simply printed to the screen,\n"
+"however the output can be greatly customized to include, for example, line\n"
+"numbers.  GNU grep offers many extensions over the standard utility,\n"
+"including, for example, recursive directory searching."
+
+#: gnu/packages/base.scm:109
+msgid "Stream editor"
+msgstr "Stream editor"
+
+#: gnu/packages/base.scm:124
+msgid ""
+"Sed is a non-interactive, text stream editor.  It receives a text\n"
+"input from a file or from standard input and it then applies a series of text\n"
+"editing commands to the stream and prints its output to standard output.  It\n"
+"is often used for substituting text patterns in a stream.  The GNU\n"
+"implementation offers several extensions over the standard utility."
+msgstr ""
+"Sed is a non-interactive, text stream editor.  It receives a text\n"
+"input from a file or from standard input and it then applies a series of text\n"
+"editing commands to the stream and prints its output to standard output.  It\n"
+"is often used for substituting text patterns in a stream.  The GNU\n"
+"implementation offers several extensions over the standard utility."
+
+#: gnu/packages/base.scm:144
+msgid "Managing tar archives"
+msgstr "Managing tar archives"
+
+#: gnu/packages/base.scm:146
+msgid ""
+"Tar provides the ability to create tar archives, as well as the\n"
+"ability to extract, update or list files in an existing archive.  It is\n"
+"useful for combining many files into one larger file, while maintaining\n"
+"directory structure and file information such as permissions and\n"
+"creation/modification dates.  GNU tar offers many extensions over the\n"
+"standard utility."
+msgstr ""
+"Tar provides the ability to create tar archives, as well as the\n"
+"ability to extract, update or list files in an existing archive.  It is\n"
+"useful for combining many files into one larger file, while maintaining\n"
+"directory structure and file information such as permissions and\n"
+"creation/modification dates.  GNU tar offers many extensions over the\n"
+"standard utility."
+
+#: gnu/packages/base.scm:173
+msgid "Apply differences to originals, with optional backups"
+msgstr "Apply differences to originals, with optional backups"
+
+#: gnu/packages/base.scm:175
+msgid ""
+"Patch is a program that applies changes to files based on differences\n"
+"laid out as by the program \"diff\".  The changes may be applied to one or more\n"
+"files depending on the contents of the diff file.  It accepts several\n"
+"different diff formats.  It may also be used to revert previously applied\n"
+"differences."
+msgstr ""
+"Patch is a program that applies changes to files based on differences\n"
+"laid out as by the program “[1mdiff[0m”.  The changes may be applied to one or more\n"
+"files depending on the contents of the diff file.  It accepts several\n"
+"different diff formats.  It may also be used to revert previously applied\n"
+"differences."
+
+#: gnu/packages/base.scm:195
+msgid "Comparing and merging files"
+msgstr "Comparing and merging files"
+
+#: gnu/packages/base.scm:197
+msgid ""
+"GNU Diffutils is a package containing tools for finding the\n"
+"differences between files.  The \"diff\" command is used to show how two files\n"
+"differ, while \"cmp\" shows the offsets and line numbers where they differ. \n"
+"\"diff3\" allows you to compare three files.  Finally, \"sdiff\" offers an\n"
+"interactive means to merge two files."
+msgstr ""
+"GNU Diffutils is a package containing tools for finding the\n"
+"differences between files.  The “[1mdiff[0m” command is used to show how two files\n"
+"differ, while “[1mcmp[0m” shows the offsets and line numbers where they differ. \n"
+"“[1mdiff3[0m” allows you to compare three files.  Finally, “[1msdiff[0m” offers an\n"
+"interactive means to merge two files."
+
+#: gnu/packages/base.scm:224
+msgid "Operating on files matching given criteria"
+msgstr "Operating on files matching given criteria"
+
+#: gnu/packages/base.scm:226
+msgid ""
+"Findutils supplies the basic file directory searching utilities of the\n"
+"GNU system.  It consists of two primary searching utilities: \"find\"\n"
+"recursively searches for files in a directory according to given criteria and\n"
+"\"locate\" lists files in a database that match a query.  Two auxiliary tools\n"
+"are included: \"updatedb\" updates the file name database and \"xargs\" may be\n"
+"used to apply commands with arbitrarily long arguments."
+msgstr ""
+"Findutils supplies the basic file directory searching utilities of the\n"
+"GNU system.  It consists of two primary searching utilities: “[1mfind[0m”\n"
+"recursively searches for files in a directory according to given criteria and\n"
+"“[1mlocate[0m” lists files in a database that match a query.  Two auxiliary tools\n"
+"are included: “[1mupdatedb[0m” updates the file name database and “[1mxargs[0m” may be\n"
+"used to apply commands with arbitrarily long arguments."
+
+#: gnu/packages/base.scm:278
+msgid "Core GNU utilities (file, text, shell)"
+msgstr "Core GNU utilities (file, text, shell)"
+
+#: gnu/packages/base.scm:280
+msgid ""
+"GNU Coreutils includes all of the basic command-line tools that are\n"
+"expected in a POSIX system.  These provide the basic file, shell and text\n"
+"manipulation functions of the GNU system.  Most of these tools offer extended\n"
+"functionality beyond that which is outlined in the POSIX standard."
+msgstr ""
+"GNU Coreutils includes all of the basic command-line tools that are\n"
+"expected in a POSIX system.  These provide the basic file, shell and text\n"
+"manipulation functions of the GNU system.  Most of these tools offer extended\n"
+"functionality beyond that which is outlined in the POSIX standard."
+
+#: gnu/packages/base.scm:314
+msgid "Remake files automatically"
+msgstr "Remake files automatically"
+
+#: gnu/packages/base.scm:316
+msgid ""
+"Make is a program that is used to control the production of\n"
+"executables or other files from their source files.  The process is\n"
+"controlled from a Makefile, in which the developer specifies how each file is\n"
+"generated from its source.  It has powerful dependency resolution and the\n"
+"ability to determine when files have to be regenerated after their sources\n"
+"change.  GNU make offers many powerful extensions over the standard utility."
+msgstr ""
+"Make is a program that is used to control the production of\n"
+"executables or other files from their source files.  The process is\n"
+"controlled from a Makefile, in which the developer specifies how each file is\n"
+"generated from its source.  It has powerful dependency resolution and the\n"
+"ability to determine when files have to be regenerated after their sources\n"
+"change.  GNU make offers many powerful extensions over the standard utility."
+
+#: gnu/packages/base.scm:361
+msgid "Binary utilities: bfd gas gprof ld"
+msgstr "Binary utilities: bfd gas gprof ld"
+
+#: gnu/packages/base.scm:363
+msgid ""
+"GNU Binutils is a collection of tools for working with binary files.\n"
+"Perhaps the most notable are \"ld\", a linker, and \"as\", an assembler. Other\n"
+"tools include programs to display binary profiling information, list the\n"
+"strings in a binary file, and utilities for working with archives.  The \"bfd\"\n"
+"library for working with executable and object formats is also included."
+msgstr ""
+"GNU Binutils is a collection of tools for working with binary files.\n"
+"Perhaps the most notable are “[1mld[0m”, a linker, and “[1mas[0m”, an assembler. Other\n"
+"tools include programs to display binary profiling information, list the\n"
+"strings in a binary file, and utilities for working with archives.  The “[1mbfd[0m”\n"
+"library for working with executable and object formats is also included."
+
+#: gnu/packages/base.scm:504
+msgid "The GNU C Library"
+msgstr "The GNU C Library"
+
+#: gnu/packages/base.scm:506
+msgid ""
+"Any Unix-like operating system needs a C library: the library which\n"
+"defines the \"system calls\" and other basic facilities such as open, malloc,\n"
+"printf, exit...\n"
+"\n"
+"The GNU C library is used as the C library in the GNU system and most systems\n"
+"with the Linux kernel."
+msgstr ""
+"Any Unix-like operating system needs a C library: the library which\n"
+"defines the “[1msystem calls[0m” and other basic facilities such as open, malloc,\n"
+"printf, exit...\n"
+"\n"
+"The GNU C library is used as the C library in the GNU system and most systems\n"
+"with the Linux kernel."
+
+#: gnu/packages/base.scm:575
+msgid "Database of current and historical time zones"
+msgstr "Database of current and historical time zones"
+
+#: gnu/packages/base.scm:576
+msgid ""
+"The Time Zone Database (often called tz or zoneinfo)\n"
+"contains code and data that represent the history of local time for many\n"
+"representative locations around the globe. It is updated periodically to\n"
+"reflect changes made by political bodies to time zone boundaries, UTC offsets,\n"
+"and daylight-saving rules."
+msgstr ""
+"The Time Zone Database (often called tz or zoneinfo)\n"
+"contains code and data that represent the history of local time for many\n"
+"representative locations around the globe. It is updated periodically to\n"
+"reflect changes made by political bodies to time zone boundaries, UTC offsets,\n"
+"and daylight-saving rules."
+
+#: gnu/packages/base.scm:1004
+msgid "GNU C++ standard library (intermediate)"
+msgstr "GNU C++ standard library (intermediate)"
+
+#: gnu/packages/base.scm:1098
+msgid "The linker wrapper"
+msgstr "The linker wrapper"
+
+#: gnu/packages/base.scm:1100
+msgid ""
+"The linker wrapper (or `ld-wrapper') wraps the linker to add any\n"
+"missing `-rpath' flags, and to detect any misuse of libraries outside of the\n"
+"store."
+msgstr ""
+"The linker wrapper (or ‘[1mld-wrapper[0m’) wraps the linker to add any\n"
+"missing ‘[1m-rpath[0m’ flags, and to detect any misuse of libraries outside of the\n"
+"store."
+
+#: gnu/packages/base.scm:1264
+msgid "Complete GCC tool chain for C/C++ development"
+msgstr "Complete GCC tool chain for C/C++ development"
+
+#: gnu/packages/base.scm:1266
+msgid ""
+"This package provides a complete GCC tool chain for C/C++ development to\n"
+"be installed in user profiles.  This includes GCC, as well as libc (headers\n"
+"and binaries, plus debugging symbols in the 'debug' output), and Binutils."
+msgstr ""
+"This package provides a complete GCC tool chain for C/C++ development to\n"
+"be installed in user profiles.  This includes GCC, as well as libc (headers\n"
+"and binaries, plus debugging symbols in the ‘[1mdebug[0m’ output), and Binutils."
+
+#: gnu/packages/guile.scm:99 gnu/packages/guile.scm:166
+msgid "Scheme implementation intended especially for extensions"
+msgstr "Scheme implementation intended especially for extensions"
+
+#: gnu/packages/guile.scm:101 gnu/packages/guile.scm:168
+msgid ""
+"Guile is the GNU Ubiquitous Intelligent Language for Extensions, the\n"
+"official extension language of the GNU system.  It is an implementation of\n"
+"the Scheme language which can be easily embedded in other applications to\n"
+"provide a convenient means of extending the functionality of the application\n"
+"without requiring the source code to be rewritten."
+msgstr ""
+"Guile is the GNU Ubiquitous Intelligent Language for Extensions, the\n"
+"official extension language of the GNU system.  It is an implementation of\n"
+"the Scheme language which can be easily embedded in other applications to\n"
+"provide a convenient means of extending the functionality of the application\n"
+"without requiring the source code to be rewritten."
+
+#: gnu/packages/guile.scm:211
+msgid "Framework for building readers for GNU Guile"
+msgstr "Framework for building readers for GNU Guile"
+
+#: gnu/packages/guile.scm:213
+msgid ""
+"Guile-Reader is a simple framework for building readers for GNU Guile.\n"
+"\n"
+"The idea is to make it easy to build procedures that extend Guile’s read\n"
+"procedure. Readers supporting various syntax variants can easily be written,\n"
+"possibly by re-using existing “token readers” of a standard Scheme\n"
+"readers. For example, it is used to implement Skribilo’s R5RS-derived\n"
+"document syntax.\n"
+"\n"
+"Guile-Reader’s approach is similar to Common Lisp’s “read table”, but\n"
+"hopefully more powerful and flexible (for instance, one may instantiate as\n"
+"many readers as needed)."
+msgstr ""
+"Guile-Reader is a simple framework for building readers for GNU Guile.\n"
+"\n"
+"The idea is to make it easy to build procedures that extend Guile[0m’s read\n"
+"procedure. Readers supporting various syntax variants can easily be written,\n"
+"possibly by re-using existing “[1mtoken readers[0m” of a standard Scheme\n"
+"readers. For example, it is used to implement Skribilo[0m’s R5RS-derived\n"
+"document syntax.\n"
+"\n"
+"Guile-Reader[0m’s approach is similar to Common Lisp[0m’s “[1mread table[0m”, but\n"
+"hopefully more powerful and flexible (for instance, one may instantiate as\n"
+"many readers as needed)."
+
+#: gnu/packages/guile.scm:267
+msgid "Guile bindings to ncurses"
+msgstr "Guile bindings to ncurses"
+
+#: gnu/packages/guile.scm:269
+msgid ""
+"guile-ncurses provides Guile language bindings for the ncurses\n"
+"library."
+msgstr ""
+"guile-ncurses provides Guile language bindings for the ncurses\n"
+"library."
+
+#: gnu/packages/guile.scm:289
+msgid "Run jobs at scheduled times"
+msgstr "Run jobs at scheduled times"
+
+#: gnu/packages/guile.scm:291
+msgid ""
+"GNU Mcron is a complete replacement for Vixie cron.  It is used to run\n"
+"tasks on a schedule, such as every hour or every Monday.  Mcron is written in\n"
+"Guile, so its configuration can be written in Scheme; the original cron\n"
+"format is also supported."
+msgstr ""
+"GNU Mcron is a complete replacement for Vixie cron.  It is used to run\n"
+"tasks on a schedule, such as every hour or every Monday.  Mcron is written in\n"
+"Guile, so its configuration can be written in Scheme; the original cron\n"
+"format is also supported."
+
+#: gnu/packages/guile.scm:319
+msgid "Collection of useful Guile Scheme modules"
+msgstr "Collection of useful Guile Scheme modules"
+
+#: gnu/packages/guile.scm:321
+msgid ""
+"guile-lib is intended as an accumulation place for pure-scheme Guile\n"
+"modules, allowing for people to cooperate integrating their generic Guile\n"
+"modules into a coherent library.  Think \"a down-scaled, limited-scope CPAN\n"
+"for Guile\"."
+msgstr ""
+"guile-lib is intended as an accumulation place for pure-scheme Guile\n"
+"modules, allowing for people to cooperate integrating their generic Guile\n"
+"modules into a coherent library.  Think \"a down-scaled, limited-scope CPAN\n"
+"for Guile\"."
+
+#: gnu/packages/guile.scm:352
+msgid "JSON module for Guile"
+msgstr "JSON module for Guile"
+
+#: gnu/packages/guile.scm:354
+msgid ""
+"Guile-json supports parsing and building JSON documents according to the\n"
+"http:://json.org specification. These are the main features:\n"
+"- Strictly complies to http://json.org specification.\n"
+"- Build JSON documents programmatically via macros.\n"
+"- Unicode support for strings.\n"
+"- Allows JSON pretty printing."
+msgstr ""
+"Guile-json supports parsing and building JSON documents according to the\n"
+"http:://json.org specification. These are the main features:\n"
+"- Strictly complies to http://json.org specification.\n"
+"- Build JSON documents programmatically via macros.\n"
+"- Unicode support for strings.\n"
+"- Allows JSON pretty printing."
+
+#: gnu/packages/lout.scm:109
+msgid "Lout, a document layout system similar in style to LaTeX"
+msgstr "Lout, a document layout system similar in style to LaTeX"
+
+#: gnu/packages/lout.scm:111
+msgid ""
+"The Lout document formatting system is now reads a high-level description of\n"
+"a document similar in style to LaTeX and produces a PostScript or plain text\n"
+"output file.\n"
+"\n"
+"Lout offers an unprecedented range of advanced features, including optimal\n"
+"paragraph and page breaking, automatic hyphenation, PostScript EPS file\n"
+"inclusion and generation, equation formatting, tables, diagrams, rotation and\n"
+"scaling, sorted indexes, bibliographic databases, running headers and\n"
+"odd-even pages, automatic cross referencing, multilingual documents including\n"
+"hyphenation (most European languages are supported), formatting of computer\n"
+"programs, and much more, all ready to use.  Furthermore, Lout is easily\n"
+"extended with definitions which are very much easier to write than troff of\n"
+"TeX macros because Lout is a high-level, purely functional language, the\n"
+"outcome of an eight-year research project that went back to the\n"
+"beginning."
+msgstr ""
+"The Lout document formatting system is now reads a high-level description of\n"
+"a document similar in style to LaTeX and produces a PostScript or plain text\n"
+"output file.\n"
+"\n"
+"Lout offers an unprecedented range of advanced features, including optimal\n"
+"paragraph and page breaking, automatic hyphenation, PostScript EPS file\n"
+"inclusion and generation, equation formatting, tables, diagrams, rotation and\n"
+"scaling, sorted indexes, bibliographic databases, running headers and\n"
+"odd-even pages, automatic cross referencing, multilingual documents including\n"
+"hyphenation (most European languages are supported), formatting of computer\n"
+"programs, and much more, all ready to use.  Furthermore, Lout is easily\n"
+"extended with definitions which are very much easier to write than troff of\n"
+"TeX macros because Lout is a high-level, purely functional language, the\n"
+"outcome of an eight-year research project that went back to the\n"
+"beginning."
+
+#: gnu/packages/recutils.scm:58
+msgid "Manipulate plain text files as databases"
+msgstr "Manipulate plain text files as databases"
+
+#: gnu/packages/recutils.scm:60
+msgid ""
+"GNU Recutils is a set of tools and libraries for creating and\n"
+"manipulating text-based, human-editable databases.  Despite being text-based,\n"
+"databases created with Recutils carry all of the expected features such as\n"
+"unique fields, primary keys, time stamps and more. Many different field types\n"
+"are supported, as is encryption."
+msgstr ""
+"GNU Recutils is a set of tools and libraries for creating and\n"
+"manipulating text-based, human-editable databases.  Despite being text-based,\n"
+"databases created with Recutils carry all of the expected features such as\n"
+"unique fields, primary keys, time stamps and more. Many different field types\n"
+"are supported, as is encryption."

@@ -80,6 +80,8 @@ then
     test "`guix package -p "$profile" -I 'g.*e' | cut -f1`" = "guile-bootstrap"
 
     # Search.
+    LC_MESSAGES=C
+    export LC_MESSAGES
     test "`guix package -s "An example GNU package" | grep ^name:`" = \
         "name: hello"
     test -z "`guix package -s "n0t4r341p4ck4g3"`"
@@ -174,6 +176,9 @@ then false; else true; fi
 # Check whether `--list-available' returns something sensible.
 guix package -p "$profile" -A 'gui.*e' | grep guile
 
+# Check whether `--show' returns something sensible.
+guix package --show=guile | grep "^name: guile"
+
 # There's no generation older than 12 months, so the following command should
 # have no effect.
 generation="`readlink_base "$profile"`"
@@ -187,10 +192,13 @@ test "`readlink_base "$profile"`" = "$generation"
 
 XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
 export XDG_CACHE_HOME
-HOME="t-home-$$"
+HOME="$PWD/t-home-$$"
 export HOME
 
 mkdir -p "$HOME"
+
+# Get the canonical directory name so that 'guix package' recognizes it.
+HOME="`cd $HOME; pwd -P`"
 
 guix package --bootstrap -i guile-bootstrap
 test -L "$HOME/.guix-profile"
@@ -221,6 +229,15 @@ do
     ! test -f "$HOME/.guix-profile/lib"
     test "`readlink "$default_profile"`" = "$default_profile-0-link"
 done
+
+# Check whether '-p ~/.guix-profile' makes any difference.
+# See <http://bugs.gnu.org/17939>.
+if test -e "$HOME/.guix-profile-0-link"; then false; fi
+if test -e "$HOME/.guix-profile-1-link"; then false; fi
+guix package --bootstrap -p "$HOME/.guix-profile" -i guile-bootstrap
+if test -e "$HOME/.guix-profile-1-link"; then false; fi
+guix package --bootstrap --roll-back -p "$HOME/.guix-profile"
+if test -e "$HOME/.guix-profile-0-link"; then false; fi
 
 # Extraneous argument.
 if guix package install foo-bar;

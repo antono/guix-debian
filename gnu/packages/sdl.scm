@@ -23,9 +23,7 @@
   #:use-module (guix download)
   #:use-module (guix build-system gnu)
   #:use-module ((gnu packages fontutils) #:prefix font:)
-  #:use-module (gnu packages libjpeg)
-  #:use-module (gnu packages libpng)
-  #:use-module (gnu packages libtiff)
+  #:use-module (gnu packages image)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages mp3)
   #:use-module (gnu packages pkg-config)
@@ -147,12 +145,17 @@ other supporting functions for SDL.")
               (base32
                "16an9slbb8ci7d89wakkmyfvp7c0cval8xw4hkg0842nhhlp540b"))))
     (build-system gnu-build-system)
+    (native-inputs `(("pkg-config" ,pkg-config)))
     ;; FIXME: Add webp
-    (inputs `(("libpng" ,libpng)
-              ("libjpeg" ,libjpeg)
-              ("libtiff" ,libtiff)
-              ("pkg-config" ,pkg-config)))
-    (propagated-inputs `(("sdl" ,sdl)))
+    ;;
+    ;; libjpeg, libpng, and libtiff are propagated inputs because the
+    ;; SDL_image headers include the headers of these libraries.  SDL is a
+    ;; propagated input because the pkg-config file refers to SDL's pkg-config
+    ;; file.
+    (propagated-inputs `(("sdl" ,sdl)
+                         ("libjpeg" ,libjpeg)
+                         ("libpng" ,libpng)
+                         ("libtiff" ,libtiff)))
     (synopsis "SDL image loading library")
     (description "SDL_image is an image file loading library for SDL that
 supports the following formats: BMP, GIF, JPEG, LBM, PCX, PNG, PNM, TGA, TIFF,

@@ -27,9 +27,7 @@
   #:use-module (gnu packages ghostscript)
   #:use-module (gnu packages graphviz)
   #:use-module (gnu packages gtk)
-  #:use-module (gnu packages libpng)
-  #:use-module (gnu packages libtiff)
-  #:use-module (gnu packages libjpeg)
+  #:use-module (gnu packages image)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages xml)
   #:use-module (gnu packages xorg))
@@ -37,14 +35,14 @@
 (define-public imagemagick
   (package
     (name "imagemagick")
-    (version "6.8.8-10")
+    (version "6.8.9-0")
     (source (origin
              (method url-fetch)
              (uri (string-append "mirror://imagemagick/ImageMagick-"
                                  version ".tar.xz"))
              (sha256
               (base32
-               "0crdazi2f1qj1ppb01f0mhqjw5q3afswgw49fa1m100bxmqpf77k"))))
+               "1lapn2798fkc2wn81slpms5p21kq4dsyg45khsk7n8p69cvrmw2b"))))
     (build-system gnu-build-system)
     (arguments
      `(#:phases (alist-cons-before

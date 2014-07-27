@@ -59,7 +59,8 @@
 
 (define %profile-directory
   (string-append %state-directory "/profiles/"
-                 (or (and=> (getenv "USER")
+                 (or (and=> (or (getenv "USER")
+                                (getenv "LOGNAME"))
                             (cut string-append "per-user/" <>))
                      "default")))
 
@@ -67,6 +68,17 @@
   ;; Call it `guix-profile', not `profile', to allow Guix profiles to
   ;; coexist with Nix profiles.
   (string-append %profile-directory "/guix-profile"))
+
+(define (canonicalize-profile profile)
+  "If PROFILE is %USER-PROFILE-DIRECTORY, return %CURRENT-PROFILE.  Otherwise
+return PROFILE unchanged.  The goal is to treat '-p ~/.guix-profile' as if
+'-p' was omitted."                           ; see <http://bugs.gnu.org/17939>
+  (if (and %user-profile-directory
+           (string=? (canonicalize-path (dirname profile))
+                     (dirname %user-profile-directory))
+           (string=? (basename profile) (basename %user-profile-directory)))
+      %current-profile
+      profile))
 
 (define (link-to-empty-profile generation)
   "Link GENERATION, a string, to the empty profile."
@@ -228,11 +240,11 @@ RX."
                      (define matches?
                        (cut regexp-exec rx <>))
 
-                     (if (or (matches? (gettext (package-name package)))
+                     (if (or (matches? (package-name package))
                              (and=> (package-synopsis package)
-                                    (compose matches? gettext))
+                                    (compose matches? P_))
                              (and=> (package-description package)
-                                    (compose matches? gettext)))
+                                    (compose matches? P_)))
                          (cons package result)
                          result))
                    '())
@@ -505,6 +517,8 @@ Install, remove, or upgrade PACKAGES in a single transaction.\n"))
   (display (_ "
   -A, --list-available[=REGEXP]
                          list available packages matching REGEXP"))
+  (display (_ "
+  --show=PACKAGE         show details about PACKAGE"))
   (newline)
   (show-build-options-help)
   (newline)
@@ -573,7 +587,7 @@ Install, remove, or upgrade PACKAGES in a single transaction.\n"))
                            #f)))
          (option '(#\p "profile") #t #f
                  (lambda (opt name arg result arg-handler)
-                   (values (alist-cons 'profile arg
+                   (values (alist-cons 'profile (canonicalize-profile arg)
                                        (alist-delete 'profile result))
                            #f)))
          (option '(#\n "dry-run") #f #f
@@ -601,6 +615,11 @@ Install, remove, or upgrade PACKAGES in a single transaction.\n"))
          (option '(#\A "list-available") #f #t
                  (lambda (opt name arg result arg-handler)
                    (values (cons `(query list-available ,(or arg ""))
+                                 result)
+                           #f)))
+         (option '("show") #t #t
+                 (lambda (opt name arg result arg-handler)
+                   (values (cons `(query show ,arg)
                                  result)
                            #f)))
 
@@ -797,7 +816,9 @@ more information.~%"))
                 %profile-directory)
         (format (current-error-port)
                 (_ "Please change the owner of `~a' to user ~s.~%")
-                %profile-directory (or (getenv "USER") (getuid)))
+                %profile-directory (or (getenv "USER")
+                                       (getenv "LOGNAME")
+                                       (getuid)))
         (rtfm))))
 
   (define (process-actions opts)
@@ -1026,6 +1047,14 @@ more information.~%"))
            (leave-on-EPIPE
             (for-each (cute package->recutils <> (current-output-port))
                       (find-packages-by-description regexp)))
+           #t))
+
+        (('show requested-name)
+         (let-values (((name version)
+                       (package-name->name+version requested-name)))
+           (leave-on-EPIPE
+            (for-each (cute package->recutils <> (current-output-port))
+                      (find-packages-by-name name version)))
            #t))
 
         (('search-paths)

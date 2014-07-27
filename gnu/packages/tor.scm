@@ -32,14 +32,14 @@
 (define-public tor
   (package
     (name "tor")
-    (version "0.2.4.21")
+    (version "0.2.4.22")
     (source (origin
              (method url-fetch)
              (uri (string-append "https://www.torproject.org/dist/tor-"
                                  version ".tar.gz"))
              (sha256
               (base32
-               "1kpijqapml7y4sl54qgyrzppxxhmy4xgk2y7wkqwjxn7q24g97d1"))))
+               "0k39ppcvld6p08yaf4rpspb34z4f5863j0d605yrm4dqjcp99xvb"))))
     (build-system gnu-build-system)
     (inputs
      `(("zlib" ,zlib)
@@ -94,7 +94,12 @@ rejects UDP traffic from the application you're using.")
                "1f6xb7aa47p90c26vqaw74y6drs9gpnhxsgby3mx0awdjh0ydisy"))))
     (build-system gnu-build-system)
     (arguments
-     '(#:phases (alist-cons-before
+     '(;; The default 'sysconfdir' is $out/etc; change that to
+       ;; $out/etc/privoxy.
+       #:configure-flags (list (string-append "--sysconfdir="
+                                              (assoc-ref %outputs "out")
+                                              "/etc/privoxy"))
+       #:phases (alist-cons-before
                  'configure 'autoconf
                  (lambda _
                    ;; Unfortunately, this is not a tarball produced by

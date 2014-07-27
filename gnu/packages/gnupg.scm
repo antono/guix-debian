@@ -40,7 +40,7 @@
 (define-public libgpg-error
   (package
     (name "libgpg-error")
-    (version "1.12")
+    (version "1.13")
     (source
      (origin
       (method url-fetch)
@@ -48,7 +48,7 @@
                           version ".tar.bz2"))
       (sha256
        (base32
-        "0pz58vr12qihq2f0bypjxsb6cf6ajq5258fmfm8s6lvwm3b9xz6a"))))
+        "02lv5h865f8if391xjp3njg04k0l4x2pwjkcdbzcwilail1skazq"))))
     (build-system gnu-build-system)
     (home-page "http://gnupg.org")
     (synopsis
@@ -168,15 +168,14 @@ specifications are building blocks of S/MIME and TLS.")
 (define-public gnupg
   (package
     (name "gnupg")
-    (version "2.0.22")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://gnupg/gnupg/gnupg-" version
-                          ".tar.bz2"))
-      (sha256
-       (base32
-        "0lg210acj2rxq291q4cwamg9gx6gh2prb1xa93y5jhw5b6r0lza3"))))
+    (version "2.0.25")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://gnupg/gnupg/gnupg-" version
+                                  ".tar.bz2"))
+              (sha256
+               (base32
+                "08sqdkybgw4jkdkcyz1bi6y8irj87hpr5b12lkb57kwny1yykaxk"))))
     (build-system gnu-build-system)
     (inputs
      `(("bzip2" ,guix:bzip2)
@@ -204,21 +203,20 @@ specifications are building blocks of S/MIME and TLS.")
 standard.  It is used to encrypt and sign data and communication.  It
 features powerful key management and the ability to access public key
 servers.  It includes several libraries: libassuan (IPC between GnuPG
-components), libgpg-error (centralized GnuPG error values), and libskba
-(working with X.509 certificates and CMS data).")
+components), libgpg-error (centralized GnuPG error values), and
+libskba (working with X.509 certificates and CMS data).")
     (license gpl3+)))
 
 (define-public gnupg-1
   (package (inherit gnupg)
-    (version "1.4.16")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://gnupg/gnupg/gnupg-" version
-                          ".tar.bz2"))
-      (sha256
-       (base32
-        "0bsa1yqa3ybhvmc4ys73amdpcmckrlq1fsxjl2980cxada778fvv"))))
+    (version "1.4.18")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://gnupg/gnupg/gnupg-" version
+                                  ".tar.bz2"))
+              (sha256
+               (base32
+                "1233bppjvdpbbl425ii6l7xvgy0879ghhnmwrph5b6c4g3dgvddp"))))
     (inputs
      `(("zlib" ,guix:zlib)
        ("bzip2" ,guix:bzip2)
@@ -279,7 +277,7 @@ and every application benefits from this.")
                      "1g1jly3wl4ks6h8ydkygyl2c4i7v3z91rg42005m6vm70y1d8b3d"))))
    (build-system gnu-build-system)
    (inputs `(("perl" ,perl)
-             ("python" ,python-wrapper)
+             ("python" ,python-2)           ; uses the Python 2 'print' syntax
              ("gpg" ,gnupg)))
    (arguments
     `(#:tests? #f

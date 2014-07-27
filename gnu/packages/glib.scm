@@ -106,28 +106,29 @@ shared NFS home directories.")
 (define glib
   (package
    (name "glib")
-   (version "2.39.1")
+   (version "2.40.0")
    (source (origin
             (method url-fetch)
             (uri (string-append "mirror://gnome/sources/"
                                 name "/" (string-take version 4) "/"
                                 name "-" version ".tar.xz"))
             (sha256
-             (base32 "0lqi6z47068vgh91fm59jn0kq969wf3g2q8k4m33jsb0amprg36h"))
+             (base32 "1d98mbqjmc34s8095lkw1j1bwvnnkw9581yfvjaikjvfjsaz29qd"))
             (patches (list (search-patch "glib-tests-homedir.patch")
                            (search-patch "glib-tests-desktop.patch")
                            (search-patch "glib-tests-prlimit.patch")
-                           (search-patch "glib-tests-newnet.patch")))))
+                           (search-patch "glib-tests-timer.patch")))))
    (build-system gnu-build-system)
-   (outputs '("out"                        ; everything
-              "doc"))                      ; 20 MiB of GTK-Doc reference
+   (outputs '("out"           ; everything
+              "bin"           ; glib-mkenums, gtester, etc.; depends on Python
+              "doc"))         ; 20 MiB of GTK-Doc reference
    (inputs
     `(("coreutils" ,coreutils)
       ("libffi" ,libffi)
       ("zlib" ,zlib)
       ("tzdata" ,tzdata)))     ; for tests/gdatetime.c
    (native-inputs
-     `(("gettext" ,gnu-gettext)
+    `(("gettext" ,gnu-gettext)
       ("dbus" ,dbus)                              ; for GDBus tests
       ("pkg-config" ,pkg-config)
       ("python" ,python-wrapper)
@@ -160,6 +161,17 @@ shared NFS home directories.")
       ;; In 'gio/tests', 'gdbus-test-codegen-generated.h' is #included in a
       ;; file that gets compiled possibly before it has been fully generated.
       #:parallel-tests? #f))
+
+   (native-search-paths
+    ;; This variable is not really "owned" by GLib, but several related
+    ;; packages refer to it: gobject-introspection's tools use it as a search
+    ;; path for .gir files, and it's also a search path for schemas produced
+    ;; by 'glib-compile-schemas'.
+    (list (search-path-specification
+           (variable "XDG_DATA_DIRS")
+           (directories '("share")))))
+   (search-paths native-search-paths)
+
    (synopsis "Thread-safe general utility library; basis of GTK+ and GNOME")
    (description
     "GLib provides data structure handling for C, portability wrappers,
@@ -190,6 +202,8 @@ dynamic loading, and an object system.")
        ("glib" ,glib)
        ("pkg-config" ,pkg-config)
        ("python-2" ,python-2)))
+    (native-inputs
+     `(("glib" ,glib "bin")))
     (propagated-inputs
      `(;; In practice, GIR users will need libffi when using
        ;; gobject-introspection.
@@ -307,7 +321,9 @@ translated.")
     (inputs
      `(("dbus" ,dbus)
        ("expat" ,expat)
-       ("glib" ,glib)
+       ("glib" ,glib)))
+    (native-inputs
+     `(("glib" ,glib "bin")
        ("pkg-config" ,pkg-config)))
     (home-page "http://dbus.freedesktop.org/doc/dbus-glib/")
     (synopsis "D-Bus GLib bindings")
@@ -371,7 +387,8 @@ has an ease of use unmatched by other C++ callback libraries.")
                      (("Gio::init.*$")
                       "return 77;\n")))
                  %standard-phases)))
-    (inputs `(("pkg-config" ,pkg-config)))
+    (inputs `(("pkg-config" ,pkg-config)
+              ("glib" ,glib "bin")))
     (propagated-inputs
      `(("libsigc++" ,libsigc++)
        ("glib" ,glib)))

@@ -108,6 +108,19 @@
                       guile)))
     #:guile-for-build (package-derivation %store %bootstrap-guile)))
 
+(test-assert "interned-file"
+  (run-with-store %store
+    (mlet* %store-monad ((file -> (search-path %load-path "guix.scm"))
+                         (a       (interned-file file))
+                         (b       (interned-file file "b")))
+      (return (equal? (call-with-input-file file get-string-all)
+                      (call-with-input-file a get-string-all)
+                      (call-with-input-file b get-string-all))))
+    #:guile-for-build (package-derivation %store %bootstrap-guile)))
+
+(define derivation-expression
+  (@@ (guix monads) derivation-expression))
+
 (test-assert "mlet* + derivation-expression"
   (run-with-store %store
     (mlet* %store-monad ((guile  (package-file %bootstrap-guile "bin/guile"))
@@ -163,14 +176,16 @@
            (let* ((input (iota 100))
                   (order '()))
              (define (frob i)
-               ;; The side effect here is used to keep track of the order in
-               ;; which monadic values are bound.
-               (set! order (cons i order))
-               i)
+               (mlet monad ((foo (return 'foo)))
+                 ;; The side effect here is used to keep track of the order in
+                 ;; which monadic values are bound.  Perform the side effect
+                 ;; within a '>>=' so that it is performed when the return
+                 ;; value is actually bound.
+                 (set! order (cons i order))
+                 (return i)))
 
              (and (equal? input
-                          (run (sequence monad
-                                         (map (lift1 frob monad) input))))
+                          (run (sequence monad (map frob input))))
 
                   ;; Make sure this is from left to right.
                   (equal? order (reverse input)))))

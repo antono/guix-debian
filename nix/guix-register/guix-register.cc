@@ -33,6 +33,7 @@
 #include <cstdio>
 
 #include <argp.h>
+#include <gcrypt.h>
 
 using namespace nix;
 
@@ -55,10 +56,14 @@ from an existing store.  It updates the new store's database with \
 information about which store files are valid, and what their \
 references are.";
 
+#define GUIX_OPT_STATE_DIRECTORY 1
+
 static const struct argp_option options[] =
   {
     { "prefix", 'p', "DIRECTORY", 0,
       "Open the store that lies under DIRECTORY" },
+    { "state-directory", GUIX_OPT_STATE_DIRECTORY, "DIRECTORY", 0,
+      "Use DIRECTORY as the state directory of the target store" },
     { 0, 0, 0, 0, 0 }
   };
 
@@ -80,6 +85,15 @@ parse_opt (int key, char *arg, struct argp_state *state)
 	settings.nixLogDir = prefix + NIX_LOG_DIR;
 	settings.nixStateDir = prefix + NIX_STATE_DIR;
 	settings.nixDBPath = settings.nixStateDir + "/db";
+	break;
+      }
+
+    case GUIX_OPT_STATE_DIRECTORY:
+      {
+	string state_dir = canonPath (arg);
+
+	settings.nixStateDir = state_dir;
+	settings.nixDBPath = state_dir + "/db";
 	break;
       }
 
@@ -168,6 +182,17 @@ register_validity (LocalStore *store, std::istream &input,
 int
 main (int argc, char *argv[])
 {
+  /* Initialize libgcrypt, which is indirectly used.  */
+  if (!gcry_check_version (GCRYPT_VERSION))
+    {
+      fprintf (stderr, "error: libgcrypt version mismatch\n");
+      exit (EXIT_FAILURE);
+    }
+
+  /* Tell Libgcrypt that initialization has completed, as per the Libgcrypt
+     1.6.0 manual (although this does not appear to be strictly needed.)  */
+  gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
+
   /* Honor the environment variables, and initialize the settings.  */
   settings.processEnvironment ();
 

@@ -1,5 +1,7 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2014 David Thompson <dthompson2@worcester.edu>
+;;; Copyright © 2014 Andreas Enge <andreas@enge.fr>
+;;; Copyright © 2014 Cyrill Schenkel <cyrill.schenkel@gmail.com>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -26,6 +28,7 @@
   #:use-module (gnu packages avahi)
   #:use-module (gnu packages compression)
   #:use-module (gnu packages curl)
+  #:use-module (gnu packages doxygen)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages mp3)
@@ -37,7 +40,8 @@
   #:use-module (gnu packages xiph)
   #:export (libmpdclient
             mpd
-            ncmpc))
+            ncmpc
+            ncmpcpp))
 
 (define libmpdclient
   (package
@@ -53,9 +57,7 @@
                (base32
                 "0csb9r3nlmbwpiryixjr5k33x3zqd61xjhwmlps3a6prck1n1xw2"))))
     (build-system gnu-build-system)
-    (arguments
-     ;; FIXME: Needs doxygen.
-     '(#:configure-flags '("--disable-documentation")))
+    (native-inputs `(("doxygen" ,doxygen)))
     (synopsis "Music Player Daemon client library")
     (description "A stable, documented, asynchronous API library for
 interfacing MPD in the C, C++ & Objective C languages.")
@@ -147,3 +149,27 @@ protocol.")
 terminal using ncurses.")
     (home-page "http://www.musicpd.org/clients/ncmpc/")
     (license license:gpl2)))
+
+(define ncmpcpp
+  (package
+    (name "ncmpcpp")
+    (version "0.5.10")
+    (source (origin
+              (method url-fetch)
+              (uri
+               (string-append "http://ncmpcpp.rybczak.net/stable/ncmpcpp-"
+                              version ".tar.bz2"))
+              (sha256
+               (base32
+                "1a54g6dary1rirrny9fd0hpxpyyffypni3mpbdpvmjnrl9v56vgz"))))
+    (build-system gnu-build-system)
+    (inputs `(("libmpdclient" ,libmpdclient)
+              ("ncurses" ,ncurses)))
+    (native-inputs `(("pkg-config" ,pkg-config)))
+    (synopsis "Featureful ncurses based MPD client inspired by ncmpc")
+    (description "Ncmpcpp is an mpd client with a UI very similar to ncmpc,
+but it provides new useful features such as support for regular expressions
+for library searches, extended song format, items filtering, the ability to
+sort playlists, and a local filesystem browser.")
+    (home-page "http://ncmpcpp.rybczak.net/")
+    (license license:gpl2+)))
