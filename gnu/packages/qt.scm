@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
+;;; Copyright © 2013, 2014 Andreas Enge <andreas@enge.fr>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -28,8 +28,7 @@
   #:use-module (gnu packages fontutils)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages icu4c)
-  #:use-module (gnu packages libjpeg)
-  #:use-module (gnu packages libpng)
+  #:use-module (gnu packages image)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages mysql)
   #:use-module (gnu packages openssl)
@@ -68,7 +67,7 @@ X11 (yet).")
 (define-public qt
   (package
     (name "qt")
-    (version "5.2.0")
+    (version "5.2.1")
     (source (origin
              (method url-fetch)
              (uri (string-append "http://download.qt-project.org/official_releases/qt/"
@@ -78,7 +77,7 @@ X11 (yet).")
                                  version ".tar.xz"))
              (sha256
               (base32
-               "0cch2mjk33x1511sqvvbfcxixpj64cfhq7kgszd422qzl3x2m8q0"))))
+               "0kkqrxpd9gqb52a2zj09d7vhd4adczpjg32vjvll5wyzmh092m85"))))
     (build-system gnu-build-system)
     (propagated-inputs
      `(("mesa" ,mesa)))
@@ -150,7 +149,7 @@ developers using C++ or QML, a CSS & JavaScript like language.")
 
 (define-public qt-4
   (package (inherit qt)
-    (version "4.8.5")
+    (version "4.8.6")
     (source (origin
              (method url-fetch)
              (uri (string-append "http://download.qt-project.org/official_releases/qt/"
@@ -160,10 +159,11 @@ developers using C++ or QML, a CSS & JavaScript like language.")
                                  version ".tar.gz"))
              (sha256
               (base32
-               "0f51dbgn1dcck8pqimls2qyf1pfmsmyknh767cvw87c3d218ywpb"))
+               "0b036iqgmbbv37dgwwfihw3mihjbnw3kb5kaisdy0qi8nn8xs54b"))
              (patches (list (search-patch "qt4-tests.patch")))))
     (inputs `(,@(alist-delete "libjpeg" (package-inputs qt))
-              ("libjepg" ,libjpeg-8)))
+              ("libjepg" ,libjpeg-8)
+              ("libsm" ,libsm)))
     (arguments
      `(#:phases
          (alist-replace

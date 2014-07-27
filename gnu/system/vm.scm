@@ -19,19 +19,19 @@
 (define-module (gnu system vm)
   #:use-module (guix config)
   #:use-module (guix store)
+  #:use-module (guix gexp)
   #:use-module (guix derivations)
   #:use-module (guix packages)
   #:use-module (guix monads)
+  #:use-module ((guix build vm)
+                #:select (qemu-command))
   #:use-module ((gnu packages base)
-                #:select (%final-inputs
-                          guile-final gcc-final glibc-final
-                          ld-wrapper binutils-final
-                          coreutils findutils grep sed tzdata))
+                #:select (%final-inputs))
   #:use-module (gnu packages guile)
   #:use-module (gnu packages bash)
   #:use-module (gnu packages less)
   #:use-module (gnu packages qemu)
-  #:use-module (gnu packages parted)
+  #:use-module (gnu packages disk)
   #:use-module (gnu packages zile)
   #:use-module (gnu packages grub)
   #:use-module (gnu packages linux)
@@ -44,6 +44,7 @@
   #:use-module (gnu system linux)
   #:use-module (gnu system linux-initrd)
   #:use-module (gnu system grub)
+  #:use-module (gnu system file-systems)
   #:use-module (gnu system)
   #:use-module (gnu services)
 
@@ -55,7 +56,8 @@
             qemu-image
             system-qemu-image
             system-qemu-image/shared-store
-            system-qemu-image/shared-store-script))
+            system-qemu-image/shared-store-script
+            system-disk-image))
 
 
 ;;; Commentary:
@@ -64,431 +66,324 @@
 ;;;
 ;;; Code:
 
+(define* (input->name+output tuple #:key (system (%current-system)))
+  "Return as a monadic value a name/file-name pair corresponding to TUPLE, an
+input tuple.  The output file name is when building for SYSTEM."
+  (with-monad %store-monad
+    (match tuple
+      ((input (? package? package))
+       (mlet %store-monad ((out (package-file package #:system system)))
+         (return `(,input . ,out))))
+      ((input (? package? package) sub-drv)
+       (mlet %store-monad ((out (package-file package
+                                              #:output sub-drv
+                                              #:system system)))
+         (return `(,input . ,out))))
+      ((input (? derivation? drv))
+       (return `(,input . ,(derivation->output-path drv))))
+      ((input (? derivation? drv) sub-drv)
+       (return `(,input . ,(derivation->output-path drv sub-drv))))
+      ((input (and (? string?) (? store-path?) file))
+       (return `(,input . ,file))))))
+
+(define %linux-vm-file-systems
+  ;; File systems mounted for 'derivation-in-linux-vm'.  The store and /xchg
+  ;; directory are shared with the host over 9p.
+  (list (file-system
+          (mount-point (%store-prefix))
+          (device "store")
+          (type "9p")
+          (needed-for-boot? #t)
+          (options "trans=virtio")
+          (check? #f))
+        (file-system
+          (mount-point "/xchg")
+          (device "xchg")
+          (type "9p")
+          (needed-for-boot? #t)
+          (options "trans=virtio")
+          (check? #f))))
+
 (define* (expression->derivation-in-linux-vm name exp
                                              #:key
                                              (system (%current-system))
-                                             (inputs '())
                                              (linux linux-libre)
                                              initrd
                                              (qemu qemu-headless)
                                              (env-vars '())
-                                             (modules '())
+                                             (modules
+                                              '((guix build vm)
+                                                (guix build install)
+                                                (guix build linux-initrd)
+                                                (guix build utils)))
                                              (guile-for-build
                                               (%guile-for-build))
 
                                              (make-disk-image? #f)
                                              (references-graphs #f)
                                              (memory-size 256)
+                                             (disk-image-format "qcow2")
                                              (disk-image-size
                                               (* 100 (expt 2 20))))
   "Evaluate EXP in a QEMU virtual machine running LINUX with INITRD (a
-derivation).  In the virtual machine, EXP has access to all of INPUTS from the
+derivation).  In the virtual machine, EXP has access to all its inputs from the
 store; it should put its output files in the `/xchg' directory, which is
 copied to the derivation's output when the VM terminates.  The virtual machine
 runs with MEMORY-SIZE MiB of memory.
 
-When MAKE-DISK-IMAGE? is true, then create a QEMU disk image of
-DISK-IMAGE-SIZE bytes and return it.
+When MAKE-DISK-IMAGE? is true, then create a QEMU disk image of type
+DISK-IMAGE-FORMAT (e.g., 'qcow2' or 'raw'), of DISK-IMAGE-SIZE bytes and
+return it.
+
+MODULES is the set of modules imported in the execution environment of EXP.
 
 When REFERENCES-GRAPHS is true, it must be a list of file name/store path
 pairs, as for `derivation'.  The files containing the reference graphs are
 made available under the /xchg CIFS share."
-  ;; FIXME: Allow use of macros from other modules, as done in
-  ;; `build-expression->derivation'.
-
-  (define input-alist
-    (with-monad %store-monad
-      (map (match-lambda
-            ((input (? package? package))
-             (mlet %store-monad ((out (package-file package #:system system)))
-               (return `(,input . ,out))))
-            ((input (? package? package) sub-drv)
-             (mlet %store-monad ((out (package-file package
-                                                    #:output sub-drv
-                                                    #:system system)))
-               (return `(,input . ,out))))
-            ((input (? derivation? drv))
-             (return `(,input . ,(derivation->output-path drv))))
-            ((input (? derivation? drv) sub-drv)
-             (return `(,input . ,(derivation->output-path drv sub-drv))))
-            ((input (and (? string?) (? store-path?) file))
-             (return `(,input . ,file))))
-           inputs)))
-
-  (define builder
-    ;; Code that launches the VM that evaluates EXP.
-    `(let ()
-       (use-modules (guix build utils)
-                    (srfi srfi-1)
-                    (ice-9 rdelim))
-
-       (let ((out     (assoc-ref %outputs "out"))
-             (cu      (string-append (assoc-ref %build-inputs "coreutils")
-                                     "/bin"))
-             (qemu    (string-append (assoc-ref %build-inputs "qemu")
-                                     "/bin/qemu-system-"
-                                     (car (string-split ,system #\-))))
-             (img     (string-append (assoc-ref %build-inputs "qemu")
-                                     "/bin/qemu-img"))
-             (linux   (string-append (assoc-ref %build-inputs "linux")
-                                     "/bzImage"))
-             (initrd  (string-append (assoc-ref %build-inputs "initrd")
-                                     "/initrd"))
-             (builder (assoc-ref %build-inputs "builder")))
-
-         ;; XXX: QEMU uses "rm -rf" when it's done to remove the temporary SMB
-         ;; directory, so it really needs `rm' in $PATH.
-         (setenv "PATH" cu)
-
-         ,(if make-disk-image?
-              `(zero? (system* img "create" "-f" "qcow2" "image.qcow2"
-                               ,(number->string disk-image-size)))
-              '(begin))
-
-         (mkdir "xchg")
-
-         ;; Copy the reference-graph files under xchg/ so EXP can access it.
-         (begin
-           ,@(match references-graphs
-               (((graph-files . _) ...)
-                (map (lambda (file)
-                       `(copy-file ,file
-                                   ,(string-append "xchg/" file)))
-                     graph-files))
-               (#f '())))
-
-         (and (zero?
-               (system* qemu "-enable-kvm" "-nographic" "-no-reboot"
-                        "-m" ,(number->string memory-size)
-                        "-net" "nic,model=virtio"
-                        "-virtfs"
-                        ,(string-append "local,id=store_dev,path=" (%store-prefix)
-                                        ",security_model=none,mount_tag=store")
-                        "-virtfs"
-                        ,(string-append "local,id=xchg_dev,path=xchg"
-                                        ",security_model=none,mount_tag=xchg")
-                        "-kernel" linux
-                        "-initrd" initrd
-                        "-append" (string-append "console=ttyS0 --load="
-                                                 builder)
-                        ,@(if make-disk-image?
-                              '("-hda" "image.qcow2")
-                              '())))
-              ,(if make-disk-image?
-                   '(copy-file "image.qcow2"      ; XXX: who mkdir'd OUT?
-                               out)
-                   '(begin
-                      (mkdir out)
-                      (copy-recursively "xchg" out)))))))
-
   (mlet* %store-monad
-      ((input-alist  (sequence %store-monad input-alist))
-       (exp* ->      `(let ((%build-inputs ',input-alist))
-                        ,exp))
-       (user-builder (text-file "builder-in-linux-vm"
-                                (object->string exp*)))
+      ((module-dir   (imported-modules modules))
+       (compiled     (compiled-modules modules))
+       (user-builder (gexp->file "builder-in-linux-vm" exp))
+       (loader       (gexp->file "linux-vm-loader"
+                                 #~(begin
+                                     (set! %load-path
+                                           (cons #$module-dir %load-path))
+                                     (set! %load-compiled-path
+                                           (cons #$compiled
+                                                 %load-compiled-path))
+                                     (primitive-load #$user-builder))))
        (coreutils -> (car (assoc-ref %final-inputs "coreutils")))
        (initrd       (if initrd                   ; use the default initrd?
                          (return initrd)
-                         (qemu-initrd #:guile-modules-in-chroot? #t
-                                      #:mounts `((9p "store" ,(%store-prefix))
-                                                 (9p "xchg" "/xchg")))))
-       (inputs       (lower-inputs `(("qemu" ,qemu)
-                                     ("linux" ,linux)
-                                     ("initrd" ,initrd)
-                                     ("coreutils" ,coreutils)
-                                     ("builder" ,user-builder)
-                                     ,@inputs))))
-    (derivation-expression name builder
-                           ;; TODO: Require the "kvm" feature.
-                           #:system system
-                           #:inputs inputs
-                           #:env-vars env-vars
-                           #:modules (delete-duplicates
-                                      `((guix build utils)
-                                        ,@modules))
-                           #:guile-for-build guile-for-build
-                           #:references-graphs references-graphs)))
+                         (base-initrd %linux-vm-file-systems
+                                      #:virtio? #t
+                                      #:qemu-networking? #t
+                                      #:guile-modules-in-chroot? #t))))
+
+    (define builder
+      ;; Code that launches the VM that evaluates EXP.
+      #~(begin
+          (use-modules (guix build utils)
+                       (guix build vm))
+
+          (let ((inputs  '#$(list qemu coreutils))
+                (linux   (string-append #$linux "/bzImage"))
+                (initrd  (string-append #$initrd "/initrd"))
+                (loader  #$loader)
+                (graphs  '#$(match references-graphs
+                              (((graph-files . _) ...) graph-files)
+                              (_ #f))))
+
+            (set-path-environment-variable "PATH" '("bin") inputs)
+
+            (load-in-linux-vm loader
+                              #:output #$output
+                              #:linux linux #:initrd initrd
+                              #:memory-size #$memory-size
+                              #:make-disk-image? #$make-disk-image?
+                              #:disk-image-format #$disk-image-format
+                              #:disk-image-size #$disk-image-size
+                              #:references-graphs graphs))))
+
+    (gexp->derivation name builder
+                      ;; TODO: Require the "kvm" feature.
+                      #:system system
+                      #:env-vars env-vars
+                      #:modules modules
+                      #:guile-for-build guile-for-build
+                      #:references-graphs references-graphs)))
 
 (define* (qemu-image #:key
                      (name "qemu-image")
                      (system (%current-system))
+                     (qemu qemu-headless)
                      (disk-image-size (* 100 (expt 2 20)))
+                     (disk-image-format "qcow2")
+                     (file-system-type "ext4")
+                     file-system-label
+                     os-derivation
                      grub-configuration
-                     (initialize-store? #f)
-                     (populate #f)
+                     (register-closures? #t)
                      (inputs '())
-                     (inputs-to-copy '()))
-  "Return a bootable, stand-alone QEMU image.  The returned image is a full
-disk image, with a GRUB installation that uses GRUB-CONFIGURATION as its
-configuration file (GRUB-CONFIGURATION must be the name of a file in the VM.)
+                     copy-inputs?)
+  "Return a bootable, stand-alone QEMU image of type DISK-IMAGE-FORMAT (e.g.,
+'qcow2' or 'raw'), with a root partition of type FILE-SYSTEM-TYPE.
+Optionally, FILE-SYSTEM-LABEL can be specified as the volume name for the root
+partition.  The returned image is a full disk image that runs OS-DERIVATION,
+with a GRUB installation that uses GRUB-CONFIGURATION as its configuration
+file (GRUB-CONFIGURATION must be the name of a file in the VM.)
 
-INPUTS-TO-COPY is a list of inputs (as for packages) whose closure is copied
-into the image being built.  When INITIALIZE-STORE? is true, initialize the
-store database in the image so that Guix can be used in the image.
-
-POPULATE is a list of directives stating directories or symlinks to be created
-in the disk image partition.  It is evaluated once the image has been
-populated with INPUTS-TO-COPY.  It can be used to provide additional files,
-such as /etc files."
-  (define (input->name+derivation tuple)
-    (with-monad %store-monad
-      (match tuple
-        ((name (? package? package))
-         (mlet %store-monad ((drv (package->derivation package system)))
-           (return `(,name . ,(derivation->output-path drv)))))
-        ((name (? package? package) sub-drv)
-         (mlet %store-monad ((drv (package->derivation package system)))
-           (return `(,name . ,(derivation->output-path drv sub-drv)))))
-        ((name (? derivation? drv))
-         (return `(,name . ,(derivation->output-path drv))))
-        ((name (? derivation? drv) sub-drv)
-         (return `(,name . ,(derivation->output-path drv sub-drv))))
-        ((input (and (? string?) (? store-path?) file))
-         (return `(,input . ,file))))))
-
+INPUTS is a list of inputs (as for packages).  When COPY-INPUTS? is true, copy
+all of INPUTS into the image being built.  When REGISTER-CLOSURES? is true,
+register INPUTS in the store database of the image so that Guix can be used in
+the image."
   (mlet %store-monad
-      ((graph (sequence %store-monad
-                        (map input->name+derivation inputs-to-copy))))
+      ((graph (sequence %store-monad (map input->name+output inputs))))
    (expression->derivation-in-linux-vm
-    "qemu-image"
-    `(let ()
-       (use-modules (ice-9 rdelim)
-                    (srfi srfi-1)
-                    (guix build utils)
-                    (guix build linux-initrd))
+    name
+    #~(begin
+        (use-modules (guix build vm)
+                     (guix build utils))
 
-       (let ((parted  (string-append (assoc-ref %build-inputs "parted")
-                                     "/sbin/parted"))
-             (mkfs    (string-append (assoc-ref %build-inputs "e2fsprogs")
-                                     "/sbin/mkfs.ext3"))
-             (grub    (string-append (assoc-ref %build-inputs "grub")
-                                     "/sbin/grub-install"))
-             (umount  (string-append (assoc-ref %build-inputs "util-linux")
-                                     "/bin/umount")) ; XXX: add to Guile
-             (grub.cfg ,grub-configuration))
+        (let ((inputs
+               '#$(append (list qemu parted grub e2fsprogs util-linux)
+                          (map (compose car (cut assoc-ref %final-inputs <>))
+                               '("sed" "grep" "coreutils" "findutils" "gawk"))
+                          (if register-closures? (list guix) '())))
 
-         (define (read-reference-graph port)
-           ;; Return a list of store paths from the reference graph at PORT.
-           ;; The data at PORT is the format produced by #:references-graphs.
-           (let loop ((line   (read-line port))
-                      (result '()))
-             (cond ((eof-object? line)
-                    (delete-duplicates result))
-                   ((string-prefix? "/" line)
-                    (loop (read-line port)
-                          (cons line result)))
-                   (else
-                    (loop (read-line port)
-                          result)))))
+              ;; This variable is unused but allows us to add INPUTS-TO-COPY
+              ;; as inputs.
+              (to-register
+                '#$(map (match-lambda
+                         ((name thing) thing)
+                         ((name thing output) `(,thing ,output)))
+                        inputs)))
 
-         (define (things-to-copy)
-           ;; Return the list of store files to copy to the image.
-           (define (graph-from-file file)
-             (call-with-input-file file
-               read-reference-graph))
+          (set-path-environment-variable "PATH" '("bin" "sbin") inputs)
 
-           ,(match inputs-to-copy
-              (((graph-files . _) ...)
-               `(let* ((graph-files ',(map (cut string-append "/xchg/" <>)
-                                           graph-files))
-                       (paths       (append-map graph-from-file graph-files)))
-                  (delete-duplicates paths)))
-              (#f ''())))
-
-         ;; GRUB is full of shell scripts.
-         (setenv "PATH"
-                 (string-append (dirname grub) ":"
-                                (assoc-ref %build-inputs "coreutils") "/bin:"
-                                (assoc-ref %build-inputs "findutils") "/bin:"
-                                (assoc-ref %build-inputs "sed") "/bin:"
-                                (assoc-ref %build-inputs "grep") "/bin:"
-                                (assoc-ref %build-inputs "gawk") "/bin"))
-
-         (display "creating partition table...\n")
-         (and (zero? (system* parted "/dev/sda" "mklabel" "msdos"
-                              "mkpart" "primary" "ext2" "1MiB"
-                              ,(format #f "~aB"
-                                       (- disk-image-size
-                                          (* 5 (expt 2 20))))))
-              (begin
-                (display "creating ext3 partition...\n")
-                (and (zero? (system* mkfs "-F" "/dev/sda1"))
-                     (let ((store (string-append "/fs" ,(%store-prefix))))
-                       (display "mounting partition...\n")
-                       (mkdir "/fs")
-                       (mount "/dev/sda1" "/fs" "ext3")
-                       (mkdir-p "/fs/boot/grub")
-                       (symlink grub.cfg "/fs/boot/grub/grub.cfg")
-
-                       ;; Populate the image's store.
-                       (mkdir-p store)
-                       (chmod store #o1775)
-                       (for-each (lambda (thing)
-                                   (copy-recursively thing
-                                                     (string-append "/fs"
-                                                                    thing)))
-                                 (things-to-copy))
-
-                       ;; Populate /dev.
-                       (make-essential-device-nodes #:root "/fs")
-
-                       ;; Optionally, register the inputs in the image's store.
-                       (let* ((guix     (assoc-ref %build-inputs "guix"))
-                              (register (and guix
-                                             (string-append guix
-                                                            "/sbin/guix-register"))))
-                         ,@(if initialize-store?
-                               (match inputs-to-copy
-                                 (((graph-files . _) ...)
-                                  (map (lambda (closure)
-                                         `(system* register "--prefix" "/fs"
-                                                   ,(string-append "/xchg/"
-                                                                   closure)))
-                                       graph-files)))
-                               '(#f)))
-
-                       ;; Evaluate the POPULATE directives.
-                       ,@(let loop ((directives populate)
-                                    (statements '()))
-                           (match directives
-                             (()
-                              (reverse statements))
-                             ((('directory name) rest ...)
-                              (loop rest
-                                    (cons `(mkdir-p ,(string-append "/fs" name))
-                                          statements)))
-                             ((('directory name uid gid) rest ...)
-                              (let ((dir (string-append "/fs" name)))
-                                (loop rest
-                                      (cons* `(chown ,dir ,uid ,gid)
-                                             `(mkdir-p ,dir)
-                                             statements))))
-                             (((new '-> old) rest ...)
-                              (loop rest
-                                    (cons `(symlink ,old
-                                                    ,(string-append "/fs" new))
-                                          statements)))))
-
-                       (and=> (assoc-ref %build-inputs "populate")
-                              (lambda (populate)
-                                (chdir "/fs")
-                                (primitive-load populate)
-                                (chdir "/")))
-
-                       (display "clearing file timestamps...\n")
-                       (for-each (lambda (file)
-                                   (let ((s (lstat file)))
-                                     ;; XXX: Guile uses libc's 'utime' function
-                                     ;; (not 'futime'), so the timestamp of
-                                     ;; symlinks cannot be changed, and there
-                                     ;; are symlinks here pointing to
-                                     ;; /gnu/store, which is the host,
-                                     ;; read-only store.
-                                     (unless (eq? (stat:type s) 'symlink)
-                                       (utime file 0 0 0 0))))
-                                 (find-files "/fs" ".*"))
-
-                       (and (zero?
-                             (system* grub "--no-floppy"
-                                      "--boot-directory" "/fs/boot"
-                                      "/dev/sda"))
-                            (begin
-                              (when (file-exists? "/fs/dev/pts")
-                                ;; Unmount devpts so /fs itself can be
-                                ;; unmounted (failing to do that leads to
-                                ;; EBUSY.)
-                                (system* umount "/fs/dev/pts"))
-                              (zero? (system* umount "/fs")))
-                            (reboot))))))))
+          (let ((graphs '#$(match inputs
+                             (((names . _) ...)
+                              names))))
+            (initialize-hard-disk "/dev/vda"
+                                  #:system-directory #$os-derivation
+                                  #:grub.cfg #$grub-configuration
+                                  #:closures graphs
+                                  #:copy-closures? #$copy-inputs?
+                                  #:register-closures? #$register-closures?
+                                  #:disk-image-size #$disk-image-size
+                                  #:file-system-type #$file-system-type
+                                  #:file-system-label #$file-system-label)
+            (reboot))))
     #:system system
-    #:inputs `(("parted" ,parted)
-               ("grub" ,grub)
-               ("e2fsprogs" ,e2fsprogs)
-
-               ;; For shell scripts.
-               ("sed" ,(car (assoc-ref %final-inputs "sed")))
-               ("grep" ,(car (assoc-ref %final-inputs "grep")))
-               ("coreutils" ,(car (assoc-ref %final-inputs "coreutils")))
-               ("findutils" ,(car (assoc-ref %final-inputs "findutils")))
-               ("gawk" ,(car (assoc-ref %final-inputs "gawk")))
-               ("util-linux" ,util-linux)
-
-               ,@(if initialize-store?
-                     `(("guix" ,guix))
-                     '())
-
-               ,@inputs-to-copy)
     #:make-disk-image? #t
     #:disk-image-size disk-image-size
-    #:references-graphs graph
-    #:modules '((guix build utils)
-                (guix build linux-initrd)))))
+    #:disk-image-format disk-image-format
+    #:references-graphs graph)))
 
 
 ;;;
-;;; Stand-alone VM image.
+;;; VM and disk images.
 ;;;
 
-(define (operating-system-build-gid os)
-  "Return as a monadic value the group id for build users of OS, or #f."
-  (anym %store-monad
-        (lambda (service)
-          (and (equal? '(guix-daemon)
-                       (service-provision service))
-               (match (service-user-groups service)
-                 ((group)
-                  (user-group-id group)))))
-        (operating-system-services os)))
+(define* (system-disk-image os
+                            #:key
+                            (name "disk-image")
+                            (file-system-type "ext4")
+                            (disk-image-size (* 900 (expt 2 20)))
+                            (volatile? #t))
+  "Return the derivation of a disk image of DISK-IMAGE-SIZE bytes of the
+system described by OS.  Said image can be copied on a USB stick as is.  When
+VOLATILE? is true, the root file system is made volatile; this is useful
+to USB sticks meant to be read-only."
+  (define root-label
+    ;; Volume name of the root file system.  Since we don't know which device
+    ;; will hold it, we use the volume name to find it (using the UUID would
+    ;; be even better, but somewhat less convenient.)
+    "gnu-disk-image")
 
-(define (operating-system-default-contents os)
-  "Return a list of directives suitable for 'system-qemu-image' describing the
-basic contents of the root file system of OS."
-  (define (user-directories user)
-    (let ((home (user-account-home-directory user))
-          ;; XXX: Deal with automatically allocated ids.
-          (uid  (or (user-account-uid user) 0))
-          (gid  (or (user-account-gid user) 0))
-          (root (string-append "/var/nix/profiles/per-user/"
-                               (user-account-name user))))
-      `((directory ,root ,uid ,gid)
-        (directory ,home ,uid ,gid))))
+  (define file-systems-to-keep
+    (remove (lambda (fs)
+              (string=? (file-system-mount-point fs) "/"))
+            (operating-system-file-systems os)))
 
-  (mlet* %store-monad ((os-drv    (operating-system-derivation os))
-                       (os-dir -> (derivation->output-path os-drv))
-                       (build-gid (operating-system-build-gid os))
-                       (profile   (operating-system-profile-directory os)))
-    (return `((directory ,(%store-prefix) 0 ,(or build-gid 0))
-              (directory "/etc")
-              (directory "/var/log")                     ; for dmd
-              (directory "/var/run/nscd")
-              (directory "/var/nix/gcroots")
-              ("/var/nix/gcroots/system" -> ,os-dir)
-              (directory "/run")
-              ("/run/current-system" -> ,profile)
-              (directory "/bin")
-              ("/bin/sh" -> "/run/current-system/bin/bash")
-              (directory "/tmp")
-              (directory "/var/nix/profiles/per-user/root" 0 0)
+  (let ((os (operating-system (inherit os)
+              ;; Since this is meant to be used on real hardware, don't
+              ;; install QEMU networking or anything like that, but make sure
+              ;; USB mass storage devices are available.
+              (initrd (cut base-initrd <>
+                           #:volatile-root? #t
+                           #:extra-modules '("usb-storage.ko")))
 
-              (directory "/root" 0 0)             ; an exception
-              ,@(append-map user-directories
-                            (operating-system-users os))))))
+              ;; Force our own root file system.
+              (file-systems (cons (file-system
+                                    (mount-point "/")
+                                    (device root-label)
+                                    (title 'label)
+                                    (type file-system-type))
+                                  file-systems-to-keep)))))
+
+    (mlet* %store-monad ((os-drv   (operating-system-derivation os))
+                         (grub.cfg (operating-system-grub.cfg os)))
+      (qemu-image #:name name
+                  #:os-derivation os-drv
+                  #:grub-configuration grub.cfg
+                  #:disk-image-size disk-image-size
+                  #:disk-image-format "raw"
+                  #:file-system-type file-system-type
+                  #:file-system-label root-label
+                  #:copy-inputs? #t
+                  #:register-closures? #t
+                  #:inputs `(("system" ,os-drv)
+                             ("grub.cfg" ,grub.cfg))))))
 
 (define* (system-qemu-image os
-                            #:key (disk-image-size (* 900 (expt 2 20))))
-  "Return the derivation of a QEMU image of DISK-IMAGE-SIZE bytes of the GNU
-system as described by OS."
-  (mlet* %store-monad
-      ((os-drv      (operating-system-derivation os))
-       (os-dir   -> (derivation->output-path os-drv))
-       (grub.cfg -> (string-append os-dir "/grub.cfg"))
-       (populate    (operating-system-default-contents os)))
-    (qemu-image  #:grub-configuration grub.cfg
-                 #:populate populate
-                 #:disk-image-size disk-image-size
-                 #:initialize-store? #t
-                 #:inputs-to-copy `(("system" ,os-drv)))))
+                            #:key
+                            (file-system-type "ext4")
+                            (disk-image-size (* 900 (expt 2 20))))
+  "Return the derivation of a freestanding QEMU image of DISK-IMAGE-SIZE bytes
+of the GNU system as described by OS."
+  (define file-systems-to-keep
+    ;; Keep only file systems other than root and not normally bound to real
+    ;; devices.
+    (remove (lambda (fs)
+              (let ((target (file-system-mount-point fs))
+                    (source (file-system-device fs)))
+                (or (string=? target "/")
+                    (string-prefix? "/dev/" source))))
+            (operating-system-file-systems os)))
+
+  (let ((os (operating-system (inherit os)
+              ;; Use an initrd with the whole QEMU shebang.
+              (initrd (cut base-initrd <>
+                           #:virtio? #t
+                           #:qemu-networking? #t))
+
+              ;; Force our own root file system.
+              (file-systems (cons (file-system
+                                    (mount-point "/")
+                                    (device "/dev/sda1")
+                                    (type file-system-type))
+                                  file-systems-to-keep)))))
+    (mlet* %store-monad
+        ((os-drv      (operating-system-derivation os))
+         (grub.cfg    (operating-system-grub.cfg os)))
+      (qemu-image  #:os-derivation os-drv
+                   #:grub-configuration grub.cfg
+                   #:disk-image-size disk-image-size
+                   #:file-system-type file-system-type
+                   #:inputs `(("system" ,os-drv)
+                              ("grub.cfg" ,grub.cfg))
+                   #:copy-inputs? #t))))
+
+(define (virtualized-operating-system os)
+  "Return an operating system based on OS suitable for use in a virtualized
+environment with the store shared with the host."
+  (operating-system (inherit os)
+    (initrd (cut base-initrd <>
+                 #:volatile-root? #t
+                 #:virtio? #t
+                 #:qemu-networking? #t))
+    (file-systems (cons* (file-system
+                           (mount-point "/")
+                           (device "/dev/vda1")
+                           (type "ext4"))
+                         (file-system
+                           (mount-point (%store-prefix))
+                           (device "store")
+                           (type "9p")
+                           (needed-for-boot? #t)
+                           (options "trans=virtio")
+                           (check? #f))
+
+                         ;; Remove file systems that conflict with those
+                         ;; above, or that are normally bound to real devices.
+                         (remove (lambda (fs)
+                                   (let ((target (file-system-mount-point fs))
+                                         (source (file-system-device fs)))
+                                     (or (string=? target (%store-prefix))
+                                         (string=? target "/")
+                                         (string-prefix? "/dev/" source))))
+                                 (operating-system-file-systems os))))))
 
 (define* (system-qemu-image/shared-store
           os
@@ -497,64 +392,46 @@ system as described by OS."
 with the host."
   (mlet* %store-monad
       ((os-drv      (operating-system-derivation os))
-       (os-dir   -> (derivation->output-path os-drv))
-       (grub.cfg -> (string-append os-dir "/grub.cfg"))
-       (populate    (operating-system-default-contents os)))
-    ;; TODO: Initialize the database so Guix can be used in the guest.
-    (qemu-image #:grub-configuration grub.cfg
-                #:populate populate
-                #:disk-image-size disk-image-size)))
+       (grub.cfg    (operating-system-grub.cfg os)))
+    (qemu-image #:os-derivation os-drv
+                #:grub-configuration grub.cfg
+                #:disk-image-size disk-image-size
+                #:inputs `(("system" ,os-drv))
+
+                ;; XXX: Passing #t here is too slow, so let it off by default.
+                #:register-closures? #f
+                #:copy-inputs? #f)))
 
 (define* (system-qemu-image/shared-store-script
           os
           #:key
-          (qemu (package (inherit qemu)
-                  ;; FIXME/TODO: Use 9p instead of this hack.
-                  (source (package-source qemu/smb-shares))))
+          (qemu qemu)
           (graphic? #t))
   "Return a derivation that builds a script to run a virtual machine image of
 OS that shares its store with the host."
-  (let* ((initrd (qemu-initrd #:mounts `((cifs "/store" ,(%store-prefix)))
-                              #:volatile-root? #t))
-         (os     (operating-system (inherit os) (initrd initrd))))
+  (mlet* %store-monad
+      ((os ->  (virtualized-operating-system os))
+       (os-drv (operating-system-derivation os))
+       (image  (system-qemu-image/shared-store os)))
     (define builder
-      (mlet %store-monad ((image  (system-qemu-image/shared-store os))
-                          (qemu   (package-file qemu
-                                                "bin/qemu-system-x86_64"))
-                          (bash   (package-file bash "bin/sh"))
-                          (kernel (package-file (operating-system-kernel os)
-                                                "bzImage"))
-                          (initrd initrd)
-                          (os-drv (operating-system-derivation os)))
-        (return `(let ((out (assoc-ref %outputs "out")))
-                   (call-with-output-file out
-                     (lambda (port)
-                       (display
-                        (string-append "#!" ,bash "
-# TODO: -virtfs local,path=XXX,security_model=none,mount_tag=store
-exec " ,qemu " -enable-kvm -no-reboot -net nic,model=virtio \
-  -net user,smb=$PWD \
-  -kernel " ,kernel " -initrd "
-  ,(string-append (derivation->output-path initrd) "/initrd") " \
--append \"" ,(if graphic? "" "console=ttyS0 ")
-"--load=" ,(derivation->output-path os-drv) "/boot --root=/dev/vda1\" \
-  -drive file=" ,(derivation->output-path image)
+      #~(call-with-output-file #$output
+          (lambda (port)
+            (display
+             (string-append "#!" #$bash "/bin/sh
+exec " #$qemu "/bin/" #$(qemu-command (%current-system))
+" -enable-kvm -no-reboot -net nic,model=virtio \
+  -virtfs local,path=" #$(%store-prefix) ",security_model=none,mount_tag=store \
+  -net user \
+  -kernel " #$(operating-system-kernel os) "/bzImage \
+  -initrd " #$os-drv "/initrd \
+-append \"" #$(if graphic? "" "console=ttyS0 ")
+  "--system=" #$os-drv " --load=" #$os-drv "/boot --root=/dev/vda1\" \
+  -serial stdio \
+  -drive file=" #$image
   ",if=virtio,cache=writeback,werror=report,readonly\n")
-                        port)))
-                   (chmod out #o555)
-                   #t))))
+             port)
+            (chmod port #o555))))
 
-    (mlet %store-monad ((image   (system-qemu-image/shared-store os))
-                        (initrd  initrd)
-                        (qemu    (package->derivation qemu))
-                        (bash    (package->derivation bash))
-                        (os      (operating-system-derivation os))
-                        (builder builder))
-      (derivation-expression "run-vm.sh" builder
-                             #:inputs `(("qemu" ,qemu)
-                                        ("image" ,image)
-                                        ("bash" ,bash)
-                                        ("initrd" ,initrd)
-                                        ("os" ,os))))))
+    (gexp->derivation "run-vm.sh" builder)))
 
 ;;; vm.scm ends here

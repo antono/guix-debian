@@ -27,6 +27,7 @@
   #:use-module (gnu packages gnustep)
   #:use-module (gnu packages admin)
   #:use-module (gnu packages bash)
+  #:use-module (guix gexp)
   #:use-module (guix monads)
   #:use-module (guix derivations)
   #:export (xorg-start-command
@@ -47,10 +48,17 @@ XORG-SERVER.  Usually the X server is started by a login manager."
   (define (xserver.conf)
     (text-file* "xserver.conf" "
 Section \"Files\"
-  FontPath \"" font-adobe75dpi "/share/font/X11/75dpi\"
+  FontPath \"" font-adobe75dpi "/share/fonts/X11/75dpi\"
   ModulePath \"" xf86-video-vesa "/lib/xorg/modules/drivers\"
-  ModulePath \"" xf86-input-mouse "/lib/xorg/modules/input\"
+  ModulePath \"" xf86-video-fbdev "/lib/xorg/modules/drivers\"
+  ModulePath \"" xf86-video-cirrus "/lib/xorg/modules/drivers\"
+  ModulePath \"" xf86-video-intel "/lib/xorg/modules/drivers\"
+  ModulePath \"" xf86-video-mach64 "/lib/xorg/modules/drivers\"
+  ModulePath \"" xf86-video-nv "/lib/xorg/modules/drivers\"
   ModulePath \"" xf86-input-keyboard "/lib/xorg/modules/input\"
+  ModulePath \"" xf86-input-mouse "/lib/xorg/modules/input\"
+  ModulePath \"" xf86-input-synaptics "/lib/xorg/modules/input\"
+  ModulePath \"" xf86-input-vmmouse "/lib/xorg/modules/input\"
   ModulePath \"" xorg-server "/lib/xorg/modules\"
   ModulePath \"" xorg-server "/lib/xorg/modules/extensions\"
   ModulePath \"" xorg-server "/lib/xorg/modules/multimedia\"
@@ -59,104 +67,49 @@ EndSection
 Section \"ServerFlags\"
   Option \"AllowMouseOpenFail\" \"on""
 EndSection
+"))
 
-Section \"Monitor\"
-  Identifier \"Monitor[0]\"
-EndSection
-
-Section \"InputClass\"
-  Identifier \"Generic keyboard\"
-  MatchIsKeyboard \"on\"
-  Option \"XkbRules\" \"base\"
-  Option \"XkbModel\" \"pc104\"
-EndSection
-
-Section \"ServerLayout\"
-  Identifier \"Layout\"
-  Screen \"Screen-vesa\"
-EndSection
-
-Section \"Device\"
-  Identifier \"Device-vesa\"
-  Driver \"vesa\"
-EndSection
-
-Section \"Screen\"
-  Identifier \"Screen-vesa\"
-  Device \"Device-vesa\"
-EndSection"))
-
-  (mlet %store-monad ((guile-bin   (package-file guile "bin/guile"))
-                      (xorg-bin    (package-file xorg-server "bin/X"))
-                      (dri         (package-file mesa "lib/dri"))
-                      (xkbcomp-bin (package-file xkbcomp "bin"))
-                      (xkb-dir     (package-file xkeyboard-config
-                                                 "share/X11/xkb"))
-                      (config      (xserver.conf)))
-    (define builder
+  (mlet %store-monad ((config (xserver.conf)))
+    (define script
       ;; Write a small wrapper around the X server.
-      `(let ((out (assoc-ref %outputs "out")))
-         (call-with-output-file out
-           (lambda (port)
-             (format port "#!~a --no-auto-compile~%!#~%" ,guile-bin)
-             (write '(begin
-                       (setenv "XORG_DRI_DRIVER_PATH" ,dri)
-                       (setenv "XKB_BINDIR" ,xkbcomp-bin)
+      #~(begin
+          (setenv "XORG_DRI_DRIVER_PATH" (string-append #$mesa "/lib/dri"))
+          (setenv "XKB_BINDIR" (string-append #$xkbcomp "/bin"))
 
-                       (apply execl
+          (apply execl (string-append #$xorg-server "/bin/X")
+                 "-ac" "-logverbose" "-verbose"
+                 "-xkbdir" (string-append #$xkeyboard-config "/share/X11/xkb")
+                 "-config" #$config
+                 "-nolisten" "tcp" "-terminate"
 
-                              ,xorg-bin "-ac" "-logverbose" "-verbose"
-                              "-xkbdir" ,xkb-dir
-                              "-config" ,(derivation->output-path config)
-                              "-nolisten" "tcp" "-terminate"
+                 ;; Note: SLiM and other display managers add the
+                 ;; '-auth' flag by themselves.
+                 (cdr (command-line)))))
 
-                              ;; Note: SLiM and other display managers add the
-                              ;; '-auth' flag by themselves.
-                              (cdr (command-line))))
-                    port)))
-         (chmod out #o555)
-         #t))
-
-    (mlet %store-monad ((inputs (lower-inputs
-                                 `(("xorg" ,xorg-server)
-                                   ("xkbcomp" ,xkbcomp)
-                                   ("xkeyboard-config" ,xkeyboard-config)
-                                   ("mesa" ,mesa)
-                                   ("guile" ,guile)
-                                   ("xorg.conf" ,config)))))
-      (derivation-expression "start-xorg" builder
-                             #:inputs inputs))))
+    (gexp->script "start-xorg" script)))
 
 (define* (xinitrc #:key
                   (guile guile-final)
                   (ratpoison ratpoison)
                   (windowmaker windowmaker))
   "Return a system-wide xinitrc script that starts the specified X session."
-  (mlet %store-monad ((guile-bin     (package-file guile "bin/guile"))
-                      (ratpoison-bin (package-file ratpoison "bin/ratpoison"))
-                      (wmaker-bin    (package-file windowmaker "bin/wmaker"))
-                      (inputs        (lower-inputs
-                                      `(("raptoison" ,ratpoison)
-                                        ("wmaker" ,windowmaker)))))
-    (define builder
-      `(let ((out (assoc-ref %outputs "out")))
-         (call-with-output-file out
-           (lambda (port)
-             (format port "#!~a --no-auto-compile~%!#~%" ,guile-bin)
-             (write '(begin
-                       (use-modules (ice-9 match))
+  (define builder
+    #~(begin
+        (use-modules (ice-9 match))
 
-                       ;; TODO: Check for ~/.xsession.
-                       (match (command-line)
-                         ((_ "ratpoison")
-                          (execl ,ratpoison-bin))
-                         (_
-                          (execl ,wmaker-bin))))
-                    port)))
-         (chmod out #o555)
-         #t))
+        ;; First, try to run ~/.xsession.
+        (let* ((home (getenv "HOME"))
+               (file (string-append home "/.xsession")))
+          (false-if-exception (execl file file)))
 
-    (derivation-expression "xinitrc" builder #:inputs inputs)))
+        ;; Then try a pre-configured session type.
+        (match (command-line)
+          ((_ "ratpoison")
+           (execl (string-append #$ratpoison "/bin/ratpoison")))
+          (_
+           (execl (string-append #$windowmaker "/bin/wmaker"))))))
+
+  (gexp->script "xinitrc" builder))
 
 (define* (slim-service #:key (slim slim)
                        (allow-empty-passwords? #t) auto-login?
@@ -164,16 +117,17 @@ EndSection"))
                        (xauth xauth) (dmd dmd) (bash bash)
                        startx)
   "Return a service that spawns the SLiM graphical login manager, which in
-turn start the X display server with STARTX, a command as returned by
-'xorg-start-command'.
+turn starts the X display server with @var{startx}, a command as returned by
+@code{xorg-start-command}.
 
-When ALLOW-EMPTY-PASSWORDS? is true, allow logins with an empty password.
-When AUTO-LOGIN? is true, log in automatically as DEFAULT-USER."
+When @var{allow-empty-passwords?} is true, allow logins with an empty
+password.  When @var{auto-login?} is true, log in automatically as
+@var{default-user}."
   (define (slim.cfg)
     (mlet %store-monad ((startx  (or startx (xorg-start-command)))
                         (xinitrc (xinitrc)))
       (text-file* "slim.cfg"  "
-default_path /run/current-system/bin
+default_path /run/current-system/profile/bin
 default_xserver " startx "
 xserver_arguments :0 vt7
 xauth_path " xauth "/bin/xauth
@@ -181,7 +135,7 @@ authfile /var/run/slim.auth
 
 # The login command.  '%session' is replaced by the chosen session name, one
 # of the names specified in the 'sessions' setting: 'wmaker', 'xfce', etc.
-login_cmd  exec " xinitrc "%session
+login_cmd  exec " xinitrc " %session
 sessions   wmaker,ratpoison
 
 halt_cmd " dmd "/sbin/halt
@@ -190,25 +144,23 @@ reboot_cmd " dmd "/sbin/reboot
       (string-append "auto_login yes\ndefault_user " default-user)
       ""))))
 
-  (mlet %store-monad ((slim-bin (package-file slim "bin/slim"))
-                      (bash-bin (package-file bash "bin/bash"))
-                      (slim.cfg (slim.cfg)))
+  (mlet %store-monad ((slim.cfg (slim.cfg)))
     (return
      (service
       (documentation "Xorg display server")
       (provision '(xorg-server))
-      (requirement '(host-name))
+      (requirement '(user-processes host-name udev))
       (start
-       ;; XXX: Work around the inability to specify env. vars. directly.
-       `(make-forkexec-constructor
-         ,bash-bin "-c"
-         ,(string-append "SLIM_CFGFILE=" (derivation->output-path slim.cfg)
-                         " " slim-bin
-                         " -nodaemon")))
-      (stop  `(make-kill-destructor))
-      (inputs `(("slim" ,slim)
-                ("slim.cfg" ,slim.cfg)
-                ("bash" ,bash)))
+       #~(lambda ()
+           ;; A stale lock file can prevent SLiM from starting, so remove it
+           ;; to be on the safe side.
+           (false-if-exception (delete-file "/var/run/slim.lock"))
+
+           (fork+exec-command
+            (list (string-append #$slim "/bin/slim") "-nodaemon")
+            #:environment-variables
+            (list (string-append "SLIM_CFGFILE=" #$slim.cfg)))))
+      (stop #~(make-kill-destructor))
       (respawn? #t)
       (pam-services
        ;; Tell PAM about 'slim'.

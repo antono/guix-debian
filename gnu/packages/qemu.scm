@@ -30,11 +30,9 @@
   #:use-module (gnu packages python)
   #:use-module (gnu packages ncurses)
   #:use-module (gnu packages compression)
-  #:use-module (gnu packages libpng)
-  #:use-module (gnu packages libjpeg)
+  #:use-module (gnu packages image)
   #:use-module (gnu packages attr)
   #:use-module (gnu packages linux)
-  #:use-module (gnu packages samba)
   #:use-module (gnu packages xorg)
   #:use-module (gnu packages gl)
   #:use-module (gnu packages sdl)
@@ -44,14 +42,14 @@
   ;; This is QEMU without GUI support.
   (package
     (name "qemu-headless")
-    (version "1.7.1")
+    (version "2.0.0")
     (source (origin
              (method url-fetch)
              (uri (string-append "http://wiki.qemu-project.org/download/qemu-"
                                  version ".tar.bz2"))
              (sha256
               (base32
-               "1x5y06zhp0gc97g1sb98vf7dkawg63xywv0mbnpfnbi20jh452fn"))))
+               "0frsahiw56jr4cqr9m6s383lyj4ar9hfs2wp3y4yr76krah1mk30"))))
     (build-system gnu-build-system)
     (arguments
      '(#:phases (alist-replace
@@ -59,8 +57,7 @@
                  (lambda* (#:key inputs outputs #:allow-other-keys)
                    ;; The `configure' script doesn't understand some of the
                    ;; GNU options.  Thus, add a new phase that's compatible.
-                   (let ((out   (assoc-ref outputs "out"))
-                         (samba (assoc-ref inputs "samba")))
+                   (let ((out (assoc-ref outputs "out")))
                      (setenv "SHELL" (which "bash"))
 
                      ;; While we're at it, patch for tests.
@@ -74,9 +71,7 @@
                                (string-append "--cc=" (which "gcc"))
                                "--disable-debug-info" ; save build space
                                "--enable-virtfs"      ; just to be sure
-                               (string-append "--prefix=" out)
-                               (string-append "--smbd=" samba
-                                              "/sbin/smbd")))))
+                               (string-append "--prefix=" out)))))
                  (alist-cons-after
                   'install 'install-info
                   (lambda* (#:key inputs outputs #:allow-other-keys)
@@ -108,10 +103,10 @@
        ;; ("pciutils" ,pciutils)
        ("alsa-lib" ,alsa-lib)
        ("zlib" ,zlib)
-       ("attr" ,attr)
-       ("samba" ,samba)))                         ; an optional dependency
+       ("attr" ,attr)))
     (native-inputs `(("pkg-config" ,pkg-config)
                      ("python" ,python-2) ; incompatible with Python 3 according to error message
+                     ("glib" ,glib "bin") ; gtester, etc.
                      ("texinfo" ,texinfo)
                      ("perl" ,perl)))
     (home-page "http://www.qemu-project.org")
@@ -131,19 +126,6 @@ server and embedded PowerPC, and S390 guests.")
 
     ;; Many files are GPLv2+, but some are GPLv2-only---e.g., `memory.c'.
     (license gpl2)))
-
-(define-public qemu/smb-shares
-  ;; A patched QEMU where `-net smb' yields two shares instead of one: one for
-  ;; the store, and another one for exchanges with the host.
-
-  ;; TODO: Use 9p/-virtfs instead of this SMB hack:
-  ;; <http://wiki.qemu.org/Documentation/9psetup>.
-  (package (inherit qemu-headless)
-    (name "qemu-with-multiple-smb-shares")
-    (source (origin (inherit (package-source qemu-headless))
-              (patches
-               (cons (search-patch "qemu-multiple-smb-shares.patch")
-                     (origin-patches (package-source qemu-headless))))))))
 
 (define-public qemu
   ;; QEMU with GUI support.

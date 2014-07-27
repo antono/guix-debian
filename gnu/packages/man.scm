@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2014 David Thompson <dthompson2@worcester.edu>
 ;;;
 ;;; This file is part of GNU Guix.
@@ -102,12 +102,44 @@ a flexible and convenient way.")
        ("groff" ,groff)
        ("less" ,less)
        ("libpipeline" ,libpipeline)))
+    (native-search-paths
+     (list (search-path-specification
+            (variable "MANPATH")
+            (directories '("share/man")))))
     (home-page "http://man-db.nongnu.org/")
     (synopsis "Standard Unix documentation system")
     (description
      "Man-db is an implementation of the standard Unix documentation system
 accessed using the man command.  It uses a Berkeley DB database in place of
 the traditional flat-text whatis databases.")
+    (license gpl2+)))
+
+(define-public man-pages
+  (package
+    (name "man-pages")
+    (version "3.69")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append
+                    "mirror://kernel.org/linux/docs/man-pages/man-pages-"
+                    version ".tar.xz"))
+              (sha256
+               (base32
+                "18zzmdzjihdnyg4vamk0jp6v6826vrsgal3kqqxvfq9bzyrh8xm2"))))
+    (build-system gnu-build-system)
+    (arguments
+     '(#:phases (alist-delete 'configure %standard-phases)
+       #:tests? #f
+       #:make-flags (list (string-append "MANDIR="
+                                         (assoc-ref %outputs "out")
+                                         "/share/man"))))
+    (home-page "http://www.kernel.org/doc/man-pages/")
+    (synopsis "Development manual pages from the Linux project")
+    (description
+     "This package provides traditional Unix \"man pages\" documenting the
+Linux kernel and C library interfaces employed by user-space programs.")
+
+    ;; Each man page has its own license; some are GPLv2+, some are MIT/X11.
     (license gpl2+)))
 
 (define-public help2man

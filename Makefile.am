@@ -37,6 +37,7 @@ MODULES =					\
   guix/download.scm				\
   guix/git-download.scm				\
   guix/monads.scm				\
+  guix/gexp.scm					\
   guix/profiles.scm				\
   guix/serialization.scm			\
   guix/nar.scm					\
@@ -58,7 +59,6 @@ MODULES =					\
   guix/build/download.scm			\
   guix/build/cmake-build-system.scm		\
   guix/build/git.scm				\
-  guix/build/gnome.scm				\
   guix/build/gnu-build-system.scm		\
   guix/build/gnu-dist.scm			\
   guix/build/linux-initrd.scm			\
@@ -69,6 +69,10 @@ MODULES =					\
   guix/build/pull.scm				\
   guix/build/rpath.scm				\
   guix/build/svn.scm				\
+  guix/build/vm.scm				\
+  guix/build/install.scm			\
+  guix/build/activation.scm			\
+  guix/build/syscalls.scm			\
   guix/packages.scm				\
   guix/snix.scm					\
   guix/scripts/download.scm			\
@@ -98,10 +102,14 @@ endif BUILD_DAEMON_OFFLOAD
 guix/scripts/download.go: guix/build/download.go
 guix/download.go: guix/build/download.go
 
+# Linux-Libre configurations.
+KCONFIGS =					\
+  gnu/packages/linux-libre-i686.conf		\
+  gnu/packages/linux-libre-x86_64.conf
 
 GOBJECTS = $(MODULES:%.scm=%.go) guix/config.go
 
-nobase_dist_guilemodule_DATA = $(MODULES)
+nobase_dist_guilemodule_DATA = $(MODULES) $(KCONFIGS)
 nobase_nodist_guilemodule_DATA = $(GOBJECTS) guix/config.scm
 
 # Do we need to provide our own non-broken (srfi srfi-37) module?
@@ -138,9 +146,11 @@ SCM_TESTS =					\
   tests/snix.scm				\
   tests/store.scm				\
   tests/monads.scm				\
+  tests/gexp.scm				\
   tests/nar.scm					\
   tests/union.scm				\
-  tests/profiles.scm
+  tests/profiles.scm				\
+  tests/syscalls.scm
 
 SH_TESTS =					\
   tests/guix-build.sh				\
@@ -148,6 +158,7 @@ SH_TESTS =					\
   tests/guix-gc.sh				\
   tests/guix-hash.sh				\
   tests/guix-package.sh				\
+  tests/guix-system.sh				\
   tests/guix-archive.sh				\
   tests/guix-authenticate.sh
 
@@ -180,27 +191,28 @@ tests/guix-gc.log:							\
 # Public key used to sign substitutes from hydra.gnu.org.
 dist_pkgdata_DATA = hydra.gnu.org.pub
 
-EXTRA_DIST =					\
-  HACKING					\
-  ROADMAP					\
-  TODO						\
-  .dir-locals.el				\
-  build-aux/hydra/gnu-system.scm		\
-  build-aux/hydra/demo-os.scm			\
-  build-aux/hydra/guix.scm			\
-  build-aux/check-available-binaries.scm	\
-  build-aux/download.scm			\
-  build-aux/list-packages.scm			\
-  build-aux/sync-descriptions.scm		\
-  srfi/srfi-37.scm.in				\
-  srfi/srfi-64.scm				\
-  srfi/srfi-64.upstream.scm			\
-  tests/test.drv				\
-  tests/signing-key.pub				\
-  tests/signing-key.sec				\
-  build-aux/config.rpath			\
-  bootstrap					\
-  release.nix					\
+EXTRA_DIST =						\
+  HACKING						\
+  ROADMAP						\
+  TODO							\
+  .dir-locals.el					\
+  build-aux/hydra/gnu-system.scm			\
+  build-aux/hydra/demo-os.scm				\
+  build-aux/hydra/guix.scm				\
+  build-aux/check-available-binaries.scm		\
+  build-aux/check-final-inputs-self-contained.scm	\
+  build-aux/download.scm				\
+  build-aux/list-packages.scm				\
+  build-aux/sync-descriptions.scm			\
+  srfi/srfi-37.scm.in					\
+  srfi/srfi-64.scm					\
+  srfi/srfi-64.upstream.scm				\
+  tests/test.drv					\
+  tests/signing-key.pub					\
+  tests/signing-key.sec					\
+  build-aux/config.rpath				\
+  bootstrap						\
+  release.nix						\
   $(TESTS)
 
 if !BUILD_DAEMON_OFFLOAD
@@ -240,7 +252,8 @@ SUFFIXES = .go
 guix_install_go_files = install-nobase_nodist_guilemoduleDATA
 $(guix_install_go_files): install-nobase_dist_guilemoduleDATA
 
-SUBDIRS = po
+SUBDIRS = po/guix po/packages
+BUILT_SOURCES =
 
 include doc.am
 
@@ -253,11 +266,12 @@ endif BUILD_DAEMON
 ACLOCAL_AMFLAGS = -I m4
 AM_DISTCHECK_CONFIGURE_FLAGS =			\
   --with-libgcrypt-prefix="$(LIBGCRYPT_PREFIX)"	\
+  --with-libgcrypt-libdir="$(LIBGCRYPT_LIBDIR)"	\
   --with-nix-prefix="$(NIX_PREFIX)"		\
   --enable-daemon
 
 dist-hook: sync-descriptions gen-ChangeLog assert-no-store-file-names
-distcheck-hook: assert-binaries-available
+distcheck-hook: assert-binaries-available assert-final-inputs-self-contained
 
 sync-descriptions:
 	-$(top_builddir)/pre-inst-env $(GUILE)		\
@@ -285,5 +299,11 @@ assert-binaries-available:
 	$(top_builddir)/pre-inst-env "$(GUILE)"				\
 	  "$(top_srcdir)/build-aux/check-available-binaries.scm"
 
+# Make sure the final inputs don't refer to bootstrap tools.
+assert-final-inputs-self-contained:
+	$(top_builddir)/pre-inst-env "$(GUILE)"				\
+	  "$(top_srcdir)/build-aux/check-final-inputs-self-contained.scm"
+
 .PHONY: sync-descriptions gen-ChangeLog clean-go
 .PHONY: assert-no-store-file-names assert-binaries-available
+.PHONY: assert-final-inputs-self-contained

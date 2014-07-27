@@ -35,7 +35,7 @@
 
 # GNU Guix --- Functional package management for GNU
 # Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
-# Copyright © 2013 Andreas Enge <andreas@enge.fr>
+# Copyright © 2013, 2014 Andreas Enge <andreas@enge.fr>
 # Copyright © 2013, 2014 Mark H Weaver <mhw@netris.org>
 #
 # This file is part of GNU Guix.
@@ -57,7 +57,7 @@
 # binaries.
 
 # GNU Guix --- Functional package management for GNU
-# Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+# Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 # Copyright © 2013 Andreas Enge <andreas@enge.fr>
 #
 # This file is part of GNU Guix.
@@ -205,22 +205,23 @@ DIST_COMMON = $(srcdir)/gnu-system.am $(srcdir)/doc.am \
 @BUILD_DAEMON_OFFLOAD_FALSE@am__append_5 = \
 @BUILD_DAEMON_OFFLOAD_FALSE@  guix/scripts/offload.scm
 
-@BUILD_DAEMON_TRUE@am__append_6 = $(BUILT_SOURCES)
+@BUILD_DAEMON_TRUE@am__append_6 = nix/libstore/schema.sql.hh
+@BUILD_DAEMON_TRUE@am__append_7 = $(BUILT_SOURCES)
 @BUILD_DAEMON_TRUE@bin_PROGRAMS = guix-daemon$(EXEEXT)
 @BUILD_DAEMON_TRUE@sbin_PROGRAMS = guix-register$(EXEEXT)
-@BUILD_DAEMON_OFFLOAD_TRUE@@BUILD_DAEMON_TRUE@am__append_7 = \
+@BUILD_DAEMON_OFFLOAD_TRUE@@BUILD_DAEMON_TRUE@am__append_8 = \
 @BUILD_DAEMON_OFFLOAD_TRUE@@BUILD_DAEMON_TRUE@  nix/scripts/offload
 
-@BUILD_DAEMON_TRUE@am__append_8 = \
+@BUILD_DAEMON_TRUE@am__append_9 = \
 @BUILD_DAEMON_TRUE@  nix/sync-with-upstream			\
 @BUILD_DAEMON_TRUE@  nix/libstore/schema.sql			\
 @BUILD_DAEMON_TRUE@  nix/AUTHORS					\
 @BUILD_DAEMON_TRUE@  nix/COPYING
 
-@BUILD_DAEMON_TRUE@am__append_9 = \
+@BUILD_DAEMON_TRUE@am__append_10 = \
 @BUILD_DAEMON_TRUE@  top_builddir="$(abs_top_builddir)"
 
-@BUILD_DAEMON_TRUE@am__append_10 = \
+@BUILD_DAEMON_TRUE@am__append_11 = \
 @BUILD_DAEMON_TRUE@  tests/guix-daemon.sh
 
 subdir = .
@@ -451,8 +452,8 @@ am__nobase_dist_guilemodule_DATA_DIST = guix/base32.scm \
 	guix/base64.scm guix/records.scm guix/hash.scm \
 	guix/pk-crypto.scm guix/pki.scm guix/utils.scm \
 	guix/download.scm guix/git-download.scm guix/monads.scm \
-	guix/profiles.scm guix/serialization.scm guix/nar.scm \
-	guix/derivations.scm guix/gnu-maintenance.scm \
+	guix/gexp.scm guix/profiles.scm guix/serialization.scm \
+	guix/nar.scm guix/derivations.scm guix/gnu-maintenance.scm \
 	guix/licenses.scm guix/build-system.scm \
 	guix/build-system/cmake.scm guix/build-system/gnu.scm \
 	guix/build-system/perl.scm guix/build-system/python.scm \
@@ -460,48 +461,54 @@ am__nobase_dist_guilemodule_DATA_DIST = guix/base32.scm \
 	guix/http-client.scm guix/gnupg.scm guix/store.scm \
 	guix/svn-download.scm guix/ui.scm guix/build/download.scm \
 	guix/build/cmake-build-system.scm guix/build/git.scm \
-	guix/build/gnome.scm guix/build/gnu-build-system.scm \
-	guix/build/gnu-dist.scm guix/build/linux-initrd.scm \
-	guix/build/perl-build-system.scm \
+	guix/build/gnu-build-system.scm guix/build/gnu-dist.scm \
+	guix/build/linux-initrd.scm guix/build/perl-build-system.scm \
 	guix/build/python-build-system.scm guix/build/utils.scm \
 	guix/build/union.scm guix/build/pull.scm guix/build/rpath.scm \
-	guix/build/svn.scm guix/packages.scm guix/snix.scm \
-	guix/scripts/download.scm guix/scripts/build.scm \
-	guix/scripts/archive.scm guix/scripts/import.scm \
-	guix/scripts/package.scm guix/scripts/gc.scm \
-	guix/scripts/hash.scm guix/scripts/pull.scm \
-	guix/scripts/substitute-binary.scm \
+	guix/build/svn.scm guix/build/vm.scm guix/build/install.scm \
+	guix/build/activation.scm guix/build/syscalls.scm \
+	guix/packages.scm guix/snix.scm guix/scripts/download.scm \
+	guix/scripts/build.scm guix/scripts/archive.scm \
+	guix/scripts/import.scm guix/scripts/package.scm \
+	guix/scripts/gc.scm guix/scripts/hash.scm \
+	guix/scripts/pull.scm guix/scripts/substitute-binary.scm \
 	guix/scripts/authenticate.scm guix/scripts/refresh.scm \
-	guix/scripts/system.scm guix.scm gnu/packages.scm \
+	guix/scripts/system.scm guix.scm gnu.scm gnu/packages.scm \
 	gnu/packages/acct.scm gnu/packages/acl.scm \
 	gnu/packages/admin.scm gnu/packages/algebra.scm \
-	gnu/packages/apl.scm gnu/packages/apr.scm \
-	gnu/packages/asciidoc.scm gnu/packages/aspell.scm \
-	gnu/packages/attr.scm gnu/packages/autogen.scm \
-	gnu/packages/autotools.scm gnu/packages/avahi.scm \
+	gnu/packages/aidc.scm gnu/packages/apl.scm \
+	gnu/packages/apr.scm gnu/packages/asciidoc.scm \
+	gnu/packages/aspell.scm gnu/packages/attr.scm \
+	gnu/packages/autogen.scm gnu/packages/autotools.scm \
+	gnu/packages/avahi.scm gnu/packages/backup.scm \
 	gnu/packages/base.scm gnu/packages/bash.scm \
 	gnu/packages/bdb.scm gnu/packages/bdw-gc.scm \
-	gnu/packages/bison.scm gnu/packages/boost.scm \
-	gnu/packages/bootstrap.scm gnu/packages/calcurse.scm \
-	gnu/packages/cdrom.scm gnu/packages/cflow.scm \
-	gnu/packages/check.scm gnu/packages/cmake.scm \
-	gnu/packages/compression.scm gnu/packages/complexity.scm \
-	gnu/packages/cpio.scm gnu/packages/cppi.scm \
-	gnu/packages/cross-base.scm gnu/packages/cryptsetup.scm \
+	gnu/packages/bittorrent.scm gnu/packages/bison.scm \
+	gnu/packages/boost.scm gnu/packages/bootstrap.scm \
+	gnu/packages/busybox.scm gnu/packages/calcurse.scm \
+	gnu/packages/ccache.scm gnu/packages/cdrom.scm \
+	gnu/packages/cflow.scm gnu/packages/check.scm \
+	gnu/packages/cmake.scm gnu/packages/compression.scm \
+	gnu/packages/complexity.scm gnu/packages/conkeror.scm \
+	gnu/packages/cook.scm gnu/packages/cpio.scm \
+	gnu/packages/cppi.scm gnu/packages/cross-base.scm \
+	gnu/packages/crypto.scm gnu/packages/cryptsetup.scm \
 	gnu/packages/curl.scm gnu/packages/cursynth.scm \
-	gnu/packages/cyrus-sasl.scm gnu/packages/dc.scm \
-	gnu/packages/dejagnu.scm gnu/packages/ddrescue.scm \
-	gnu/packages/dictionaries.scm gnu/packages/docbook.scm \
+	gnu/packages/cyrus-sasl.scm gnu/packages/datamash.scm \
+	gnu/packages/dc.scm gnu/packages/dejagnu.scm \
+	gnu/packages/dictionaries.scm gnu/packages/disk.scm \
+	gnu/packages/docbook.scm gnu/packages/doxygen.scm \
 	gnu/packages/dwm.scm gnu/packages/ed.scm gnu/packages/elf.scm \
-	gnu/packages/emacs.scm gnu/packages/fdisk.scm \
-	gnu/packages/file.scm gnu/packages/flex.scm \
+	gnu/packages/emacs.scm gnu/packages/file.scm \
+	gnu/packages/fish.scm gnu/packages/flex.scm \
 	gnu/packages/fltk.scm gnu/packages/fonts.scm \
 	gnu/packages/fontutils.scm gnu/packages/freeipmi.scm \
-	gnu/packages/games.scm gnu/packages/gawk.scm \
-	gnu/packages/gcal.scm gnu/packages/gcc.scm gnu/packages/gd.scm \
-	gnu/packages/gdb.scm gnu/packages/gdbm.scm \
-	gnu/packages/geeqie.scm gnu/packages/gettext.scm \
-	gnu/packages/ghostscript.scm gnu/packages/giflib.scm \
+	gnu/packages/ftp.scm gnu/packages/games.scm \
+	gnu/packages/gawk.scm gnu/packages/gcal.scm \
+	gnu/packages/gcc.scm gnu/packages/gd.scm gnu/packages/gdb.scm \
+	gnu/packages/gdbm.scm gnu/packages/geeqie.scm \
+	gnu/packages/gettext.scm gnu/packages/ghostscript.scm \
+	gnu/packages/giflib.scm gnu/packages/gimp.scm \
 	gnu/packages/gkrellm.scm gnu/packages/gl.scm \
 	gnu/packages/glib.scm gnu/packages/global.scm \
 	gnu/packages/gnome.scm gnu/packages/gnunet.scm \
@@ -516,72 +523,79 @@ am__nobase_dist_guilemodule_DATA_DIST = guix/base32.scm \
 	gnu/packages/gv.scm gnu/packages/gxmessage.scm \
 	gnu/packages/hugs.scm gnu/packages/hurd.scm \
 	gnu/packages/icu4c.scm gnu/packages/idutils.scm \
-	gnu/packages/imagemagick.scm gnu/packages/indent.scm \
-	gnu/packages/inkscape.scm gnu/packages/irssi.scm \
-	gnu/packages/iso-codes.scm gnu/packages/kde.scm \
+	gnu/packages/image.scm gnu/packages/imagemagick.scm \
+	gnu/packages/indent.scm gnu/packages/inkscape.scm \
+	gnu/packages/irssi.scm gnu/packages/iso-codes.scm \
+	gnu/packages/jrnl.scm gnu/packages/kde.scm \
 	gnu/packages/ld-wrapper.scm gnu/packages/less.scm \
 	gnu/packages/lesstif.scm gnu/packages/libcanberra.scm \
 	gnu/packages/libdaemon.scm gnu/packages/libevent.scm \
-	gnu/packages/libffi.scm gnu/packages/libidn.scm \
-	gnu/packages/libjpeg.scm gnu/packages/libphidget.scm \
-	gnu/packages/libpng.scm gnu/packages/libsigsegv.scm \
-	gnu/packages/libtiff.scm gnu/packages/libunistring.scm \
+	gnu/packages/libffi.scm gnu/packages/libftdi.scm \
+	gnu/packages/libidn.scm gnu/packages/libphidget.scm \
+	gnu/packages/libsigsegv.scm gnu/packages/libunistring.scm \
 	gnu/packages/libusb.scm gnu/packages/libunwind.scm \
-	gnu/packages/lightning.scm gnu/packages/linux.scm \
+	gnu/packages/lightning.scm gnu/packages/links.scm \
+	gnu/packages/linux.scm gnu/packages/lisp.scm \
 	gnu/packages/lout.scm gnu/packages/lsh.scm \
 	gnu/packages/lsof.scm gnu/packages/lua.scm \
 	gnu/packages/lvm.scm gnu/packages/lynx.scm gnu/packages/m4.scm \
 	gnu/packages/man.scm gnu/packages/mail.scm \
 	gnu/packages/make-bootstrap.scm gnu/packages/maths.scm \
-	gnu/packages/mc.scm gnu/packages/messaging.scm \
-	gnu/packages/mit-krb5.scm gnu/packages/moe.scm \
-	gnu/packages/mpd.scm gnu/packages/mp3.scm \
-	gnu/packages/multiprecision.scm gnu/packages/mtools.scm \
-	gnu/packages/mysql.scm gnu/packages/nano.scm \
-	gnu/packages/ncdu.scm gnu/packages/ncurses.scm \
-	gnu/packages/netpbm.scm gnu/packages/nettle.scm \
+	gnu/packages/mc.scm gnu/packages/mcrypt.scm \
+	gnu/packages/messaging.scm gnu/packages/mit-krb5.scm \
+	gnu/packages/moe.scm gnu/packages/mpd.scm gnu/packages/mp3.scm \
+	gnu/packages/mpi.scm gnu/packages/multiprecision.scm \
+	gnu/packages/mtools.scm gnu/packages/mysql.scm \
+	gnu/packages/nano.scm gnu/packages/ncdu.scm \
+	gnu/packages/ncurses.scm gnu/packages/netpbm.scm \
+	gnu/packages/nettle.scm gnu/packages/node.scm \
 	gnu/packages/noweb.scm gnu/packages/ocaml.scm \
 	gnu/packages/ocrad.scm gnu/packages/onc-rpc.scm \
 	gnu/packages/openldap.scm gnu/packages/openssl.scm \
 	gnu/packages/package-management.scm gnu/packages/parallel.scm \
-	gnu/packages/parted.scm gnu/packages/patchutils.scm \
+	gnu/packages/patchutils.scm gnu/packages/pciutils.scm \
 	gnu/packages/pcre.scm gnu/packages/pdf.scm \
 	gnu/packages/pem.scm gnu/packages/perl.scm \
 	gnu/packages/photo.scm gnu/packages/pkg-config.scm \
 	gnu/packages/plotutils.scm gnu/packages/popt.scm \
 	gnu/packages/pth.scm gnu/packages/pulseaudio.scm \
-	gnu/packages/pretty-print.scm gnu/packages/python.scm \
-	gnu/packages/qemu.scm gnu/packages/qt.scm \
-	gnu/packages/ratpoison.scm gnu/packages/rdf.scm \
-	gnu/packages/readline.scm gnu/packages/recutils.scm \
-	gnu/packages/rsync.scm gnu/packages/rush.scm \
-	gnu/packages/samba.scm gnu/packages/scheme.scm \
-	gnu/packages/screen.scm gnu/packages/sdl.scm \
-	gnu/packages/search.scm gnu/packages/serveez.scm \
-	gnu/packages/shishi.scm gnu/packages/skribilo.scm \
-	gnu/packages/slim.scm gnu/packages/smalltalk.scm \
-	gnu/packages/sqlite.scm gnu/packages/ssh.scm \
-	gnu/packages/stalonetray.scm gnu/packages/swig.scm \
-	gnu/packages/tcl.scm gnu/packages/tcsh.scm \
+	gnu/packages/pretty-print.scm gnu/packages/protobuf.scm \
+	gnu/packages/python.scm gnu/packages/qemu.scm \
+	gnu/packages/qt.scm gnu/packages/ratpoison.scm \
+	gnu/packages/rdf.scm gnu/packages/readline.scm \
+	gnu/packages/recutils.scm gnu/packages/rsync.scm \
+	gnu/packages/rush.scm gnu/packages/samba.scm \
+	gnu/packages/scheme.scm gnu/packages/screen.scm \
+	gnu/packages/sdl.scm gnu/packages/search.scm \
+	gnu/packages/serveez.scm gnu/packages/shishi.scm \
+	gnu/packages/skribilo.scm gnu/packages/slim.scm \
+	gnu/packages/smalltalk.scm gnu/packages/sqlite.scm \
+	gnu/packages/ssh.scm gnu/packages/stalonetray.scm \
+	gnu/packages/swig.scm gnu/packages/tcl.scm \
+	gnu/packages/tcsh.scm gnu/packages/telephony.scm \
 	gnu/packages/texinfo.scm gnu/packages/texlive.scm \
 	gnu/packages/time.scm gnu/packages/tmux.scm \
 	gnu/packages/tor.scm gnu/packages/uucp.scm \
 	gnu/packages/unrtf.scm gnu/packages/upnp.scm \
 	gnu/packages/valgrind.scm gnu/packages/version-control.scm \
 	gnu/packages/video.scm gnu/packages/vim.scm \
-	gnu/packages/vpn.scm gnu/packages/w3m.scm \
+	gnu/packages/vpn.scm gnu/packages/vtk.scm gnu/packages/w3m.scm \
 	gnu/packages/wdiff.scm gnu/packages/web.scm \
 	gnu/packages/wget.scm gnu/packages/which.scm \
 	gnu/packages/wordnet.scm gnu/packages/xiph.scm \
 	gnu/packages/xlockmore.scm gnu/packages/xml.scm \
 	gnu/packages/xnee.scm gnu/packages/xorg.scm \
 	gnu/packages/yasm.scm gnu/packages/zile.scm \
-	gnu/packages/zip.scm gnu/services.scm gnu/services/base.scm \
+	gnu/packages/zip.scm gnu/services.scm gnu/services/avahi.scm \
+	gnu/services/base.scm gnu/services/dbus.scm \
 	gnu/services/dmd.scm gnu/services/networking.scm \
-	gnu/services/xorg.scm gnu/system.scm gnu/system/grub.scm \
+	gnu/services/ssh.scm gnu/services/xorg.scm gnu/system.scm \
+	gnu/system/file-systems.scm gnu/system/grub.scm \
+	gnu/system/install.scm gnu/system/os-config.tmpl \
 	gnu/system/linux.scm gnu/system/linux-initrd.scm \
 	gnu/system/shadow.scm gnu/system/vm.scm \
-	guix/scripts/offload.scm
+	guix/scripts/offload.scm gnu/packages/linux-libre-i686.conf \
+	gnu/packages/linux-libre-x86_64.conf
 DATA = $(dist_bootstrap_i686_linux_DATA) \
 	$(dist_bootstrap_mips64el_linux_DATA) \
 	$(dist_bootstrap_x86_64_linux_DATA) $(dist_infoimage_DATA) \
@@ -907,6 +921,7 @@ INTL_MACOSX_LIBS = @INTL_MACOSX_LIBS@
 LDFLAGS = @LDFLAGS@
 LIBGCRYPT = @LIBGCRYPT@
 LIBGCRYPT_CFLAGS = @LIBGCRYPT_CFLAGS@
+LIBGCRYPT_LIBDIR = @LIBGCRYPT_LIBDIR@
 LIBGCRYPT_LIBS = @LIBGCRYPT_LIBS@
 LIBGCRYPT_PREFIX = @LIBGCRYPT_PREFIX@
 LIBICONV = @LIBICONV@
@@ -1016,11 +1031,13 @@ nodist_noinst_SCRIPTS = \
   test-env
 
 GNU_SYSTEM_MODULES = \
+  gnu.scm					\
   gnu/packages.scm				\
   gnu/packages/acct.scm				\
   gnu/packages/acl.scm				\
   gnu/packages/admin.scm			\
   gnu/packages/algebra.scm			\
+  gnu/packages/aidc.scm 			\
   gnu/packages/apl.scm				\
   gnu/packages/apr.scm				\
   gnu/packages/asciidoc.scm			\
@@ -1029,43 +1046,53 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/autogen.scm			\
   gnu/packages/autotools.scm			\
   gnu/packages/avahi.scm			\
+  gnu/packages/backup.scm			\
   gnu/packages/base.scm				\
   gnu/packages/bash.scm				\
   gnu/packages/bdb.scm				\
   gnu/packages/bdw-gc.scm			\
+  gnu/packages/bittorrent.scm			\
   gnu/packages/bison.scm			\
   gnu/packages/boost.scm			\
   gnu/packages/bootstrap.scm			\
+  gnu/packages/busybox.scm			\
   gnu/packages/calcurse.scm			\
+  gnu/packages/ccache.scm			\
   gnu/packages/cdrom.scm			\
   gnu/packages/cflow.scm			\
   gnu/packages/check.scm			\
   gnu/packages/cmake.scm			\
   gnu/packages/compression.scm			\
   gnu/packages/complexity.scm			\
+  gnu/packages/conkeror.scm			\
+  gnu/packages/cook.scm 			\
   gnu/packages/cpio.scm				\
   gnu/packages/cppi.scm				\
   gnu/packages/cross-base.scm			\
+  gnu/packages/crypto.scm			\
   gnu/packages/cryptsetup.scm			\
   gnu/packages/curl.scm				\
   gnu/packages/cursynth.scm			\
   gnu/packages/cyrus-sasl.scm			\
+  gnu/packages/datamash.scm			\
   gnu/packages/dc.scm				\
   gnu/packages/dejagnu.scm			\
-  gnu/packages/ddrescue.scm			\
   gnu/packages/dictionaries.scm			\
+  gnu/packages/disk.scm				\
   gnu/packages/docbook.scm			\
+  gnu/packages/doxygen.scm			\
   gnu/packages/dwm.scm				\
   gnu/packages/ed.scm				\
   gnu/packages/elf.scm				\
   gnu/packages/emacs.scm			\
-  gnu/packages/fdisk.scm			\
   gnu/packages/file.scm				\
+  gnu/packages/fish.scm				\
   gnu/packages/flex.scm				\
   gnu/packages/fltk.scm				\
   gnu/packages/fonts.scm			\
   gnu/packages/fontutils.scm			\
   gnu/packages/freeipmi.scm			\
+  gnu/packages/ftp.scm				\
   gnu/packages/games.scm			\
   gnu/packages/gawk.scm				\
   gnu/packages/gcal.scm				\
@@ -1077,6 +1104,7 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/gettext.scm			\
   gnu/packages/ghostscript.scm			\
   gnu/packages/giflib.scm			\
+  gnu/packages/gimp.scm				\
   gnu/packages/gkrellm.scm			\
   gnu/packages/gl.scm				\
   gnu/packages/glib.scm				\
@@ -1105,11 +1133,13 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/hurd.scm				\
   gnu/packages/icu4c.scm			\
   gnu/packages/idutils.scm			\
+  gnu/packages/image.scm			\
   gnu/packages/imagemagick.scm			\
   gnu/packages/indent.scm			\
   gnu/packages/inkscape.scm			\
   gnu/packages/irssi.scm			\
   gnu/packages/iso-codes.scm			\
+  gnu/packages/jrnl.scm				\
   gnu/packages/kde.scm				\
   gnu/packages/ld-wrapper.scm			\
   gnu/packages/less.scm				\
@@ -1118,17 +1148,17 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/libdaemon.scm			\
   gnu/packages/libevent.scm			\
   gnu/packages/libffi.scm			\
+  gnu/packages/libftdi.scm			\
   gnu/packages/libidn.scm			\
-  gnu/packages/libjpeg.scm			\
   gnu/packages/libphidget.scm			\
-  gnu/packages/libpng.scm			\
   gnu/packages/libsigsegv.scm			\
-  gnu/packages/libtiff.scm			\
   gnu/packages/libunistring.scm			\
   gnu/packages/libusb.scm			\
   gnu/packages/libunwind.scm			\
   gnu/packages/lightning.scm			\
+  gnu/packages/links.scm			\
   gnu/packages/linux.scm			\
+  gnu/packages/lisp.scm			\
   gnu/packages/lout.scm				\
   gnu/packages/lsh.scm				\
   gnu/packages/lsof.scm				\
@@ -1141,11 +1171,13 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/make-bootstrap.scm		\
   gnu/packages/maths.scm			\
   gnu/packages/mc.scm				\
+  gnu/packages/mcrypt.scm			\
   gnu/packages/messaging.scm			\
   gnu/packages/mit-krb5.scm			\
   gnu/packages/moe.scm				\
   gnu/packages/mpd.scm				\
   gnu/packages/mp3.scm				\
+  gnu/packages/mpi.scm				\
   gnu/packages/multiprecision.scm		\
   gnu/packages/mtools.scm			\
   gnu/packages/mysql.scm			\
@@ -1154,6 +1186,7 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/ncurses.scm			\
   gnu/packages/netpbm.scm			\
   gnu/packages/nettle.scm			\
+  gnu/packages/node.scm				\
   gnu/packages/noweb.scm			\
   gnu/packages/ocaml.scm			\
   gnu/packages/ocrad.scm			\
@@ -1162,8 +1195,8 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/openssl.scm			\
   gnu/packages/package-management.scm		\
   gnu/packages/parallel.scm			\
-  gnu/packages/parted.scm			\
   gnu/packages/patchutils.scm			\
+  gnu/packages/pciutils.scm			\
   gnu/packages/pcre.scm				\
   gnu/packages/pdf.scm				\
   gnu/packages/pem.scm				\
@@ -1175,6 +1208,7 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/pth.scm				\
   gnu/packages/pulseaudio.scm			\
   gnu/packages/pretty-print.scm			\
+  gnu/packages/protobuf.scm			\
   gnu/packages/python.scm			\
   gnu/packages/qemu.scm				\
   gnu/packages/qt.scm				\
@@ -1200,6 +1234,7 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/swig.scm				\
   gnu/packages/tcl.scm				\
   gnu/packages/tcsh.scm				\
+  gnu/packages/telephony.scm			\
   gnu/packages/texinfo.scm			\
   gnu/packages/texlive.scm			\
   gnu/packages/time.scm				\
@@ -1213,6 +1248,7 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/video.scm			\
   gnu/packages/vim.scm				\
   gnu/packages/vpn.scm				\
+  gnu/packages/vtk.scm				\
   gnu/packages/w3m.scm				\
   gnu/packages/wdiff.scm			\
   gnu/packages/web.scm				\
@@ -1229,13 +1265,19 @@ GNU_SYSTEM_MODULES = \
   gnu/packages/zip.scm				\
 						\
   gnu/services.scm				\
+  gnu/services/avahi.scm			\
   gnu/services/base.scm				\
+  gnu/services/dbus.scm				\
   gnu/services/dmd.scm				\
   gnu/services/networking.scm			\
+  gnu/services/ssh.scm				\
   gnu/services/xorg.scm				\
 						\
   gnu/system.scm				\
+  gnu/system/file-systems.scm			\
   gnu/system/grub.scm				\
+  gnu/system/install.scm			\
+  gnu/system/os-config.tmpl			\
   gnu/system/linux.scm				\
   gnu/system/linux-initrd.scm			\
   gnu/system/shadow.scm				\
@@ -1250,29 +1292,31 @@ dist_patch_DATA = \
   gnu/packages/patches/bigloo-gc-shebangs.patch			\
   gnu/packages/patches/binutils-ld-new-dtags.patch		\
   gnu/packages/patches/binutils-loongson-workaround.patch	\
-  gnu/packages/patches/bitlbee-fix-tests.patch			\
-  gnu/packages/patches/bitlbee-memset-fix.patch			\
+  gnu/packages/patches/ccache-stdc-predef-test.patch		\
   gnu/packages/patches/cdparanoia-fpic.patch			\
+  gnu/packages/patches/clucene-pkgconfig.patch			\
   gnu/packages/patches/cmake-fix-tests.patch			\
   gnu/packages/patches/coreutils-dummy-man.patch		\
   gnu/packages/patches/coreutils-skip-nohup.patch		\
   gnu/packages/patches/cpio-gets-undeclared.patch		\
+  gnu/packages/patches/cssc-gets-undeclared.patch               \
+  gnu/packages/patches/cssc-missing-include.patch               \
   gnu/packages/patches/curl-fix-test172.patch			\
+  gnu/packages/patches/cursynth-wave-rand.patch			\
   gnu/packages/patches/dbus-localstatedir.patch			\
   gnu/packages/patches/diffutils-gets-undeclared.patch		\
-  gnu/packages/patches/dmd-getpw.patch				\
-  gnu/packages/patches/dmd-tests-longer-sleeps.patch		\
+  gnu/packages/patches/doxygen-test.patch			\
+  gnu/packages/patches/doxygen-tmake.patch			\
   gnu/packages/patches/emacs-configure-sh.patch			\
   gnu/packages/patches/findutils-absolute-paths.patch		\
-  gnu/packages/patches/flac-fix-memcmp-not-declared.patch	\
   gnu/packages/patches/flex-bison-tests.patch			\
   gnu/packages/patches/gawk-shell.patch				\
   gnu/packages/patches/gcc-cross-environment-variables.patch	\
   gnu/packages/patches/gd-mips64-deplibs-fix.patch		\
   gnu/packages/patches/glib-tests-desktop.patch			\
   gnu/packages/patches/glib-tests-homedir.patch			\
-  gnu/packages/patches/glib-tests-newnet.patch			\
   gnu/packages/patches/glib-tests-prlimit.patch			\
+  gnu/packages/patches/glib-tests-timer.patch			\
   gnu/packages/patches/glibc-bootstrap-system.patch		\
   gnu/packages/patches/glibc-ldd-x86_64.patch			\
   gnu/packages/patches/gnunet-fix-scheduler.patch		\
@@ -1284,12 +1328,15 @@ dist_patch_DATA = \
   gnu/packages/patches/guile-1.8-cpp-4.5.patch			\
   gnu/packages/patches/guile-default-utf8.patch			\
   gnu/packages/patches/guile-linux-syscalls.patch		\
+  gnu/packages/patches/guile-ncurses-tests.patch		\
   gnu/packages/patches/guile-relocatable.patch			\
   gnu/packages/patches/guix-test-networking.patch		\
   gnu/packages/patches/gtkglext-disable-disable-deprecated.patch \
-  gnu/packages/patches/gtkglext-remove-pangox-dependency.patch  \
   gnu/packages/patches/hop-bigloo-4.0b.patch			\
+  gnu/packages/patches/icu4c-test-date-format.patch		\
   gnu/packages/patches/inkscape-stray-comma.patch               \
+  gnu/packages/patches/kmod-module-directory.patch		\
+  gnu/packages/patches/libbonobo-activation-test-race.patch	\
   gnu/packages/patches/libevent-dns-tests.patch			\
   gnu/packages/patches/libffi-mips-n32-fix.patch		\
   gnu/packages/patches/liboop-mips64-deplibs-fix.patch		\
@@ -1304,28 +1351,39 @@ dist_patch_DATA = \
   gnu/packages/patches/make-impure-dirs.patch			\
   gnu/packages/patches/mc-fix-ncurses-build.patch		\
   gnu/packages/patches/mcron-install.patch			\
+  gnu/packages/patches/mhash-keygen-test-segfault.patch		\
   gnu/packages/patches/mit-krb5-init-fix.patch			\
   gnu/packages/patches/mpc123-initialize-ao.patch		\
+  gnu/packages/patches/module-init-tools-moduledir.patch	\
   gnu/packages/patches/patchelf-page-size.patch			\
   gnu/packages/patches/patchutils-xfail-gendiff-tests.patch	\
   gnu/packages/patches/perl-no-sys-dirs.patch			\
+  gnu/packages/patches/perl-tk-x11-discover.patch		\
+  gnu/packages/patches/petsc-fix-threadcomm.patch		\
+  gnu/packages/patches/pingus-sdl-libs-config.patch		\
   gnu/packages/patches/plotutils-libpng-jmpbuf.patch		\
   gnu/packages/patches/procps-make-3.82.patch			\
+  gnu/packages/patches/pybugz-encode-error.patch		\
+  gnu/packages/patches/pybugz-stty.patch			\
   gnu/packages/patches/python-fix-tests.patch			\
   gnu/packages/patches/python-libffi-mips-n32-fix.patch		\
-  gnu/packages/patches/qemu-multiple-smb-shares.patch		\
   gnu/packages/patches/qt4-tests.patch				\
   gnu/packages/patches/ratpoison-shell.patch			\
   gnu/packages/patches/readline-link-ncurses.patch		\
   gnu/packages/patches/ripperx-libm.patch			\
   gnu/packages/patches/scheme48-tests.patch			\
+  gnu/packages/patches/scotch-test-threading.patch		\
   gnu/packages/patches/slim-session.patch			\
   gnu/packages/patches/slim-config.patch			\
   gnu/packages/patches/slim-sigusr1.patch			\
+  gnu/packages/patches/soprano-find-clucene.patch		\
   gnu/packages/patches/source-highlight-regexrange-test.patch	\
   gnu/packages/patches/sqlite-large-page-size-fix.patch		\
+  gnu/packages/patches/superlu-dist-scotchmetis.patch		\
   gnu/packages/patches/tcsh-fix-autotest.patch			\
   gnu/packages/patches/teckit-cstdio.patch			\
+  gnu/packages/patches/udev-gir-libtool.patch			\
+  gnu/packages/patches/util-linux-perl.patch			\
   gnu/packages/patches/valgrind-glibc.patch			\
   gnu/packages/patches/vpnc-script.patch			\
   gnu/packages/patches/w3m-fix-compile.patch			\
@@ -1381,8 +1439,8 @@ DOWNLOAD_FILE = \
 MODULES = guix/base32.scm guix/base64.scm guix/records.scm \
 	guix/hash.scm guix/pk-crypto.scm guix/pki.scm guix/utils.scm \
 	guix/download.scm guix/git-download.scm guix/monads.scm \
-	guix/profiles.scm guix/serialization.scm guix/nar.scm \
-	guix/derivations.scm guix/gnu-maintenance.scm \
+	guix/gexp.scm guix/profiles.scm guix/serialization.scm \
+	guix/nar.scm guix/derivations.scm guix/gnu-maintenance.scm \
 	guix/licenses.scm guix/build-system.scm \
 	guix/build-system/cmake.scm guix/build-system/gnu.scm \
 	guix/build-system/perl.scm guix/build-system/python.scm \
@@ -1390,22 +1448,28 @@ MODULES = guix/base32.scm guix/base64.scm guix/records.scm \
 	guix/http-client.scm guix/gnupg.scm guix/store.scm \
 	guix/svn-download.scm guix/ui.scm guix/build/download.scm \
 	guix/build/cmake-build-system.scm guix/build/git.scm \
-	guix/build/gnome.scm guix/build/gnu-build-system.scm \
-	guix/build/gnu-dist.scm guix/build/linux-initrd.scm \
-	guix/build/perl-build-system.scm \
+	guix/build/gnu-build-system.scm guix/build/gnu-dist.scm \
+	guix/build/linux-initrd.scm guix/build/perl-build-system.scm \
 	guix/build/python-build-system.scm guix/build/utils.scm \
 	guix/build/union.scm guix/build/pull.scm guix/build/rpath.scm \
-	guix/build/svn.scm guix/packages.scm guix/snix.scm \
-	guix/scripts/download.scm guix/scripts/build.scm \
-	guix/scripts/archive.scm guix/scripts/import.scm \
-	guix/scripts/package.scm guix/scripts/gc.scm \
-	guix/scripts/hash.scm guix/scripts/pull.scm \
-	guix/scripts/substitute-binary.scm \
+	guix/build/svn.scm guix/build/vm.scm guix/build/install.scm \
+	guix/build/activation.scm guix/build/syscalls.scm \
+	guix/packages.scm guix/snix.scm guix/scripts/download.scm \
+	guix/scripts/build.scm guix/scripts/archive.scm \
+	guix/scripts/import.scm guix/scripts/package.scm \
+	guix/scripts/gc.scm guix/scripts/hash.scm \
+	guix/scripts/pull.scm guix/scripts/substitute-binary.scm \
 	guix/scripts/authenticate.scm guix/scripts/refresh.scm \
 	guix/scripts/system.scm guix.scm $(GNU_SYSTEM_MODULES) \
 	$(am__append_1)
+
+# Linux-Libre configurations.
+KCONFIGS = \
+  gnu/packages/linux-libre-i686.conf		\
+  gnu/packages/linux-libre-x86_64.conf
+
 GOBJECTS = $(MODULES:%.scm=%.go) guix/config.go $(am__append_3)
-nobase_dist_guilemodule_DATA = $(MODULES)
+nobase_dist_guilemodule_DATA = $(MODULES) $(KCONFIGS)
 nobase_nodist_guilemodule_DATA = $(GOBJECTS) guix/config.scm \
 	$(am__append_2)
 SCM_TESTS = \
@@ -1425,17 +1489,20 @@ SCM_TESTS = \
   tests/snix.scm				\
   tests/store.scm				\
   tests/monads.scm				\
+  tests/gexp.scm				\
   tests/nar.scm					\
   tests/union.scm				\
-  tests/profiles.scm
+  tests/profiles.scm				\
+  tests/syscalls.scm
 
 SH_TESTS = tests/guix-build.sh tests/guix-download.sh tests/guix-gc.sh \
-	tests/guix-hash.sh tests/guix-package.sh tests/guix-archive.sh \
-	tests/guix-authenticate.sh $(am__append_4)
-TESTS = $(SCM_TESTS) $(SH_TESTS) $(am__append_10)
+	tests/guix-hash.sh tests/guix-package.sh tests/guix-system.sh \
+	tests/guix-archive.sh tests/guix-authenticate.sh \
+	$(am__append_4)
+TESTS = $(SCM_TESTS) $(SH_TESTS) $(am__append_11)
 TEST_EXTENSIONS = .scm .sh
 AM_TESTS_ENVIRONMENT = abs_top_srcdir="$(abs_top_srcdir)" \
-	$(am__append_9)
+	$(am__append_10)
 SCM_LOG_COMPILER = $(top_builddir)/test-env $(GUILE)
 AM_SCM_LOG_FLAGS = --no-auto-compile -L "$(top_srcdir)"
 SH_LOG_COMPILER = $(top_builddir)/test-env $(SHELL)
@@ -1446,16 +1513,19 @@ dist_pkgdata_DATA = hydra.gnu.org.pub
 EXTRA_DIST = HACKING ROADMAP TODO .dir-locals.el \
 	build-aux/hydra/gnu-system.scm build-aux/hydra/demo-os.scm \
 	build-aux/hydra/guix.scm \
-	build-aux/check-available-binaries.scm build-aux/download.scm \
-	build-aux/list-packages.scm build-aux/sync-descriptions.scm \
-	srfi/srfi-37.scm.in srfi/srfi-64.scm srfi/srfi-64.upstream.scm \
-	tests/test.drv tests/signing-key.pub tests/signing-key.sec \
+	build-aux/check-available-binaries.scm \
+	build-aux/check-final-inputs-self-contained.scm \
+	build-aux/download.scm build-aux/list-packages.scm \
+	build-aux/sync-descriptions.scm srfi/srfi-37.scm.in \
+	srfi/srfi-64.scm srfi/srfi-64.upstream.scm tests/test.drv \
+	tests/signing-key.pub tests/signing-key.sec \
 	build-aux/config.rpath bootstrap release.nix $(TESTS) \
 	$(am__append_5) doc/fdl-1.3.texi \
 	doc/images/bootstrap-graph.dot doc/images/bootstrap-graph.eps \
-	doc/images/bootstrap-graph.pdf $(am__append_8)
+	doc/images/bootstrap-graph.pdf doc/os-config.texi \
+	$(am__append_9)
 CLEANFILES = $(GOBJECTS) $(SCM_TESTS:tests/%.scm=%.log) \
-	$(am__append_6)
+	$(am__append_7)
 AM_V_GUILEC = $(AM_V_GUILEC_$(V))
 AM_V_GUILEC_ = $(AM_V_GUILEC_$(AM_DEFAULT_VERBOSITY))
 AM_V_GUILEC_0 = @echo "  GUILEC" $@;
@@ -1467,8 +1537,12 @@ SUFFIXES = .go
 # <http://lists.gnu.org/archive/html/guile-devel/2010-07/msg00125.html>
 # for details.
 guix_install_go_files = install-nobase_nodist_guilemoduleDATA
-SUBDIRS = po
+SUBDIRS = po/guix po/packages
+
+# Bundle this file so that makeinfo finds it in out-of-source-tree builds.
+BUILT_SOURCES = doc/os-config.texi $(am__append_6)
 info_TEXINFOS = doc/guix.texi
+MAINTAINERCLEANFILES = doc/os-config.texi
 infoimagedir = $(infodir)/images
 dist_infoimage_DATA = doc/images/bootstrap-graph.png
 
@@ -1478,7 +1552,6 @@ DOT_OPTIONS = \
   -Gratio=.9 -Gnodesep=.005 -Granksep=.00005	\
   -Nfontsize=9 -Nheight=.1 -Nwidth=.1
 
-@BUILD_DAEMON_TRUE@BUILT_SOURCES = nix/libstore/schema.sql.hh
 @BUILD_DAEMON_TRUE@noinst_LIBRARIES = libformat.a libutil.a libstore.a
 
 # Use '-std=c++0x' for 'std::shared_ptr'.
@@ -1608,7 +1681,7 @@ DOT_OPTIONS = \
 @BUILD_DAEMON_TRUE@nodist_pkglibexec_SCRIPTS =  \
 @BUILD_DAEMON_TRUE@	nix/scripts/list-runtime-roots \
 @BUILD_DAEMON_TRUE@	nix/scripts/substitute-binary \
-@BUILD_DAEMON_TRUE@	$(am__append_7)
+@BUILD_DAEMON_TRUE@	$(am__append_8)
 
 # XXX: It'd be better to hide it in $(pkglibexecdir).
 @BUILD_DAEMON_TRUE@nodist_libexec_SCRIPTS = \
@@ -1617,6 +1690,7 @@ DOT_OPTIONS = \
 ACLOCAL_AMFLAGS = -I m4
 AM_DISTCHECK_CONFIGURE_FLAGS = \
   --with-libgcrypt-prefix="$(LIBGCRYPT_PREFIX)"	\
+  --with-libgcrypt-libdir="$(LIBGCRYPT_LIBDIR)"	\
   --with-nix-prefix="$(NIX_PREFIX)"		\
   --enable-daemon
 
@@ -3314,6 +3388,7 @@ maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
 	-test -z "$(BUILT_SOURCES)" || rm -f $(BUILT_SOURCES)
+	-test -z "$(MAINTAINERCLEANFILES)" || rm -f $(MAINTAINERCLEANFILES)
 @BUILD_DAEMON_FALSE@clean-local:
 clean: clean-recursive
 
@@ -3603,6 +3678,10 @@ tests/guix-gc.log:							\
 	  -o "$@" "$<"
 $(guix_install_go_files): install-nobase_dist_guilemoduleDATA
 
+doc/os-config.texi: gnu/system/os-config.tmpl
+	$(MKDIR_P) "`dirname "$@"`"
+	cp "$<" "$@"
+
 .dot.png:
 	$(DOT) -Tpng $(DOT_OPTIONS) < "$<" > "$@.tmp"
 	mv "$@.tmp" "$@"
@@ -3638,7 +3717,7 @@ ps-local: $(top_srcdir)/doc/images/bootstrap-graph.eps
 @BUILD_DAEMON_TRUE@	-rm -rf "$(GUIX_TEST_ROOT)"
 
 dist-hook: sync-descriptions gen-ChangeLog assert-no-store-file-names
-distcheck-hook: assert-binaries-available
+distcheck-hook: assert-binaries-available assert-final-inputs-self-contained
 
 sync-descriptions:
 	-$(top_builddir)/pre-inst-env $(GUILE)		\
@@ -3666,8 +3745,14 @@ assert-binaries-available:
 	$(top_builddir)/pre-inst-env "$(GUILE)"				\
 	  "$(top_srcdir)/build-aux/check-available-binaries.scm"
 
+# Make sure the final inputs don't refer to bootstrap tools.
+assert-final-inputs-self-contained:
+	$(top_builddir)/pre-inst-env "$(GUILE)"				\
+	  "$(top_srcdir)/build-aux/check-final-inputs-self-contained.scm"
+
 .PHONY: sync-descriptions gen-ChangeLog clean-go
 .PHONY: assert-no-store-file-names assert-binaries-available
+.PHONY: assert-final-inputs-self-contained
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

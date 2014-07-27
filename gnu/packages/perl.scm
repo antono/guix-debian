@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
 ;;;
 ;;; This file is part of GNU Guix.
@@ -102,3 +102,22 @@ lists of files")
 provided base directory and can return files (and/or directories if desired)
 matching a regular expression.")
     (home-page "http://search.cpan.org/~dopacki/File-List/")))
+
+(define-public perl-io-tty
+  (package
+    (name "perl-io-tty")
+    (version "1.11")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://cpan/authors/id/T/TO/TODDR/IO-Tty-"
+                                  version ".tar.gz"))
+              (sha256
+               (base32
+                "0lgd9xcbi4gf4gw1ka6fj94my3w1f3k1zamb4pfln0qxz45zlxx4"))))
+    (build-system perl-build-system)
+    (home-page "http://search.cpan.org/~toddr/IO-Tty/")
+    (synopsis "Perl interface to pseudo ttys")
+    (description
+     "This package provides the 'IO::Pty' and 'IO::Tty' Perl interfaces to
+pseudo ttys.")
+    (license (package-license perl))))

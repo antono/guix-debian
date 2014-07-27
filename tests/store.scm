@@ -85,7 +85,8 @@
        (not (direct-store-path?
              (string-append
               (%store-prefix)
-              "/283gqy39v3g9dxjy26rynl0zls82fmcg-guile-2.0.7/bin/guile")))))
+              "/283gqy39v3g9dxjy26rynl0zls82fmcg-guile-2.0.7/bin/guile")))
+       (not (direct-store-path? (%store-prefix)))))
 
 (test-skip (if %store 0 13))
 
@@ -146,6 +147,18 @@
 ;;          (build-derivations %store (list d1))
 ;;          (valid-path? %store p1)
 ;;          (member (pk p2) (live-paths %store)))))
+
+(test-assert "permanent root"
+  (let* ((p  (with-store store
+               (let ((p (add-text-to-store store "random-text"
+                                           (random-text))))
+                 (add-permanent-root p)
+                 (add-permanent-root p)           ; should not throw
+                 p))))
+    (and (member p (live-paths %store))
+         (begin
+           (remove-permanent-root p)
+           (->bool (member p (dead-paths %store)))))))
 
 (test-assert "dead path can be explicitly collected"
   (let ((p (add-text-to-store %store "random-text"

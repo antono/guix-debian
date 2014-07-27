@@ -21,6 +21,7 @@
   #:use-module (guix utils)
   #:use-module (guix config)
   #:use-module (guix serialization)
+  #:autoload   (guix base32) (bytevector->base32-string)
   #:use-module (rnrs bytevectors)
   #:use-module (rnrs io ports)
   #:use-module (srfi srfi-1)
@@ -35,6 +36,7 @@
   #:use-module (ice-9 vlist)
   #:use-module (ice-9 popen)
   #:export (%daemon-socket-file
+            %gc-roots-directory
 
             nix-server?
             nix-server-major-version
@@ -63,6 +65,8 @@
             build-derivations
             add-temp-root
             add-indirect-root
+            add-permanent-root
+            remove-permanent-root
 
             substitutable?
             substitutable-path
@@ -287,16 +291,6 @@ operate, should the disk become full.  Return a server object."
         (a (make-socket-address PF_UNIX file)))
 
     (catch 'system-error
-      (lambda ()
-        ;; Enlarge the receive buffer.
-        (setsockopt s SOL_SOCKET SO_RCVBUF (* 12 1024)))
-      (lambda args
-        ;; On the Hurd, the pflocal server's implementation of `socket_setopt'
-        ;; always returns ENOPROTOOPT.  Ignore it.
-        (unless (= (system-error-errno args) ENOPROTOOPT)
-          (apply throw args))))
-
-    (catch 'system-error
       (cut connect s a)
       (lambda args
         ;; Translate the error to something user-friendly.
@@ -366,6 +360,12 @@ to OUT, using chunks of BUFFER-SIZE bytes."
                                        (min (- len total) buffer-size)
                                        buffer-size)))))))
 
+(define %newlines
+  ;; Newline characters triggering a flush of 'current-build-output-port'.
+  ;; Unlike Guile's _IOLBF, we flush upon #\return so that progress reports
+  ;; that use that trick are correctly displayed.
+  (char-set #\newline #\return))
+
 (define* (process-stderr server #:optional user-port)
   "Read standard output and standard error from SERVER, writing it to
 CURRENT-BUILD-OUTPUT-PORT.  Return #t when SERVER is done sending data, and
@@ -397,17 +397,21 @@ encoding conversion errors."
            #f)
           ((= k %stderr-read)
            ;; Read a byte stream from USER-PORT.
+           ;; Note: Avoid 'get-bytevector-n' to work around
+           ;; <http://bugs.gnu.org/17591> in Guile up to 2.0.11.
            (let* ((max-len (read-int p))
-                  (data    (get-bytevector-n user-port max-len))
-                  (len     (bytevector-length data)))
+                  (data    (make-bytevector max-len))
+                  (len     (get-bytevector-n! user-port data 0 max-len)))
              (write-int len p)
-             (put-bytevector p data)
+             (put-bytevector p data 0 len)
              (write-padding len p)
              #f))
           ((= k %stderr-next)
            ;; Log a string.
            (let ((s (read-latin1-string p)))
              (display s (current-build-output-port))
+             (when (string-any %newlines s)
+               (flush-output-port (current-build-output-port)))
              #f))
           ((= k %stderr-error)
            ;; Report an error.
@@ -570,11 +574,39 @@ Return #t."
   boolean)
 
 (define-operation (add-indirect-root (string file-name))
-  "Make FILE-NAME an indirect root for the garbage collector; FILE-NAME
-can be anywhere on the file system, but it must be an absolute file
-name--it is the caller's responsibility to ensure that it is an absolute
-file name.  Return #t on success."
+  "Make the symlink FILE-NAME an indirect root for the garbage collector:
+whatever store item FILE-NAME points to will not be collected.  Return #t on
+success.
+
+FILE-NAME can be anywhere on the file system, but it must be an absolute file
+name--it is the caller's responsibility to ensure that it is an absolute file
+name."
   boolean)
+
+(define %gc-roots-directory
+  ;; The place where garbage collector roots (symlinks) are kept.
+  (string-append %state-directory "/gcroots"))
+
+(define (add-permanent-root target)
+  "Add a garbage collector root pointing to TARGET, an element of the store,
+preventing TARGET from even being collected.  This can also be used if TARGET
+does not exist yet.
+
+Raise an error if the caller does not have write access to the GC root
+directory."
+  (let* ((root (string-append %gc-roots-directory "/" (basename target))))
+    (catch 'system-error
+      (lambda ()
+        (symlink target root))
+      (lambda args
+        ;; If ROOT already exists, this is fine; otherwise, re-throw.
+        (unless (= EEXIST (system-error-errno args))
+          (apply throw args))))))
+
+(define (remove-permanent-root target)
+  "Remove the permanent garbage collector root pointing to TARGET.  Raise an
+error if there is no such root."
+  (delete-file (string-append %gc-roots-directory "/" (basename target))))
 
 (define references
   (operation (query-references (store-path path))
@@ -765,17 +797,27 @@ signing them if SIGN? is true."
               (loop tail)))))))
 
 (define* (register-path path
-                        #:key (references '()) deriver)
+                        #:key (references '()) deriver prefix
+                        state-directory)
   "Register PATH as a valid store file, with REFERENCES as its list of
-references, and DERIVER as its deriver (.drv that led to it.)  Return #t on
-success.
+references, and DERIVER as its deriver (.drv that led to it.)  If PREFIX is
+not #f, it must be the name of the directory containing the new store to
+initialize; if STATE-DIRECTORY is not #f, it must be a string containing the
+absolute file name to the state directory of the store being initialized.
+Return #t on success.
 
 Use with care as it directly modifies the store!  This is primarily meant to
 be used internally by the daemon's build hook."
   ;; Currently this is implemented by calling out to the fine C++ blob.
   (catch 'system-error
     (lambda ()
-      (let ((pipe (open-pipe* OPEN_WRITE %guix-register-program)))
+      (let ((pipe (apply open-pipe* OPEN_WRITE %guix-register-program
+                         `(,@(if prefix
+                                 `("--prefix" ,prefix)
+                                 '())
+                           ,@(if state-directory
+                                 `("--state-directory" ,state-directory)
+                                 '())))))
         (and pipe
              (begin
                (format pipe "~a~%~a~%~a~%"
@@ -807,6 +849,7 @@ be used internally by the daemon's build hook."
 This predicate is sometimes needed because files *under* a store path are not
 valid inputs."
   (and (store-path? path)
+       (not (string=? path (%store-prefix)))
        (let ((len (+ 1 (string-length (%store-prefix)))))
          (not (string-index (substring path len) #\/)))))
 

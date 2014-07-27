@@ -39,6 +39,7 @@
   #:use-module (ice-9 regex)
   #:export (_
             N_
+            P_
             leave
             show-version-and-exit
             show-bug-report-information
@@ -72,10 +73,16 @@
 ;;; Code:
 
 (define %gettext-domain
+  ;; Text domain for strings used in the tools.
   "guix")
+
+(define %package-text-domain
+  ;; Text domain for package synopses and descriptions.
+  "guix-packages")
 
 (define _ (cut gettext <> %gettext-domain))
 (define N_ (cut ngettext <> <> <> %gettext-domain))
+(define P_ (cut gettext <> %package-text-domain))
 
 (define-syntax-rule (define-diagnostic name prefix)
   "Create a diagnostic macro (i.e., NAME), which will prepend PREFIX to all
@@ -231,6 +238,16 @@ interpreted."
         (leave (_ "~a: ~a~%") proc
                (apply format #f format-string format-args))))))
 
+(define %guix-user-module
+  ;; Module in which user expressions are evaluated.
+  ;; Compute lazily to avoid circularity with (guix gexp).
+  (delay
+    (let ((module (make-module)))
+      (beautify-user-module! module)
+      ;; Use (guix gexp) so that one can use #~ & co.
+      (module-use! module (resolve-interface '(guix gexp)))
+      module)))
+
 (define (read/eval str)
   "Read and evaluate STR, raising an error if something goes wrong."
   (let ((exp (catch #t
@@ -241,7 +258,7 @@ interpreted."
                         str args)))))
     (catch #t
       (lambda ()
-        (eval exp the-scm-module))
+        (eval exp (force %guix-user-module)))
       (lambda args
         (leave (_ "failed to evaluate expression `~a': ~s~%")
                exp args)))))
@@ -261,6 +278,14 @@ error."
 derivations listed in DRV.  Return #t if there's something to build, #f
 otherwise.  When USE-SUBSTITUTES?, check and report what is prerequisites are
 available for download."
+  (define (built-or-substitutable? drv)
+    (let ((out (derivation->output-path drv)))
+      ;; If DRV has zero outputs, OUT is #f.
+      (or (not out)
+          (or (valid-path? store out)
+              (and use-substitutes?
+                   (has-substitutes? store out))))))
+
   (let*-values (((build download)
                  (fold2 (lambda (drv build download)
                           (let-values (((b d)
@@ -275,14 +300,7 @@ available for download."
                 ((build)                          ; add the DRV themselves
                  (delete-duplicates
                   (append (map derivation-file-name
-                               (remove (lambda (drv)
-                                         (let ((out (derivation->output-path
-                                                     drv)))
-                                           (or (valid-path? store out)
-                                               (and use-substitutes?
-                                                    (has-substitutes? store
-                                                                      out)))))
-                                       drv))
+                               (remove built-or-substitutable? drv))
                           (map derivation-input-path build))))
                 ((download)                   ; add the references of DOWNLOAD
                  (if use-substitutes?
@@ -430,14 +448,28 @@ followed by \"+ \", which makes for a valid multi-line field value in the
   "Write to PORT a `recutils' record of package P, arranging to fit within
 WIDTH columns."
   (define (description->recutils str)
-    (let ((str (_ str)))
+    (let ((str (P_ str)))
       (string->recutils
        (fill-paragraph str width
                        (string-length "description: ")))))
 
+  (define (dependencies->recutils packages)
+    (let ((list (string-join (map package-full-name
+                                  (sort packages package<?)) " ")))
+      (string->recutils
+       (fill-paragraph list width
+                       (string-length "dependencies: ")))))
+
+  (define (package<? p1 p2)
+    (string<? (package-full-name p1) (package-full-name p2)))
+
   ;; Note: Don't i18n field names so that people can post-process it.
   (format port "name: ~a~%" (package-name p))
   (format port "version: ~a~%" (package-version p))
+  (format port "dependencies: ~a~%"
+          (match (package-direct-inputs p)
+            (((labels packages . _) ...)
+             (dependencies->recutils packages))))
   (format port "location: ~a~%"
           (or (and=> (package-location p) location->string)
               (_ "unknown")))
@@ -459,7 +491,7 @@ WIDTH columns."
           (string-map (match-lambda
                        (#\newline #\space)
                        (chr       chr))
-                      (or (and=> (package-synopsis p) _)
+                      (or (and=> (package-synopsis p) P_)
                           "")))
   (format port "description: ~a~%"
           (and=> (package-description p) description->recutils))

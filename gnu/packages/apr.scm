@@ -40,6 +40,11 @@
               (list (search-patch "apr-skip-getservbyname-test.patch")))
              (patch-flags '("-p0"))))
     (build-system gnu-build-system)
+    (arguments
+     ;; Sometimes we end up with two processes concurrently trying to make
+     ;; 'libmod_test.la': <http://hydra.gnu.org/build/60266/nixlog/2/raw>.
+     ;; Thus, build sequentially.
+     '(#:parallel-build? #f))
     (inputs `(("perl" ,perl)
               ("libtool" ,libtool)))
     (home-page "http://apr.apache.org/")
@@ -80,7 +85,13 @@ around or take advantage of platform-specific deficiencies or features.")
              (system* "./configure"
                       (string-append "--prefix=" out)
                       (string-append "--with-apr=" apr)))))
-        %standard-phases)))
+        %standard-phases)
+
+       ;; There are race conditions during 'make check'.  Typically, the
+       ;; 'testall' executable is not built yet by the time 'make check' tries
+       ;; to run it.  See
+       ;; <http://lists.gnu.org/archive/html/guix-devel/2014-03/msg00261.html>.
+       #:parallel-tests? #f))
     (home-page "http://apr.apache.org/")
     (synopsis "One of the Apache Portable Runtime Library companions")
     (description

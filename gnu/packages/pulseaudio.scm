@@ -32,13 +32,13 @@
   #:use-module (gnu packages glib)
   #:use-module (gnu packages gtk)
   #:use-module (gnu packages libcanberra)
+  #:use-module (gnu packages web)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages m4)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages xiph)
   #:export (libsndfile
             libsamplerate
-            json-c
             pulseaudio))
 
 (define libsndfile
@@ -109,28 +109,6 @@ signal-to-noise ratio of 145dB with -3dB passband extending from DC to 96% of
 the theoretical best bandwidth for a given pair of input and output sample
 rates. ")
     (license l:gpl2+)))
-
-(define json-c
-  (package
-    (name "json-c")
-    (version "0.11")
-    (source (origin
-             (method url-fetch)
-             (uri (string-append "https://s3.amazonaws.com/json-c_releases/releases/json-c-"
-                                 version ".tar.gz"))
-             (sha256
-              (base32
-               "1324jja19jgsvcz9ij3nf4sgkrf4fg0ilw77vzqls3fw8m8wdpr8"))))
-    (build-system gnu-build-system)
-    (arguments '(#:parallel-build? #f
-                 #:parallel-tests? #f))
-    (home-page "https://github.com/json-c/json-c/wiki")
-    (synopsis "JSON implementation in C")
-    (description
-     "JSON-C implements a reference counting object model that allows you to
-easily construct JSON objects in C, output them as JSON formatted strings and
-parse JSON formatted strings back into the C representation of JSON objects.")
-    (license l:x11)))
 
 (define pulseaudio
   (package

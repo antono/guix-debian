@@ -1,5 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2013, 2014 Andreas Enge <andreas@enge.fr>
+;;; Copyright © 2014 David Thompson <davet@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -17,32 +18,52 @@
 ;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (gnu packages video)
-  #:use-module ((guix licenses) #:select (gpl2+))
+  #:use-module ((guix licenses)
+                #:select (gpl2 gpl2+ bsd-3 public-domain))
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix build-system gnu)
+  #:use-module (guix build-system python)
   #:use-module (gnu packages algebra)
+  #:use-module (gnu packages avahi)
+  #:use-module (gnu packages cdrom)
   #:use-module (gnu packages compression)
+  #:use-module (gnu packages zip)
   #:use-module (gnu packages elf)
   #:use-module (gnu packages fontutils)
+  #:use-module (gnu packages gl)
+  #:use-module (gnu packages glib)
+  #:use-module (gnu packages gnupg)
+  #:use-module (gnu packages gnutls)
+  #:use-module (gnu packages image)
+  #:use-module (gnu packages linux)
+  #:use-module (gnu packages lua)
+  #:use-module (gnu packages mp3)
   #:use-module (gnu packages openssl)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages pulseaudio)
   #:use-module (gnu packages python)
+  #:use-module (gnu packages qt)
+  #:use-module (gnu packages sdl)
+  #:use-module (gnu packages ssh)
+  #:use-module (gnu packages version-control)
   #:use-module (gnu packages xiph)
+  #:use-module (gnu packages xml)
+  #:use-module (gnu packages xorg)
   #:use-module (gnu packages yasm))
 
 (define-public ffmpeg
   (package
     (name "ffmpeg")
-    (version "2.1.4")
+    (version "2.3")
     (source (origin
              (method url-fetch)
              (uri (string-append "http://www.ffmpeg.org/releases/ffmpeg-"
                                  version ".tar.bz2"))
              (sha256
               (base32
-               "00c1k84amgkc7vk5xkrg7z99q7jbfhbz3qk854cxnc38d2ynrd3z"))))
+               "17l0bx95al6cjhz3pzfcbwg07sbfbwqbxg34zl5lhl89w9jbngbb"))))
     (build-system gnu-build-system)
     (inputs
      `(("fontconfig" ,fontconfig)
@@ -50,6 +71,7 @@
        ("opus" ,opus)
        ("libtheora" ,libtheora)
        ("libvorbis" ,libvorbis)
+       ("libvpx" ,libvpx)
        ("patchelf" ,patchelf)
        ("speex" ,speex)
        ("zlib", zlib)))
@@ -123,7 +145,6 @@
 ;;   --enable-libvidstab      enable video stabilization using vid.stab [no]
 ;;   --enable-libvo-aacenc    enable AAC encoding via libvo-aacenc [no]
 ;;   --enable-libvo-amrwbenc  enable AMR-WB encoding via libvo-amrwbenc [no]
-;;   --enable-libvpx          enable VP8 and VP9 de/encoding via libvpx [no]
 ;;   --enable-libwavpack      enable wavpack encoding via libwavpack [no]
 ;;   --enable-libx264         enable H.264 encoding via x264 [no]
 ;;   --enable-libxavs         enable AVS encoding via xavs [no]
@@ -146,6 +167,7 @@
                       "--enable-libspeex"
                       "--enable-libtheora"
                       "--enable-libvorbis"
+                      "--enable-libvpx"
                       ;; drop special machine instructions not supported
                       ;; on all instances of the target
                       ,@(if (string-prefix? "x86_64"
@@ -171,7 +193,6 @@
                       "--disable-armv6t2"
                       "--disable-vfp"
                       "--disable-neon"
-                      "--disable-vis"
                       "--disable-mips32r2"
                       "--disable-mipsdspr1"
                       "--disable-mipsdspr2"
@@ -192,3 +213,214 @@
 convert and stream audio and video.  It includes the libavcodec
 audio/video codec library.")
     (license gpl2+)))
+
+(define-public vlc
+  (package
+    (name "vlc")
+    (version "2.1.4")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append
+                   "http://download.videolan.org/pub/videolan/vlc/"
+                   version "/vlc-" version ".tar.xz"))
+             (sha256
+              (base32
+               "1lymhbb2bns73qivdaqanhggjjhyc9fwfgf5ikhng0a74msnqmiy"))))
+    (build-system gnu-build-system)
+    (native-inputs
+     `(("git" ,git) ; needed for a test
+       ("pkg-config" ,pkg-config)))
+    ;; FIXME: Add optional inputs once available.
+    (inputs
+     `(("alsa-lib" ,alsa-lib)
+       ("avahi" ,avahi)
+       ("dbus" ,dbus)
+       ("flac" ,flac)
+       ("ffmpeg" ,ffmpeg)
+       ("fontconfig" ,fontconfig)
+       ("freetype" ,freetype)
+       ("gnutls" ,gnutls)
+       ("libcddb" ,libcddb)
+       ("libgcrypt" ,libgcrypt)
+       ("libkate" ,libkate)
+       ("libmad" ,libmad)
+       ("libogg" ,libogg)
+       ("libpng" ,libpng)
+       ("libsamplerate" ,libsamplerate)
+       ("libssh2" ,libssh2)
+       ("libvorbis" ,libvorbis)
+       ("libtheora" ,libtheora)
+       ("libxext" ,libxext)
+       ("libxinerama" ,libxinerama)
+       ("libxml2" ,libxml2)
+       ("libxpm" ,libxpm)
+       ("lua" ,lua-5.1)
+       ("mesa" ,mesa)
+       ("opus" ,opus)
+       ("perl" ,perl)
+       ("pulseaudio" ,pulseaudio)
+       ("python" ,python-wrapper)
+       ("qt" ,qt-4)
+       ("sdl" ,sdl)
+       ("sdl-image" ,sdl-image)
+       ("speex" ,speex)
+       ("xcb-util-keysyms" ,xcb-util-keysyms)))
+    (arguments
+     `(#:configure-flags
+       `("--disable-a52" ; FIXME: reenable once available
+         "--disable-mmx" ; FIXME: may be enabled on x86_64
+         "--disable-sse" ; 1-4, no separate options available
+         "--disable-neon"
+         "--disable-altivec"
+         ,(string-append "LDFLAGS=-Wl,-rpath -Wl,"
+                         (assoc-ref %build-inputs "ffmpeg")
+                         "/lib")))) ; needed for the tests
+    (home-page "https://www.videolan.org/")
+    (synopsis "Audio and video framework")
+    (description "VLC is a cross-platform multimedia player and framework
+that plays most multimedia files as well as DVD, Audio CD, VCD, and various
+treaming protocols.")
+    (license gpl2+)))
+
+(define-public mplayer
+  (package
+    (name "mplayer")
+    (version "1.1.1")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append
+                   "http://www.mplayerhq.hu/MPlayer/releases/MPlayer-"
+                   version ".tar.xz"))
+             (sha256
+              (base32
+               "0xlcg7rszrwmw29wqr0plsw5d1rq0hb7vjsq7bmmfsly2z1wg3yf"))))
+    (build-system gnu-build-system)
+    ;; FIXME: Add additional inputs once available.
+    (native-inputs
+     `(("pkg-config" ,pkg-config)))
+    (inputs
+     `(("alsa-lib" ,alsa-lib)
+       ("cdparanoia" ,cdparanoia)
+       ("fontconfig" ,fontconfig)
+       ("freetype" ,freetype)
+       ("lame" ,lame)
+       ("libmpg123" ,mpg123)                      ; audio codec for MP3
+;;        ("giflib" ,giflib) ; uses QuantizeBuffer, requires version >= 5
+       ("libjpeg" ,libjpeg)
+       ("libpng" ,libpng)
+       ("libtheora" ,libtheora)
+       ("libvorbis" ,libvorbis)
+       ("libx11" ,libx11)
+       ("libxxf86dga" ,libxxf86dga)
+       ("libxinerama" ,libxinerama)
+       ("libxv" ,libxv)
+       ("mesa" ,mesa)
+       ("perl" ,perl)
+       ("pulseaudio" ,pulseaudio)
+       ("python" ,python-wrapper)
+       ("sdl" ,sdl)
+       ("speex" ,speex)
+       ("yasm" ,yasm)
+       ("zlib" ,zlib)))
+    (arguments
+     `(#:tests? #f ; no test target
+       #:phases
+         (alist-replace
+          'configure
+          ;; configure does not work followed by "SHELL=..." and
+          ;; "CONFIG_SHELL=..."; set environment variables instead
+          (lambda* (#:key inputs outputs #:allow-other-keys)
+            (let ((out (assoc-ref outputs "out"))
+                  (libx11 (assoc-ref inputs "libx11")))
+              (substitute* "configure"
+                (("#! /bin/sh") (string-append "#!" (which "bash"))))
+              (setenv "SHELL" (which "bash"))
+              (setenv "CONFIG_SHELL" (which "bash"))
+              (zero? (system*
+                      "./configure"
+                      (string-append "--extra-cflags=-I"
+                                     libx11 "/include") ; to detect libx11
+                      "--disable-tremor-internal" ; forces external libvorbis
+                      (string-append "--prefix=" out)
+                      ;; drop special machine instructions not supported
+                      ;; on all instances of the target
+                      ,@(if (string-prefix? "x86_64"
+                                            (or (%current-target-system)
+                                                (%current-system)))
+                            '()
+                            '("--disable-3dnow"
+                              "--disable-3dnowext"
+                              "--disable-mmx"
+                              "--disable-mmxext"
+                              "--disable-sse"
+                              "--disable-sse2"))
+                      "--disable-ssse3"
+                      "--disable-altivec"
+                      "--disable-armv5te"
+                      "--disable-armv6"
+                      "--disable-armv6t2"
+                      "--disable-armvfp"
+                      "--disable-neon"
+                      "--disable-thumb"
+                      "--disable-iwmmxt"))))
+          %standard-phases)))
+    (home-page "http://www.mplayerhq.hu/design7/news.html")
+    (synopsis "Audio and video player")
+    (description "MPlayer is a movie player.  It plays most MPEG/VOB, AVI,
+Ogg/OGM, VIVO, ASF/WMA/WMV, QT/MOV/MP4, RealMedia, Matroska, NUT,
+NuppelVideo, FLI, YUV4MPEG, FILM, RoQ, PVA files.  One can watch VideoCD,
+SVCD, DVD, 3ivx, DivX 3/4/5, WMV and H.264 movies.")
+    (license gpl2)))
+
+(define-public libvpx
+  (package
+    (name "libvpx")
+    (version "1.3.0")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "http://webm.googlecode.com/files/libvpx-v"
+                                  version ".tar.bz2"))
+              (sha256
+               (base32
+                "1aai0h0z1bhp89pxmg4fkrwpmqq24k39fhr15cw6q77m9bccip6k"))))
+    (build-system gnu-build-system)
+    (arguments
+     '(#:phases (alist-replace
+                 'configure
+                 (lambda* (#:key outputs #:allow-other-keys)
+                   (setenv "CONFIG_SHELL" (which "bash"))
+                   (let ((out (assoc-ref outputs "out")))
+                     (zero? (system* "./configure"
+                                     "--enable-shared"
+                                     "--as=yasm"
+                                     (string-append "--prefix=" out)))))
+                 %standard-phases)
+       #:tests? #f)) ; no check target
+    (native-inputs
+     `(("perl" ,perl)
+       ("yasm" ,yasm)))
+    (synopsis "VP8/VP9 video codec")
+    (description "libvpx is a codec for the VP8/VP9 video compression format.")
+    (license bsd-3)
+    (home-page "http://www.webmproject.org/")))
+
+(define-public youtube-dl
+  (package
+    (name "youtube-dl")
+    (version "2014.06.26")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "http://youtube-dl.org/downloads/"
+                                  version "/youtube-dl-"
+                                  version ".tar.gz"))
+              (sha256
+               (base32
+                "0jl90plg9mz4mwich219a58y4npwi33myx0cx44v8pymkqykv5cd"))))
+    (build-system python-build-system)
+    (inputs `(("setuptools" ,python-setuptools)))
+    (home-page "http://youtube-dl.org")
+    (synopsis "Download videos from YouTube.com and other sites")
+    (description
+     "youtube-dl is a small command-line program to download videos from
+YouTube.com and a few more sites.")
+    (license public-domain)))

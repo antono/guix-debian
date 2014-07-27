@@ -1,6 +1,6 @@
 # GNU Guix --- Functional package management for GNU
 # Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
-# Copyright © 2013 Andreas Enge <andreas@enge.fr>
+# Copyright © 2013, 2014 Andreas Enge <andreas@enge.fr>
 # Copyright © 2013, 2014 Mark H Weaver <mhw@netris.org>
 #
 # This file is part of GNU Guix.
@@ -22,11 +22,13 @@
 # binaries.
 
 GNU_SYSTEM_MODULES =				\
+  gnu.scm					\
   gnu/packages.scm				\
   gnu/packages/acct.scm				\
   gnu/packages/acl.scm				\
   gnu/packages/admin.scm			\
   gnu/packages/algebra.scm			\
+  gnu/packages/aidc.scm 			\
   gnu/packages/apl.scm				\
   gnu/packages/apr.scm				\
   gnu/packages/asciidoc.scm			\
@@ -35,43 +37,53 @@ GNU_SYSTEM_MODULES =				\
   gnu/packages/autogen.scm			\
   gnu/packages/autotools.scm			\
   gnu/packages/avahi.scm			\
+  gnu/packages/backup.scm			\
   gnu/packages/base.scm				\
   gnu/packages/bash.scm				\
   gnu/packages/bdb.scm				\
   gnu/packages/bdw-gc.scm			\
+  gnu/packages/bittorrent.scm			\
   gnu/packages/bison.scm			\
   gnu/packages/boost.scm			\
   gnu/packages/bootstrap.scm			\
+  gnu/packages/busybox.scm			\
   gnu/packages/calcurse.scm			\
+  gnu/packages/ccache.scm			\
   gnu/packages/cdrom.scm			\
   gnu/packages/cflow.scm			\
   gnu/packages/check.scm			\
   gnu/packages/cmake.scm			\
   gnu/packages/compression.scm			\
   gnu/packages/complexity.scm			\
+  gnu/packages/conkeror.scm			\
+  gnu/packages/cook.scm 			\
   gnu/packages/cpio.scm				\
   gnu/packages/cppi.scm				\
   gnu/packages/cross-base.scm			\
+  gnu/packages/crypto.scm			\
   gnu/packages/cryptsetup.scm			\
   gnu/packages/curl.scm				\
   gnu/packages/cursynth.scm			\
   gnu/packages/cyrus-sasl.scm			\
+  gnu/packages/datamash.scm			\
   gnu/packages/dc.scm				\
   gnu/packages/dejagnu.scm			\
-  gnu/packages/ddrescue.scm			\
   gnu/packages/dictionaries.scm			\
+  gnu/packages/disk.scm				\
   gnu/packages/docbook.scm			\
+  gnu/packages/doxygen.scm			\
   gnu/packages/dwm.scm				\
   gnu/packages/ed.scm				\
   gnu/packages/elf.scm				\
   gnu/packages/emacs.scm			\
-  gnu/packages/fdisk.scm			\
   gnu/packages/file.scm				\
+  gnu/packages/fish.scm				\
   gnu/packages/flex.scm				\
   gnu/packages/fltk.scm				\
   gnu/packages/fonts.scm			\
   gnu/packages/fontutils.scm			\
   gnu/packages/freeipmi.scm			\
+  gnu/packages/ftp.scm				\
   gnu/packages/games.scm			\
   gnu/packages/gawk.scm				\
   gnu/packages/gcal.scm				\
@@ -83,6 +95,7 @@ GNU_SYSTEM_MODULES =				\
   gnu/packages/gettext.scm			\
   gnu/packages/ghostscript.scm			\
   gnu/packages/giflib.scm			\
+  gnu/packages/gimp.scm				\
   gnu/packages/gkrellm.scm			\
   gnu/packages/gl.scm				\
   gnu/packages/glib.scm				\
@@ -111,11 +124,13 @@ GNU_SYSTEM_MODULES =				\
   gnu/packages/hurd.scm				\
   gnu/packages/icu4c.scm			\
   gnu/packages/idutils.scm			\
+  gnu/packages/image.scm			\
   gnu/packages/imagemagick.scm			\
   gnu/packages/indent.scm			\
   gnu/packages/inkscape.scm			\
   gnu/packages/irssi.scm			\
   gnu/packages/iso-codes.scm			\
+  gnu/packages/jrnl.scm				\
   gnu/packages/kde.scm				\
   gnu/packages/ld-wrapper.scm			\
   gnu/packages/less.scm				\
@@ -124,17 +139,17 @@ GNU_SYSTEM_MODULES =				\
   gnu/packages/libdaemon.scm			\
   gnu/packages/libevent.scm			\
   gnu/packages/libffi.scm			\
+  gnu/packages/libftdi.scm			\
   gnu/packages/libidn.scm			\
-  gnu/packages/libjpeg.scm			\
   gnu/packages/libphidget.scm			\
-  gnu/packages/libpng.scm			\
   gnu/packages/libsigsegv.scm			\
-  gnu/packages/libtiff.scm			\
   gnu/packages/libunistring.scm			\
   gnu/packages/libusb.scm			\
   gnu/packages/libunwind.scm			\
   gnu/packages/lightning.scm			\
+  gnu/packages/links.scm			\
   gnu/packages/linux.scm			\
+  gnu/packages/lisp.scm			\
   gnu/packages/lout.scm				\
   gnu/packages/lsh.scm				\
   gnu/packages/lsof.scm				\
@@ -147,11 +162,13 @@ GNU_SYSTEM_MODULES =				\
   gnu/packages/make-bootstrap.scm		\
   gnu/packages/maths.scm			\
   gnu/packages/mc.scm				\
+  gnu/packages/mcrypt.scm			\
   gnu/packages/messaging.scm			\
   gnu/packages/mit-krb5.scm			\
   gnu/packages/moe.scm				\
   gnu/packages/mpd.scm				\
   gnu/packages/mp3.scm				\
+  gnu/packages/mpi.scm				\
   gnu/packages/multiprecision.scm		\
   gnu/packages/mtools.scm			\
   gnu/packages/mysql.scm			\
@@ -160,6 +177,7 @@ GNU_SYSTEM_MODULES =				\
   gnu/packages/ncurses.scm			\
   gnu/packages/netpbm.scm			\
   gnu/packages/nettle.scm			\
+  gnu/packages/node.scm				\
   gnu/packages/noweb.scm			\
   gnu/packages/ocaml.scm			\
   gnu/packages/ocrad.scm			\
@@ -168,8 +186,8 @@ GNU_SYSTEM_MODULES =				\
   gnu/packages/openssl.scm			\
   gnu/packages/package-management.scm		\
   gnu/packages/parallel.scm			\
-  gnu/packages/parted.scm			\
   gnu/packages/patchutils.scm			\
+  gnu/packages/pciutils.scm			\
   gnu/packages/pcre.scm				\
   gnu/packages/pdf.scm				\
   gnu/packages/pem.scm				\
@@ -181,6 +199,7 @@ GNU_SYSTEM_MODULES =				\
   gnu/packages/pth.scm				\
   gnu/packages/pulseaudio.scm			\
   gnu/packages/pretty-print.scm			\
+  gnu/packages/protobuf.scm			\
   gnu/packages/python.scm			\
   gnu/packages/qemu.scm				\
   gnu/packages/qt.scm				\
@@ -206,6 +225,7 @@ GNU_SYSTEM_MODULES =				\
   gnu/packages/swig.scm				\
   gnu/packages/tcl.scm				\
   gnu/packages/tcsh.scm				\
+  gnu/packages/telephony.scm			\
   gnu/packages/texinfo.scm			\
   gnu/packages/texlive.scm			\
   gnu/packages/time.scm				\
@@ -219,6 +239,7 @@ GNU_SYSTEM_MODULES =				\
   gnu/packages/video.scm			\
   gnu/packages/vim.scm				\
   gnu/packages/vpn.scm				\
+  gnu/packages/vtk.scm				\
   gnu/packages/w3m.scm				\
   gnu/packages/wdiff.scm			\
   gnu/packages/web.scm				\
@@ -235,13 +256,19 @@ GNU_SYSTEM_MODULES =				\
   gnu/packages/zip.scm				\
 						\
   gnu/services.scm				\
+  gnu/services/avahi.scm			\
   gnu/services/base.scm				\
+  gnu/services/dbus.scm				\
   gnu/services/dmd.scm				\
   gnu/services/networking.scm			\
+  gnu/services/ssh.scm				\
   gnu/services/xorg.scm				\
 						\
   gnu/system.scm				\
+  gnu/system/file-systems.scm			\
   gnu/system/grub.scm				\
+  gnu/system/install.scm			\
+  gnu/system/os-config.tmpl			\
   gnu/system/linux.scm				\
   gnu/system/linux-initrd.scm			\
   gnu/system/shadow.scm				\
@@ -256,29 +283,31 @@ dist_patch_DATA =						\
   gnu/packages/patches/bigloo-gc-shebangs.patch			\
   gnu/packages/patches/binutils-ld-new-dtags.patch		\
   gnu/packages/patches/binutils-loongson-workaround.patch	\
-  gnu/packages/patches/bitlbee-fix-tests.patch			\
-  gnu/packages/patches/bitlbee-memset-fix.patch			\
+  gnu/packages/patches/ccache-stdc-predef-test.patch		\
   gnu/packages/patches/cdparanoia-fpic.patch			\
+  gnu/packages/patches/clucene-pkgconfig.patch			\
   gnu/packages/patches/cmake-fix-tests.patch			\
   gnu/packages/patches/coreutils-dummy-man.patch		\
   gnu/packages/patches/coreutils-skip-nohup.patch		\
   gnu/packages/patches/cpio-gets-undeclared.patch		\
+  gnu/packages/patches/cssc-gets-undeclared.patch               \
+  gnu/packages/patches/cssc-missing-include.patch               \
   gnu/packages/patches/curl-fix-test172.patch			\
+  gnu/packages/patches/cursynth-wave-rand.patch			\
   gnu/packages/patches/dbus-localstatedir.patch			\
   gnu/packages/patches/diffutils-gets-undeclared.patch		\
-  gnu/packages/patches/dmd-getpw.patch				\
-  gnu/packages/patches/dmd-tests-longer-sleeps.patch		\
+  gnu/packages/patches/doxygen-test.patch			\
+  gnu/packages/patches/doxygen-tmake.patch			\
   gnu/packages/patches/emacs-configure-sh.patch			\
   gnu/packages/patches/findutils-absolute-paths.patch		\
-  gnu/packages/patches/flac-fix-memcmp-not-declared.patch	\
   gnu/packages/patches/flex-bison-tests.patch			\
   gnu/packages/patches/gawk-shell.patch				\
   gnu/packages/patches/gcc-cross-environment-variables.patch	\
   gnu/packages/patches/gd-mips64-deplibs-fix.patch		\
   gnu/packages/patches/glib-tests-desktop.patch			\
   gnu/packages/patches/glib-tests-homedir.patch			\
-  gnu/packages/patches/glib-tests-newnet.patch			\
   gnu/packages/patches/glib-tests-prlimit.patch			\
+  gnu/packages/patches/glib-tests-timer.patch			\
   gnu/packages/patches/glibc-bootstrap-system.patch		\
   gnu/packages/patches/glibc-ldd-x86_64.patch			\
   gnu/packages/patches/gnunet-fix-scheduler.patch		\
@@ -290,12 +319,15 @@ dist_patch_DATA =						\
   gnu/packages/patches/guile-1.8-cpp-4.5.patch			\
   gnu/packages/patches/guile-default-utf8.patch			\
   gnu/packages/patches/guile-linux-syscalls.patch		\
+  gnu/packages/patches/guile-ncurses-tests.patch		\
   gnu/packages/patches/guile-relocatable.patch			\
   gnu/packages/patches/guix-test-networking.patch		\
   gnu/packages/patches/gtkglext-disable-disable-deprecated.patch \
-  gnu/packages/patches/gtkglext-remove-pangox-dependency.patch  \
   gnu/packages/patches/hop-bigloo-4.0b.patch			\
+  gnu/packages/patches/icu4c-test-date-format.patch		\
   gnu/packages/patches/inkscape-stray-comma.patch               \
+  gnu/packages/patches/kmod-module-directory.patch		\
+  gnu/packages/patches/libbonobo-activation-test-race.patch	\
   gnu/packages/patches/libevent-dns-tests.patch			\
   gnu/packages/patches/libffi-mips-n32-fix.patch		\
   gnu/packages/patches/liboop-mips64-deplibs-fix.patch		\
@@ -310,28 +342,39 @@ dist_patch_DATA =						\
   gnu/packages/patches/make-impure-dirs.patch			\
   gnu/packages/patches/mc-fix-ncurses-build.patch		\
   gnu/packages/patches/mcron-install.patch			\
+  gnu/packages/patches/mhash-keygen-test-segfault.patch		\
   gnu/packages/patches/mit-krb5-init-fix.patch			\
   gnu/packages/patches/mpc123-initialize-ao.patch		\
+  gnu/packages/patches/module-init-tools-moduledir.patch	\
   gnu/packages/patches/patchelf-page-size.patch			\
   gnu/packages/patches/patchutils-xfail-gendiff-tests.patch	\
   gnu/packages/patches/perl-no-sys-dirs.patch			\
+  gnu/packages/patches/perl-tk-x11-discover.patch		\
+  gnu/packages/patches/petsc-fix-threadcomm.patch		\
+  gnu/packages/patches/pingus-sdl-libs-config.patch		\
   gnu/packages/patches/plotutils-libpng-jmpbuf.patch		\
   gnu/packages/patches/procps-make-3.82.patch			\
+  gnu/packages/patches/pybugz-encode-error.patch		\
+  gnu/packages/patches/pybugz-stty.patch			\
   gnu/packages/patches/python-fix-tests.patch			\
   gnu/packages/patches/python-libffi-mips-n32-fix.patch		\
-  gnu/packages/patches/qemu-multiple-smb-shares.patch		\
   gnu/packages/patches/qt4-tests.patch				\
   gnu/packages/patches/ratpoison-shell.patch			\
   gnu/packages/patches/readline-link-ncurses.patch		\
   gnu/packages/patches/ripperx-libm.patch			\
   gnu/packages/patches/scheme48-tests.patch			\
+  gnu/packages/patches/scotch-test-threading.patch		\
   gnu/packages/patches/slim-session.patch			\
   gnu/packages/patches/slim-config.patch			\
   gnu/packages/patches/slim-sigusr1.patch			\
+  gnu/packages/patches/soprano-find-clucene.patch		\
   gnu/packages/patches/source-highlight-regexrange-test.patch	\
   gnu/packages/patches/sqlite-large-page-size-fix.patch		\
+  gnu/packages/patches/superlu-dist-scotchmetis.patch		\
   gnu/packages/patches/tcsh-fix-autotest.patch			\
   gnu/packages/patches/teckit-cstdio.patch			\
+  gnu/packages/patches/udev-gir-libtool.patch			\
+  gnu/packages/patches/util-linux-perl.patch			\
   gnu/packages/patches/valgrind-glibc.patch			\
   gnu/packages/patches/vpnc-script.patch			\
   gnu/packages/patches/w3m-fix-compile.patch			\

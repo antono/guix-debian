@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -22,7 +22,7 @@
   #:use-module (guix download)
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages xorg)
-  #:use-module (gnu packages libpng)
+  #:use-module (gnu packages image)
   #:use-module (gnu packages))
 
 (define-public plotutils
@@ -40,8 +40,11 @@
     (build-system gnu-build-system)
     (inputs `(("libpng" ,libpng)
               ("libx11" ,libx11)
-              ("libxt" ,libxt)
-              ("libxaw" ,libxaw)))
+              ("libxt" ,libxt)))
+
+    ;; libplot.la has '-lXaw'.
+    (propagated-inputs `(("libxaw" ,libxaw)))
+
     (home-page
      "http://www.gnu.org/software/plotutils/")
     (synopsis "Plotting utilities and library")

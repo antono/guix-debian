@@ -3,6 +3,7 @@
 ;;; Copyright © 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;; Copyright © 2013 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2014 Mark H Weaver <mhw@netris.org>
+;;; Copyright © 2014 Eric Bavier <bavier@member.fsf.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -21,8 +22,9 @@
 
 (define-module (gnu packages python)
   #:use-module ((guix licenses)
-                #:select (bsd-3 bsd-style psfl x11 x11-style
-                          gpl2 gpl2+ lgpl2.1+))
+                #:select (asl2.0 bsd-3 bsd-style cc0 expat x11 x11-style
+                          gpl2 gpl2+ lgpl2.1+
+                          psfl public-domain))
   #:use-module ((guix licenses) #:select (zlib)
                                 #:renamer (symbol-prefix-proc 'license:))
   #:use-module (gnu packages)
@@ -35,6 +37,8 @@
   #:use-module (gnu packages elf)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages sqlite)
+  #:use-module (gnu packages zip)
+  #:use-module (gnu packages multiprecision)
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix utils)
@@ -293,6 +297,55 @@ etc. ")
 (define-public python2-babel
   (package-with-python2 python-babel))
 
+(define-public python-lockfile
+  (package
+    (name "python-lockfile")
+    (version "0.9.1")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "https://pypi.python.org/packages/source/l/lockfile/"
+                           "lockfile-" version ".tar.gz"))
+       (sha256
+        (base32
+         "0iwif7i84gwpvrnpv4brshdk8j6l77smvknm8k3bg77mj6f5ini3"))))
+    (build-system python-build-system)
+    (arguments '(#:test-target "check"))
+    (home-page "http://code.google.com/p/pylockfile/")
+    (synopsis "Platform-independent file locking module")
+    (description
+     "The lockfile package exports a LockFile class which provides a simple
+API for locking files.")
+    (license expat)))
+
+(define-public python2-lockfile
+  (package-with-python2 python-lockfile))
+
+(define-public python-mock
+  (package
+    (name "python-mock")
+    (version "1.0.1")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "https://pypi.python.org/packages/source/m/mock/"
+                           "mock-" version ".tar.gz"))
+       (sha256
+        (base32
+         "0kzlsbki6q0awf89rc287f3aj8x431lrajf160a70z0ikhnxsfdq"))))
+    (build-system python-build-system)
+    (arguments '(#:test-target "check"))
+    (home-page "http://code.google.com/m/mock/")
+    (synopsis "A Python Mocking and Patching Library for Testing")
+    (description
+     "Mock is a library for testing in Python.  It allows you to replace parts
+of your system under test with mock objects and make assertions about how they
+have been used.")
+    (license expat)))
+
+(define-public python2-mock
+  (package-with-python2 python-mock))
+
 
 (define-public python-setuptools
   (package
@@ -331,6 +384,131 @@ Python 3 support.")
   (package-with-python2 python-setuptools))
 
 
+(define-public python-pycrypto
+  (package
+    (name "python-pycrypto")
+    (version "2.6.1")
+    (source
+     (origin
+      (method url-fetch)
+      (uri (string-append "https://pypi.python.org/packages/source/p/"
+                          "pycrypto/pycrypto-" version ".tar.gz"))
+      (sha256
+       (base32
+        "0g0ayql5b9mkjam8hym6zyg6bv77lbh66rv1fyvgqb17kfc1xkpj"))))
+    (build-system python-build-system)
+    (native-inputs
+     `(("python-setuptools" ,python-setuptools)))
+    (inputs
+     `(("python" ,python)
+       ("gmp" ,gmp)))
+    (arguments
+     `(#:phases
+       (alist-cons-before
+        'build 'set-build-env
+        ;; pycrypto runs an autoconf configure script behind the scenes
+        (lambda _
+          (setenv "CONFIG_SHELL" (which "bash")))
+        %standard-phases)))
+    (home-page "http://www.pycrypto.org/")
+    (synopsis "Cryptographic modules for Python")
+    (description
+     "Pycrypto is a collection of both secure hash functions (such as SHA256
+and RIPEMD160), and various encryption algorithms (AES, DES, RSA, ElGamal,
+etc.). The package is structured to make adding new modules easy.")
+    (license public-domain)))
+
+(define-public python-keyring
+  (package
+    (name "python-keyring")
+    (version "3.8")
+    (source
+     (origin
+      (method url-fetch)
+      (uri (string-append "https://pypi.python.org/packages/source/k/"
+                          "keyring/keyring-" version ".zip"))
+      (sha256
+       (base32
+        "1vxazfbcwggyfyramh55shkxs08skhpqrkm6lrrjnygnm8c1l2zg"))))
+    (build-system python-build-system)
+    (native-inputs
+     `(("unzip" ,unzip)
+       ("python-setuptools" ,python-setuptools)
+       ("python-mock" ,python-mock)))
+    (inputs
+     `(("python-pycrypto" ,python-pycrypto)))
+    (arguments
+     `(#:tests? #f                      ;TODO: tests require pytest
+       #:phases
+       (alist-replace
+        'unpack
+        (lambda _
+          (let ((unzip (string-append (assoc-ref %build-inputs "unzip")
+                                      "/bin/unzip"))
+                (source (assoc-ref %build-inputs "source")))
+            (and (zero? (system* unzip source))
+                 (chdir (string-append "keyring-" ,version)))))
+        %standard-phases)))
+    (home-page "http://bitbucket.org/kang/python-keyring-lib")
+    (synopsis "Store and access your passwords safely")
+    (description
+     "The Python keyring lib provides a easy way to access the system keyring
+service from python. It can be used in any application that needs safe
+password storage.")
+    ;; "MIT" and PSF dual license
+    (license x11)))
+
+(define-public python-six
+  (package
+    (name "python-six")
+    (version "1.7.2")
+    (source
+     (origin
+      (method url-fetch)
+      (uri (string-append "https://pypi.python.org/packages/source/s/"
+                          "six/six-" version ".tar.gz"))
+      (sha256
+       (base32
+        "164rns26aqfqx2hwi0qq3scl50s69japn0fvgvrjsbyg7r1mxf67"))))
+    (build-system python-build-system)
+    (inputs
+     `(("python-setuptools" ,python-setuptools)))
+    (home-page "http://pypi.python.org/pypi/six/")
+    (synopsis "Python 2 and 3 compatibility utilities")
+    (description
+     "Six is a Python 2 and 3 compatibility library. It provides utility
+functions for smoothing over the differences between the Python versions with
+the goal of writing Python code that is compatible on both Python versions.
+Six supports every Python version since 2.5. It is contained in only one
+Python file, so it can be easily copied into your project.")
+    (license x11)))
+
+(define-public python-dateutil-2
+  (package
+    (name "python-dateutil")
+    (version "2.2")
+    (source
+     (origin
+      (method url-fetch)
+      (uri (string-append "https://pypi.python.org/packages/source/p/"
+                          name "/" name "-" version ".tar.gz"))
+      (sha256
+       (base32
+        "0s74ad6r789810s10dxgvaf48ni6adac2icrdad34zxygqq6bj7f"))))
+    (build-system python-build-system)
+    (inputs
+     `(("python-setuptools" ,python-setuptools)
+       ("python-six" ,python-six)))
+    (home-page "http://labix.org/python-dateutil")
+    (synopsis "Extensions to the standard datetime module")
+    (description
+     "The dateutil module provides powerful extensions to the standard
+datetime module, available in Python 2.3+.")
+    (license bsd-3)))
+
+(define-public python2-dateutil-2
+  (package-with-python2 python-dateutil-2))
+
 (define-public python-dateutil
   (package
     (name "python-dateutil")
@@ -338,8 +516,8 @@ Python 3 support.")
     (source
      (origin
       (method url-fetch)
-      (uri (string-append "http://labix.org/download/python-dateutil/python-dateutil-"
-                          version ".tar.gz"))
+      (uri (string-append "http://labix.org/download/python-dateutil/"
+                          "python-dateutil-" version ".tar.gz"))
       (sha256
        (base32
         "0fqfglhy5khbvsipr3x7m6bcaqljh8xl5cw33vbfxy7qhmywm2n0"))))
@@ -347,8 +525,7 @@ Python 3 support.")
     (inputs
      `(("python-setuptools" ,python-setuptools)))
     (home-page "http://labix.org/python-dateutil")
-    (synopsis
-     "Extensions to the standard datetime module, available in Python 2.3+")
+    (synopsis "Extensions to the standard datetime module")
     (description
      "The dateutil module provides powerful extensions to the standard
 datetime module, available in Python 2.3+.")
@@ -356,6 +533,67 @@ datetime module, available in Python 2.3+.")
 
 (define-public python2-dateutil
   (package-with-python2 python-dateutil))
+
+(define-public python-parsedatetime
+  (package
+    (name "python-parsedatetime")
+    (version "1.2")
+    (source
+     (origin
+      (method url-fetch)
+      (uri (string-append "https://pypi.python.org/packages/source/p/"
+                          "parsedatetime/parsedatetime-" version ".tar.gz"))
+      (sha256
+       (base32
+        "1zcj0pzxvpl4j2ma9awmpkfxldybi2kjaahjjpmgfbg5cxwcjsqv"))))
+    (build-system python-build-system)
+    (native-inputs
+     `(("python-setuptools" ,python-setuptools)))
+    (arguments `(#:tests? #f))          ;no test target
+    (home-page "http://github.com/bear/parsedatetime/")
+    (synopsis
+     "Parse human-readable date/time text")
+    (description
+     "Parse human-readable date/time text")
+    (license asl2.0)))
+
+(define-public python-tzlocal
+  (package
+    (name "python-tzlocal")
+    (version "1.1.1")
+    (source
+     (origin
+      (method url-fetch)
+      (uri (string-append "https://pypi.python.org/packages/source/t/"
+                          "tzlocal/tzlocal-" version ".zip"))
+      (sha256
+       (base32
+        "1m3y918c3chf41fwg2bx4w42bqsjzn3dyvvcmwwy13c8gj6zssv9"))))
+    (build-system python-build-system)
+    (native-inputs
+     `(("unzip" ,unzip)
+       ("python-setuptools" ,python-setuptools)))
+    (inputs `(("python-pytz" ,python-pytz)))
+    (arguments
+     `(#:phases
+       (alist-replace
+        'unpack
+        (lambda _
+          (let ((unzip (string-append (assoc-ref %build-inputs "unzip")
+                                      "/bin/unzip"))
+                (source (assoc-ref %build-inputs "source")))
+            (and (zero? (system* unzip source))
+                 (chdir (string-append "tzlocal-" ,version)))))
+        %standard-phases)))
+    (home-page "https://github.com/regebro/tzlocal")
+    (synopsis
+     "tzinfo object for the local timezone")
+    (description
+     "Tzlocal returns a tzinfo object with the local timezone information.
+This module attempts to fix a glaring hole in pytz, that there is no way to
+get the local timezone information, unless you know the zoneinfo name, and
+under several distributions that's hard or impossible to figure out.")
+    (license cc0)))
 
 
 (define-public python2-pysqlite
@@ -578,7 +816,10 @@ commands.")
                     version ".tar.gz"))
               (sha256
                (base32
-                "17ni00p08gp5lkxlrrcnvi3x09fmajnlbz4da03qcgl9q21ym4jd"))))
+                "17ni00p08gp5lkxlrrcnvi3x09fmajnlbz4da03qcgl9q21ym4jd"))
+              (patches (map search-patch
+                            (list "pybugz-stty.patch"
+                                  "pybugz-encode-error.patch")))))
     (build-system python-build-system)
     (arguments
      `(#:python ,python-2                         ; SyntaxError with Python 3
@@ -591,6 +832,86 @@ bug tracking system.  It is meant as an aid to speed up interaction with the
 bug tracker.")
     (home-page "http://www.liquidx.net/pybugz/")
     (license gpl2)))
+
+(define-public python-enum34
+  (package
+    (name "python-enum34")
+    (version "1.0")
+    (source
+     (origin
+      (method url-fetch)
+      (uri (string-append "https://pypi.python.org/packages/source/e/"
+                          "enum34/enum34-" version ".tar.gz"))
+      (sha256
+       (base32
+        "0dg6mpg9n4g9diyrbnbb5vd9d1qw9f265zwhknqy0mxh0cvmjjrq"))))
+    (build-system python-build-system)
+    (inputs
+     `(("python-setuptools" ,python-setuptools)))
+    (arguments
+     `(#:phases
+       (alist-replace
+        'check
+        (lambda _ (zero? (system* "python" "enum/test_enum.py")))
+        %standard-phases)))
+    (home-page "https://pypi.python.org/pypi/enum34")
+    (synopsis "Backported Python 3.4 Enum")
+    (description
+     "Enum34 is the new Python stdlib enum module available in Python 3.4
+backported for previous versions of Python from 2.4 to 3.3.")
+    (license bsd-3)))
+
+(define-public python-parse-type
+  (package
+    (name "python-parse-type")
+    (version "0.3.4")
+    (source
+     (origin
+      (method url-fetch)
+      (uri (string-append "https://pypi.python.org/packages/source/p/"
+                          "parse_type/parse_type-" version ".tar.gz"))
+      (sha256
+       (base32
+        "0iv1c34npr4iynwpgv1vkjx9rjd18a85ir8c01gc5f7wp8iv7l1x"))))
+    (build-system python-build-system)
+    (inputs
+     `(("python-setuptools" ,python-setuptools)
+       ("python-six" ,python-six)
+       ("python-parse" ,python-parse)
+       ("python-enum34" ,python-enum34))) ;required for python<3.4
+    (arguments '(#:tests? #f))            ;TODO: tests require pytest
+    (home-page "https://github.com/jenisys/parse_type")
+    (synopsis "Extended parse module")
+    (description
+     "Parse_type extends the python parse module.")
+    (license bsd-3)))
+
+(define-public python-parse
+  (package
+    (name "python-parse")
+    (version "1.6.4")
+    (source
+     (origin
+      (method url-fetch)
+      (uri (string-append "https://pypi.python.org/packages/source/p/"
+                          "parse/parse-" version ".tar.gz"))
+      (sha256
+       (base32
+        "0m30q64l6szl7s9mhvqy64w2fdhdn8lb91fmacjiwbv3479cmk57"))))
+    (build-system python-build-system)
+    (arguments
+     `(#:phases
+       (alist-replace
+        'check
+        (lambda _ (zero? (system* "python" "test_parse.py")))
+        %standard-phases)))
+    (home-page "https://github.com/r1chardj0n3s/parse")
+    (synopsis "Parse strings")
+    (description
+     "Parse strings using a specification based on the Python format()
+syntax.")
+    (license x11)))
+
 
 (define-public scons
   (package
@@ -618,3 +939,32 @@ In short, SCons is an easier, more reliable and faster way to build
 software.")
     (license x11)))
 
+(define-public behave
+  (package
+    (name "behave")
+    (version "1.2.4")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "https://pypi.python.org/packages/source/b/"
+                                 name "/" name "-" version ".tar.gz"))
+             (sha256
+              (base32
+               "1v2rfy8xnf0rk7cj4cgr7lam4015d458i7bg0xqs9czfv6njlm14"))))
+    (build-system python-build-system)
+    (inputs
+     `(("python-setuptools" ,python-setuptools)
+       ("python-six" ,python-six)
+       ("python-enum43" ,python-enum34)
+       ("python-parse" ,python-parse)
+       ("python-parse-type" ,python-parse-type)))
+    (arguments `(#:tests? #f))          ;TODO: tests require nose>=1.3 and
+                                        ;PyHamcrest>=1.8
+    (home-page "http://github.com/behave/behave")
+    (synopsis "Python behavior-driven development")
+    (description
+     "Behave is a tool for behavior-driven development in python.
+Behavior-driven development (or BDD) is an agile software development
+technique that encourages collaboration between developers, QA and
+non-technical or business participants in a software project.  Behave uses
+tests written in a natural language style, backed up by Python code.")
+    (license x11)))

@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2012, 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -34,6 +34,14 @@
 ;;;
 ;;; Code:
 
+(define-syntax record-error
+  (syntax-rules ()
+    "Report a syntactic error in use of CONSTRUCTOR."
+    ((_ constructor form fmt args ...)
+     (syntax-violation constructor
+                       (format #f fmt args ...)
+                       form))))
+
 (define-syntax define-record-type*
   (lambda (s)
     "Define the given record type such that an additional \"syntactic
@@ -60,6 +68,14 @@ thunked fields."
                                  (eq? f (car (syntax->datum x))))
                                field+value)
                          car))
+
+                ;; Make sure there are no unknown field names.
+                (let* ((fields     (map (compose car syntax->datum)
+                                        field+value))
+                       (unexpected (lset-difference eq? fields 'expected)))
+                  (when (pair? unexpected)
+                    (record-error 'name s "extraneous field initializers ~a"
+                                  unexpected)))
 
                 #`(make-struct type 0
                                #,@(map (lambda (field index)
@@ -107,25 +123,21 @@ thunked fields."
                                #`(lambda () #,value)
                                value))))
 
-                   (let-syntax ((error*
-                                 (syntax-rules ()
-                                   ((_ fmt args (... ...))
-                                    (syntax-violation 'name
-                                                      (format #f fmt args
-                                                              (... ...))
-                                                      s)))))
-                     (let ((fields (append fields (map car dflt))))
-                       (cond ((lset= eq? fields 'expected)
-                              #`(let* #,(field-bindings
-                                         #'((field value) (... ...)))
-                                  (ctor #,@(map field-value 'expected))))
-                             ((pair? (lset-difference eq? fields 'expected))
-                              (error* "extraneous field initializers ~a"
-                                      (lset-difference eq? fields 'expected)))
-                             (else
-                              (error* "missing field initializers ~a"
-                                      (lset-difference eq? 'expected
-                                                       fields)))))))))))))
+                   (let ((fields (append fields (map car dflt))))
+                     (cond ((lset= eq? fields 'expected)
+                            #`(let* #,(field-bindings
+                                       #'((field value) (... ...)))
+                                (ctor #,@(map field-value 'expected))))
+                           ((pair? (lset-difference eq? fields 'expected))
+                            (record-error 'name s
+                                          "extraneous field initializers ~a"
+                                          (lset-difference eq? fields
+                                                           'expected)))
+                           (else
+                            (record-error 'name s
+                                          "missing field initializers ~a"
+                                          (lset-difference eq? 'expected
+                                                           fields))))))))))))
 
     (define (field-default-value s)
       (syntax-case s (default)

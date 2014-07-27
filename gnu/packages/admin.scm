@@ -40,25 +40,27 @@
                 #:select (tar))
   #:use-module ((gnu packages compression)
                 #:select (gzip))
+  #:use-module ((gnu packages openssl)
+                #:renamer (symbol-prefix-proc 'o:))
   #:use-module (gnu packages bison)
   #:use-module (gnu packages flex)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages texinfo)
+  #:use-module (gnu packages groff)
   #:use-module (gnu packages xorg))
 
 (define-public dmd
   (package
     (name "dmd")
-    (version "0.1")
+    (version "0.2")
     (source (origin
              (method url-fetch)
              (uri (string-append "ftp://alpha.gnu.org/gnu/dmd/dmd-"
                                  version ".tar.gz"))
              (sha256
               (base32
-               "07mddw0p62fcphwjzgb6rfa0pjz5sy6jzbha0sm2vc3rqf459jxg"))
-             (patches (list (search-patch "dmd-getpw.patch")
-                            (search-patch "dmd-tests-longer-sleeps.patch")))))
+               "10fl4k96f17gqx2fv8iw9c61ld26gsk4bbrlfqckdmiimz1k175z"))))
     (build-system gnu-build-system)
     (arguments
      '(#:configure-flags '("--localstatedir=/var")))
@@ -76,16 +78,16 @@ interface and is based on GNU Guile.")
 (define-public dfc
   (package
    (name "dfc")
-   (version "3.0.3")
+   (version "3.0.4")
    (source
     (origin
      (method url-fetch)
       (uri (string-append
-            "http://projects.gw-computing.net/attachments/download/78/dfc-"
+            "http://projects.gw-computing.net/attachments/download/79/dfc-"
             version ".tar.gz"))
       (sha256
        (base32
-        "1b4hfqv23l87cb37fxwzfk2sgspkyxpr3ig2hsd23hr6mm982j7z"))))
+        "0zk1ppx93ijimf4sbgqilxxikpsa2gmpbynknyh41xy7jbdjxp0b"))))
    (build-system cmake-build-system)
    (arguments '(#:tests? #f)) ; There are no tests.
    (native-inputs `(("gettext" ,gnu-gettext)))
@@ -99,14 +101,14 @@ graphs and can export its output to different formats.")
 (define-public htop
   (package
    (name "htop")
-   (version "1.0.2")
+   (version "1.0.3")
    (source (origin
             (method url-fetch)
-            (uri (string-append "mirror://sourceforge/htop/"
+            (uri (string-append "http://hisham.hm/htop/releases/"
                   version "/htop-" version ".tar.gz"))
             (sha256
              (base32
-              "18fqrhvnm7h4c3939av8lpiwrwxbyw6hcly0jvq0vkjf0ixnaq7f"))))
+              "0a8qbpsifzjwc4f45xfwm48jhm59g6q5hlib4bf7z13mgy95fp05"))))
    (build-system gnu-build-system)
    (inputs
     `(("ncurses" ,ncurses)))
@@ -201,16 +203,7 @@ client and server, a telnet client and server, and an rsh client and server.")
                       (delete-file (string-append bin "/groups"))
                       (for-each delete-file (find-files man "^groups\\."))
                       #t))
-                  (alist-cons-after
-                   'unpack 'reset-timestamps
-                   (lambda _
-                     ;; FIXME: Reset the file timestamps here, until the
-                     ;; 'unpack' phase does it for us.  See
-                     ;; <https://lists.gnu.org/archive/html/guix-devel/2014-04/msg00098.html>.
-                     (for-each (lambda (file)
-                                 (utime file 0 0 0))
-                               (find-files "." "")))
-                   %standard-phases)))))
+                  %standard-phases))))
 
     (inputs (if (string-suffix? "-linux"
                                 (or (%current-target-system)
@@ -442,11 +435,15 @@ connection alive.")
 
     (native-inputs `(("perl" ,perl)))
 
-    ;; Even Coreutils and sed are needed here in case we're cross-compiling.
-    (inputs `(("coreutils" ,coreutils)
-              ("sed" ,sed)
-              ("net-tools" ,net-tools)
-              ("iproute" ,iproute)))
+    (inputs `(("net-tools" ,net-tools)
+              ("iproute" ,iproute)
+
+              ;; When cross-compiling, we need the cross Coreutils and sed.
+              ;; Otherwise just use those from %FINAL-INPUTS.
+              ,@(if (%current-target-system)
+                    `(("coreutils" ,coreutils)
+                      ("sed" ,sed))
+                    '())))
 
     (home-page "http://www.isc.org/products/DHCP/")
     (synopsis "Dynamic Host Configuration Protocol (DHCP) tools")
@@ -478,6 +475,28 @@ portable framework for low-level network monitoring.  Applications include
 network statistics collection, security monitoring, network debugging, etc.")
 
     ;; fad-*.c and a couple other files are BSD-4, but the rest is BSD-3.
+    (license bsd-3)))
+
+(define-public tcpdump
+  (package
+    (name "tcpdump")
+    (version "4.5.1")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "http://www.tcpdump.org/release/tcpdump-"
+                                  version ".tar.gz"))
+              (sha256
+               (base32
+                "15hb7zkzd66nag102qbv100hcnf7frglbkylmr8adwr8f5jkkaql"))))
+    (build-system gnu-build-system)
+    (inputs `(("libpcap" ,libpcap)
+              ("openssl" ,o:openssl)))
+    (native-inputs `(("perl" ,perl)))        ; for tests
+    (home-page "http://www.tcpdump.org/")
+    (synopsis "Network packet analyzer")
+    (description
+     "Tcpdump is a command-line tool to analyze network traffic passing
+through the network interface controller.")
     (license bsd-3)))
 
 (define-public jnettop
@@ -550,4 +569,196 @@ by bandwidth they use.")
      "ClusterSSH controls a number of xterm windows via a single graphical
 console window to allow commands to be interactively run on multiple servers
 over ssh connections.")
+    (license gpl2+)))
+
+(define-public rottlog
+  (package
+    (name "rottlog")
+    (version "0.72.2")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://gnu/rottlog/rottlog-"
+                                  version ".tar.gz"))
+              (sha256
+               (base32
+                "0751mb9l2f0jrk3vj6q8ilanifd121dliwk0c34g8k0dlzsv3kd7"))
+              (modules '((guix build utils)))
+              (snippet
+               '(substitute* "Makefile.in"
+                  (("-o \\$\\{LOG_OWN\\} -g \\$\\{LOG_GROUP\\}")
+                   ;; Don't try to chown root.
+                   "")
+                  (("mkdir -p \\$\\(ROTT_STATDIR\\)")
+                   ;; Don't attempt to create /var/lib/rottlog.
+                   "true")))))
+    (build-system gnu-build-system)
+    (arguments
+     '(#:configure-flags (list (string-append "ROTT_ETCDIR="
+                                              (assoc-ref %outputs "out")
+                                              "/etc")
+                               "--localstatedir=/var")
+       #:phases (alist-cons-after
+                 'install 'install-info
+                 (lambda _
+                   (zero? (system* "make" "install-info")))
+                 %standard-phases)))
+    (native-inputs `(("texinfo" ,texinfo)
+                     ("util-linux" ,util-linux))) ; for 'cal'
+    (home-page "http://www.gnu.org/software/rottlog/")
+    (synopsis "Log rotation and management")
+    (description
+     "GNU Rot[t]log is a program for managing log files.  It is used to
+automatically rotate out log files when they have reached a given size or
+according to a given schedule.  It can also be used to automatically compress
+and archive such logs.  Rot[t]log will mail reports of its activity to the
+system administrator.")
+    (license gpl3+)))
+
+(define-public sudo
+  (package
+    (name "sudo")
+    (version "1.8.10p3")
+    (source (origin
+              (method url-fetch)
+              (uri
+               (list (string-append "http://www.sudo.ws/sudo/dist/sudo-"
+                                    version ".tar.gz")
+                     (string-append "ftp://ftp.sudo.ws/pub/sudo/OLD/sudo-"
+                                    version ".tar.gz")))
+              (sha256
+               (base32
+                "002l6h27pnhb77b65frhazbhknsxvrsnkpi43j7i0qw1lrgi7nkf"))))
+    (build-system gnu-build-system)
+    (arguments
+     '(#:configure-flags '("--with-logpath=/var/log/sudo.log")
+       #:phases (alist-cons-before
+                 'configure 'pre-configure
+                 (lambda _
+                   (substitute* "configure"
+                     ;; Refer to the right executables.
+                     (("/usr/bin/mv") (which "mv"))
+                     (("/usr/bin/sh") (which "sh")))
+                   (substitute* (find-files "." "Makefile\\.in")
+                     (("-O [[:graph:]]+ -G [[:graph:]]+")
+                      ;; Allow installation as non-root.
+                      "")
+                     (("^install: (.*)install-sudoers(.*)" _ before after)
+                      ;; Don't try to create /etc/sudoers.
+                      (string-append "install: " before after "\n"))))
+                 %standard-phases)
+
+       ;; XXX: The 'testsudoers' test series expects user 'root' to exist, but
+       ;; the chroot's /etc/passwd doesn't have it.  Turn off the tests.
+       #:tests? #f))
+    (inputs
+     `(("groff" ,groff)
+       ("linux-pam" ,linux-pam)
+       ("coreutils" ,coreutils)))
+    (home-page "http://www.sudo.ws/")
+    (synopsis "Run commands as root")
+    (description
+     "Sudo (su \"do\") allows a system administrator to delegate authority to
+give certain users (or groups of users) the ability to run some (or all)
+commands as root or another user while providing an audit trail of the
+commands and their arguments.")
+
+    ;; See <http://www.sudo.ws/sudo/license.html>.
+    (license x11)))
+
+(define-public wpa-supplicant
+  (package
+    (name "wpa-supplicant")
+    (version "2.2")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append
+                    "http://hostap.epitest.fi/releases/wpa_supplicant-"
+                    version
+                    ".tar.gz"))
+              (sha256
+               (base32
+                "1vf8jc4yyksbxf86narvsli3vxfbm8nbnim2mdp66nd6d3yvin70"))))
+    (build-system gnu-build-system)
+    (arguments
+     '(#:phases (alist-replace
+                 'configure
+                 (lambda* (#:key outputs #:allow-other-keys)
+                   (chdir "wpa_supplicant")
+                   (copy-file "defconfig" ".config")
+                   (let ((port (open-file ".config" "al")))
+                     (display "
+      CONFIG_DEBUG_SYSLOG=y
+      CONFIG_CTRL_IFACE_DBUS=y
+      CONFIG_CTRL_IFACE_DBUS_NEW=y
+      CONFIG_CTRL_IFACE_DBUS_INTRO=y
+      CONFIG_DRIVER_NL80211=y
+      CFLAGS += $(shell pkg-config libnl-3.0 --cflags)
+      CONFIG_LIBNL32=y
+      CONFIG_READLINE=y\n" port)
+                     (close-port port)))
+                 %standard-phases)
+
+      #:make-flags (list "CC=gcc"
+                         (string-append "BINDIR=" (assoc-ref %outputs "out")
+                                        "/sbin")
+                         (string-append "LIBDIR=" (assoc-ref %outputs "out")
+                                        "/lib"))
+      #:tests? #f))
+    (inputs
+     `(("readline" ,readline)
+       ("libnl" ,libnl)
+       ("dbus" ,dbus)
+       ("openssl" ,o:openssl)))
+    (native-inputs
+     `(("pkg-config" ,pkg-config)))
+    (home-page "http://hostap.epitest.fi/wpa_supplicant/")
+    (synopsis "Connecting to WPA and WPA2-protected wireless networks")
+    (description
+     "wpa_supplicant is a WPA Supplicant with support for WPA and WPA2 (IEEE
+802.11i / RSN).  Supplicant is the IEEE 802.1X/WPA component that is used in
+the client stations.  It implements key negotiation with a WPA Authenticator
+and it controls the roaming and IEEE 802.11 authentication/association of the
+WLAN driver.
+
+This package provides the 'wpa_supplicant' daemon and the 'wpa_cli' command.")
+
+    ;; In practice, this is linked against Readline, which makes it GPLv3+.
+    (license bsd-3)))
+
+(define-public wakelan
+  (package
+    (name "wakelan")
+    (version "1.1")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append
+                    "ftp://ftp.gwdg.de/pub/linux/metalab/system/network/misc/wakelan-"
+                    version ".tar.gz"))
+              (sha256
+               (base32
+                "0vydqpf44146ir6k87gmqaq6xy66xhc1gkr3nsd7jj3nhy7ypx9x"))))
+    (build-system gnu-build-system)
+    (arguments
+     '(#:phases (alist-replace
+                 'configure
+                 (lambda* (#:key outputs #:allow-other-keys)
+                   (let ((out (assoc-ref outputs "out")))
+                     (mkdir-p (string-append out "/bin"))
+                     (mkdir-p (string-append out "/share/man/man1"))
+
+                     ;; It's an old configure script that doesn't understand
+                     ;; the extra options we pass.
+                     (setenv "CONFIG_SHELL" (which "bash"))
+                     (zero?
+                      (system* "./configure"
+                               (string-append "--prefix=" out)
+                               (string-append "--mandir=" out
+                                              "/share/man")))))
+                 %standard-phases)
+       #:tests? #f))
+    (home-page "http://kernel.org")               ; really, no home page
+    (synopsis "Send a wake-on-LAN packet")
+    (description
+     "WakeLan broadcasts a properly formatted UDP packet across the local area
+network, which causes enabled computers to power on.")
     (license gpl2+)))

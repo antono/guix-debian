@@ -36,7 +36,7 @@
 (define-public libtasn1
   (package
     (name "libtasn1")
-    (version "3.4")
+    (version "3.6")
     (source
      (origin
       (method url-fetch)
@@ -44,7 +44,7 @@
                           version ".tar.gz"))
       (sha256
        (base32
-        "1j5cwsjk9wai700ljsr5qyzywijrr5ba05hhg4mkgqlg8mx50lzk"))))
+        "0c547qa1vfk1x2jzgjhf65izf4sfi86c6g46q7779g4aldk4gqqr"))))
     (build-system gnu-build-system)
     (native-inputs `(("perl" ,perl)
 
@@ -63,7 +63,7 @@ specifications.")
 (define-public gnutls
   (package
     (name "gnutls")
-    (version "3.2.12")
+    (version "3.2.15")
     (source (origin
              (method url-fetch)
              (uri
@@ -75,7 +75,7 @@ specifications.")
                              "/gnutls-" version ".tar.xz"))
              (sha256
               (base32
-               "0195nliarszq5mginli6d2f5z7ljnd7mwa46iy9z8pkcgy56khbl"))))
+               "1fbpr9r1r2y803s3avwjpy1higqsz85dyb302kvmh0i29frwgg9h"))))
     (build-system gnu-build-system)
     (arguments
      ;; Work around build issue reported at

@@ -1,5 +1,6 @@
 ;;; GNU Guix --- Functional package management for GNU
 ;;; Copyright © 2012, 2013, 2014 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2014 Andreas Enge <andreas@enge.fr>
 ;;; Copyright © 2012 Nikita Karetnikov <nikita@karetnikov.org>
 ;;; Copyright © 2014 Mark H Weaver <mhw@netris.org>
 ;;;
@@ -26,23 +27,31 @@
                 #:renamer (symbol-prefix-proc 'guix:))
   #:use-module (gnu packages flex)
   #:use-module (gnu packages bison)
+  #:use-module (gnu packages gperf)
   #:use-module (gnu packages libusb)
   #:use-module (gnu packages ncurses)
+  #:use-module (gnu packages pciutils)
   #:use-module (gnu packages bdb)
   #:use-module (gnu packages perl)
   #:use-module (gnu packages pkg-config)
   #:use-module (gnu packages python)
   #:use-module (gnu packages algebra)
   #:use-module (gnu packages gettext)
+  #:use-module (gnu packages glib)
   #:use-module (gnu packages pulseaudio)
   #:use-module (gnu packages attr)
   #:use-module (gnu packages xml)
   #:use-module (gnu packages autotools)
+  #:use-module (gnu packages texinfo)
+  #:use-module (gnu packages check)
   #:use-module (guix packages)
   #:use-module (guix download)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system cmake)
-  #:use-module (guix build-system python))
+  #:use-module (guix build-system python)
+  #:use-module (guix build-system trivial)
+  #:use-module (srfi srfi-26)
+  #:use-module (ice-9 match))
 
 (define-public (system->linux-architecture arch)
   "Return the Linux architecture name for ARCH, a Guix system name such as
@@ -129,7 +138,9 @@
                    version ".tar.bz2"))
              (sha256
               (base32
-               "0jxnz9ahfic79rp93l5wxcbgh4pkv85mwnjlbv1gz3jawv5cvwp1"))))
+               "0jxnz9ahfic79rp93l5wxcbgh4pkv85mwnjlbv1gz3jawv5cvwp1"))
+             (patches
+              (list (search-patch "module-init-tools-moduledir.patch")))))
     (build-system gnu-build-system)
     (arguments
      ;; FIXME: The upstream tarball lacks man pages, and building them would
@@ -149,40 +160,79 @@
 `insmod', `lsmod', and more.")
     (license gpl2+)))
 
+(define %boot-logo-patch
+  ;; Linux-Libre boot logo featuring Freedo and a gnu.
+  (origin
+    (method url-fetch)
+    (uri (string-append "http://www.fsfla.org/svn/fsfla/software/linux-libre/"
+                        "lemote/gnewsense/branches/3.15/100gnu+freedo.patch"))
+    (sha256
+     (base32
+      "1hk9swxxc80bmn2zd2qr5ccrjrk28xkypwhl4z0qx4hbivj7qm06"))))
+
+(define (kernel-config system)
+  "Return the absolute file name of the Linux-Libre build configuration file
+for SYSTEM, or #f if there is no configuration for SYSTEM."
+  (define (lookup file)
+    (let ((file (string-append "gnu/packages/" file)))
+      (search-path %load-path file)))
+
+  (match system
+    ("i686-linux"
+     (lookup "linux-libre-i686.conf"))
+    ("x86_64-linux"
+     (lookup "linux-libre-x86_64.conf"))
+    (_
+     #f)))
+
 (define-public linux-libre
-  (let* ((version "3.13.7")
+  (let* ((version "3.15.6")
          (build-phase
-          '(lambda* (#:key system #:allow-other-keys #:rest args)
+          '(lambda* (#:key system inputs #:allow-other-keys #:rest args)
+             ;; Apply the neat patch.
+             (system* "patch" "-p1" "--batch"
+                      "-i" (assoc-ref inputs "patch/freedo+gnu"))
+
              (let ((arch (car (string-split system #\-))))
                (setenv "ARCH"
                        (cond ((string=? arch "i686") "i386")
                              (else arch)))
                (format #t "`ARCH' set to `~a'~%" (getenv "ARCH")))
 
-             (let ((build (assoc-ref %standard-phases 'build)))
-               (and (zero? (system* "make" "defconfig"))
-                    (begin
-                      ;; Appending works even when the option wasn't in the
-                      ;; file.  The last one prevails if duplicated.
-                      (let ((port (open-file ".config" "a")))
-                        (display (string-append "CONFIG_NET_9P=m\n"
-                                                "CONFIG_NET_9P_VIRTIO=m\n"
-                                                "CONFIG_VIRTIO_BLK=m\n"
-                                                "CONFIG_VIRTIO_NET=m\n"
-                                                "CONFIG_VIRTIO_PCI=m\n"
-                                                "CONFIG_VIRTIO_BALLOON=m\n"
-                                                "CONFIG_VIRTIO_MMIO=m\n"
-                                                "CONFIG_FUSE_FS=m\n"
-                                                "CONFIG_CIFS=m\n"
-                                                "CONFIG_9P_FS=m\n")
-                                 port)
-                        (close-port port))
+             (let ((build  (assoc-ref %standard-phases 'build))
+                   (config (assoc-ref inputs "kconfig")))
 
-                      (zero? (system* "make" "oldconfig")))
+               ;; Use the architecture-specific config if available, and
+               ;; 'defconfig' otherwise.
+               (if config
+                   (begin
+                     (copy-file config ".config")
+                     (chmod ".config" #o666))
+                   (system* "make" "defconfig"))
 
-                    ;; Call the default `build' phase so `-j' is correctly
-                    ;; passed.
-                    (apply build #:make-flags "all" args)))))
+               ;; Appending works even when the option wasn't in the
+               ;; file.  The last one prevails if duplicated.
+               (let ((port (open-file ".config" "a")))
+                 (display (string-append "CONFIG_NET_9P=m\n"
+                                         "CONFIG_NET_9P_VIRTIO=m\n"
+                                         "CONFIG_VIRTIO_BLK=m\n"
+                                         "CONFIG_VIRTIO_NET=m\n"
+                                         ;; https://lists.gnu.org/archive/html/guix-devel/2014-04/msg00039.html
+                                         "CONFIG_DEVPTS_MULTIPLE_INSTANCES=y\n"
+                                         "CONFIG_VIRTIO_PCI=m\n"
+                                         "CONFIG_VIRTIO_BALLOON=m\n"
+                                         "CONFIG_VIRTIO_MMIO=m\n"
+                                         "CONFIG_FUSE_FS=m\n"
+                                         "CONFIG_CIFS=m\n"
+                                         "CONFIG_9P_FS=m\n")
+                          port)
+                 (close-port port))
+
+               (zero? (system* "make" "oldconfig"))
+
+               ;; Call the default `build' phase so `-j' is correctly
+               ;; passed.
+               (apply build #:make-flags "all" args))))
          (install-phase
           `(lambda* (#:key inputs outputs #:allow-other-keys)
              (let* ((out    (assoc-ref outputs "out"))
@@ -199,6 +249,7 @@
                                (string-append "MODULE_DIR=" moddir)
                                (string-append "INSTALL_PATH=" out)
                                (string-append "INSTALL_MOD_PATH=" out)
+                               "INSTALL_MOD_STRIP=1"
                                "modules_install"))))))
    (package
     (name "linux-libre")
@@ -208,11 +259,18 @@
              (uri (linux-libre-urls version))
              (sha256
               (base32
-               "0j28dg0zq4vlbk4ady4fq021i8dxx2h8h90n26mzigr9hky86n8d"))))
+               "07v45q8r9fz9jgj1m7dibbmcdlzfzpcj7kh2bp1s1pv512h7fnw0"))))
     (build-system gnu-build-system)
     (native-inputs `(("perl" ,perl)
                      ("bc" ,bc)
-                     ("module-init-tools" ,module-init-tools)))
+                     ("module-init-tools" ,module-init-tools)
+                     ("patch/freedo+gnu" ,%boot-logo-patch)
+
+                     ,@(let ((conf (kernel-config (or (%current-target-system)
+                                                      (%current-system)))))
+                         (if conf
+                             `(("kconfig" ,conf))
+                             '()))))
     (arguments
      `(#:modules ((guix build gnu-build-system)
                   (guix build utils)
@@ -309,18 +367,19 @@ providing the system administrator with some help in common tasks.")
   (package
     (name "util-linux")
     (version "2.21")
-    (source
-     (origin
-      (method url-fetch)
-      (uri (string-append "mirror://kernel.org/linux/utils/"
-                          name "/v" version "/"
-                          name "-" version ".2" ".tar.xz"))
-      (sha256
-       (base32
-        "1rpgghf7n0zx0cdy8hibr41wvkm2qp1yvd8ab1rxr193l1jmgcir"))))
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://kernel.org/linux/utils/"
+                                  name "/v" version "/"
+                                  name "-" version ".2" ".tar.xz"))
+              (sha256
+               (base32
+                "1rpgghf7n0zx0cdy8hibr41wvkm2qp1yvd8ab1rxr193l1jmgcir"))
+              (patches (list (search-patch "util-linux-perl.patch")))))
     (build-system gnu-build-system)
     (arguments
-     `(#:configure-flags '("--disable-use-tty-group")
+     `(#:configure-flags '("--disable-use-tty-group"
+                           "--enable-ddate")
        #:phases (alist-cons-after
                  'install 'patch-chkdupexe
                  (lambda* (#:key outputs #:allow-other-keys)
@@ -435,7 +494,8 @@ slabtop, and skill.")
                "0ibkkvp6kan0hn0d1anq4n2md70j5gcm7mwna515w82xwyr02rfw"))))
     (build-system gnu-build-system)
     (inputs `(("util-linux" ,util-linux)))
-    (native-inputs `(("pkg-config" ,pkg-config)))
+    (native-inputs `(("pkg-config" ,pkg-config)
+                     ("texinfo" ,texinfo)))    ; for the libext2fs Info manual
     (arguments
      '(#:phases (alist-cons-before
                  'configure 'patch-shells
@@ -460,6 +520,39 @@ slabtop, and skill.")
     (license (list gpl2                           ; programs
                    lgpl2.0                        ; libext2fs
                    x11))))                        ; libuuid
+
+(define-public e2fsck/static
+  (package
+    (name "e2fsck-static")
+    (version (package-version e2fsprogs))
+    (build-system trivial-build-system)
+    (source #f)
+    (arguments
+     `(#:modules ((guix build utils))
+       #:builder
+       (begin
+         (use-modules (guix build utils)
+                      (ice-9 ftw)
+                      (srfi srfi-26))
+
+         (let ((source (string-append (assoc-ref %build-inputs "e2fsprogs")
+                                      "/sbin"))
+               (bin    (string-append (assoc-ref %outputs "out") "/sbin")))
+           (mkdir-p bin)
+           (with-directory-excursion bin
+             (for-each (lambda (file)
+                         (copy-file (string-append source "/" file)
+                                    file)
+                         (remove-store-references file)
+                         (chmod file #o555))
+                       (scandir source (cut string-prefix? "fsck." <>))))))))
+    (inputs `(("e2fsprogs" ,(static-package e2fsprogs))))
+    (synopsis "Statically-linked fsck.* commands from e2fsprogs")
+    (description
+     "This package provides statically-linked command of fsck.ext[234] taken
+from the e2fsprogs package.  It is meant to be used in initrds.")
+    (home-page (package-home-page e2fsprogs))
+    (license (package-license e2fsprogs))))
 
 (define-public strace
   (package
@@ -919,7 +1012,15 @@ processes currently causing I/O.")
                                     "/bin/" maybe-u "mount")))
                   (substitute* '("util/mount.fuse.c")
                     (("/bin/sh")
-                     (which "sh"))))
+                     (which "sh")))
+
+                  ;; This hack leads libfuse to search for 'fusermount' in
+                  ;; $PATH, where it may find a setuid-root binary, instead of
+                  ;; trying solely $out/sbin/fusermount and failing because
+                  ;; it's not setuid.
+                  (substitute* "lib/Makefile"
+                    (("-DFUSERMOUNT_DIR=[[:graph:]]+")
+                     "-DFUSERMOUNT_DIR=\\\"/var/empty\\\"")))
                 %standard-phases)))
     (home-page "http://fuse.sourceforge.net/")
     (synopsis "Support file systems implemented in user space")
@@ -957,6 +1058,23 @@ space, using the FUSE library.  Mounting a union file system allows you to
 UnionFS-FUSE additionally supports copy-on-write.")
     (license bsd-3)))
 
+(define fuse-static
+  (package (inherit fuse)
+    (name "fuse-static")
+    (source (origin (inherit (package-source fuse))
+              (modules '((guix build utils)))
+              (snippet
+               ;; Normally libfuse invokes mount(8) so that /etc/mtab is
+               ;; updated.  Change calls to 'mtab_needs_update' to 0 so that
+               ;; it doesn't do that, allowing us to remove the dependency on
+               ;; util-linux (something that is useful in initrds.)
+               '(substitute* '("lib/mount_util.c"
+                               "util/mount_util.c")
+                  (("mtab_needs_update[[:blank:]]*\\([a-z_]+\\)")
+                   "0")
+                  (("/bin/")
+                   "")))))))
+
 (define-public unionfs-fuse/static
   (package (inherit unionfs-fuse)
     (synopsis "User-space union file system (statically linked)")
@@ -971,4 +1089,280 @@ UnionFS-FUSE additionally supports copy-on-write.")
                                   libs " dl)"))))))
     (arguments
      '(#:tests? #f
-       #:configure-flags '("-DCMAKE_EXE_LINKER_FLAGS=-static")))))
+       #:configure-flags '("-DCMAKE_EXE_LINKER_FLAGS=-static")))
+    (inputs `(("fuse" ,fuse-static)))))
+
+(define-public sshfs-fuse
+  (package
+    (name "sshfs-fuse")
+    (version "2.5")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://sourceforge/fuse/sshfs-fuse-"
+                                  version ".tar.gz"))
+              (sha256
+               (base32
+                "0gp6qr33l2p0964j0kds0dfmvyyf5lpgsn11daf0n5fhwm9185z9"))))
+    (build-system gnu-build-system)
+    (inputs
+     `(("fuse" ,fuse)
+       ("glib" ,glib)))
+    (native-inputs
+     `(("pkg-config" ,pkg-config)))
+    (home-page "http://fuse.sourceforge.net/sshfs.html")
+    (synopsis "Mount remote file systems over SSH")
+    (description
+     "This is a file system client based on the SSH File Transfer Protocol.
+Since most SSH servers already support this protocol it is very easy to set
+up: on the server side there's nothing to do; on the client side mounting the
+file system is as easy as logging into the server with an SSH client.")
+    (license gpl2+)))
+
+(define-public numactl
+  (package
+    (name "numactl")
+    (version "2.0.9")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append
+                    "ftp://oss.sgi.com/www/projects/libnuma/download/numactl-"
+                    version
+                    ".tar.gz"))
+              (sha256
+               (base32
+                "073myxlyyhgxh1w3r757ajixb7s2k69czc3r0g12c3scq7k3784w"))))
+    (build-system gnu-build-system)
+    (arguments
+     '(#:phases (alist-replace
+                 'configure
+                 (lambda* (#:key outputs #:allow-other-keys)
+                   ;; There's no 'configure' script, just a raw makefile.
+                   (substitute* "Makefile"
+                     (("^prefix := .*$")
+                      (string-append "prefix := " (assoc-ref outputs "out")
+                                     "\n"))
+                     (("^libdir := .*$")
+                      ;; By default the thing tries to install under
+                      ;; $prefix/lib64 when on a 64-bit platform.
+                      (string-append "libdir := $(prefix)/lib\n"))))
+                 %standard-phases)
+
+       #:make-flags (list
+                     ;; By default the thing tries to use 'cc'.
+                     "CC=gcc"
+
+                     ;; Make sure programs have an RPATH so they can find
+                     ;; libnuma.so.
+                     (string-append "LDLIBS=-Wl,-rpath="
+                                    (assoc-ref %outputs "out") "/lib"))
+
+       ;; There's a 'test' target, but it requires NUMA support in the kernel
+       ;; to run, which we can't assume to have.
+       #:tests? #f))
+    (home-page "http://oss.sgi.com/projects/libnuma/")
+    (synopsis "Tools for non-uniform memory access (NUMA) machines")
+    (description
+     "NUMA stands for Non-Uniform Memory Access, in other words a system whose
+memory is not all in one place.  The numactl program allows you to run your
+application program on specific CPU's and memory nodes.  It does this by
+supplying a NUMA memory policy to the operating system before running your
+program.
+
+The package contains other commands, such as numademo, numastat and memhog.
+The numademo command provides a quick overview of NUMA performance on your
+system.")
+    (license (list gpl2                           ; programs
+                   lgpl2.1))))                    ; library
+
+(define-public kbd
+  (package
+    (name "kbd")
+    (version "2.0.1")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "mirror://kernel.org/linux/utils/kbd/kbd-"
+                                  version ".tar.gz"))
+              (sha256
+               (base32
+                "0c34b0za2v0934acvgnva0vaqpghmmhz4zh7k0m9jd4mbc91byqm"))
+              (modules '((guix build utils)))
+              (snippet
+               '(begin
+                  (substitute* "tests/Makefile.in"
+                    ;; The '%: %.in' rule incorrectly uses @VERSION@.
+                    (("@VERSION@")
+                     "[@]VERSION[@]"))
+                  (substitute* '("src/unicode_start" "src/unicode_stop")
+                    ;; Assume the Coreutils are in $PATH.
+                    (("/usr/bin/tty")
+                     "tty"))))))
+    (build-system gnu-build-system)
+    (arguments
+     '(#:phases (alist-cons-before
+                 'build 'pre-build
+                 (lambda* (#:key inputs #:allow-other-keys)
+                   (let ((gzip  (assoc-ref %build-inputs "gzip"))
+                         (bzip2 (assoc-ref %build-inputs "bzip2")))
+                     (substitute* "src/libkeymap/findfile.c"
+                       (("gzip")
+                        (string-append gzip "/bin/gzip"))
+                       (("bzip2")
+                        (string-append bzip2 "/bin/bzip2")))))
+                 (alist-cons-after
+                  'install 'post-install
+                  (lambda* (#:key outputs #:allow-other-keys)
+                    ;; Make sure these programs find their comrades.
+                    (let* ((out (assoc-ref outputs "out"))
+                           (bin (string-append out "/bin")))
+                      (for-each (lambda (prog)
+                                  (wrap-program (string-append bin "/" prog)
+                                                `("PATH" ":" prefix (,bin))))
+                                '("unicode_start" "unicode_stop"))))
+                  %standard-phases))))
+    (inputs `(("check" ,check)
+              ("gzip" ,guix:gzip)
+              ("bzip2" ,guix:bzip2)
+              ("pam" ,linux-pam)))
+    (native-inputs `(("pkg-config" ,pkg-config)))
+    (home-page "ftp://ftp.kernel.org/pub/linux/utils/kbd/")
+    (synopsis "Linux keyboard utilities and keyboard maps")
+    (description
+     "This package contains keytable files and keyboard utilities compatible
+for systems using the Linux kernel.  This includes commands such as
+'loadkeys', 'setfont', 'kbdinfo', and 'chvt'.")
+    (license gpl2+)))
+
+(define-public inotify-tools
+  (package
+    (name "inotify-tools")
+    (version "3.13")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append
+                    "mirror://sourceforge/inotify-tools/inotify-tools/"
+                    version "/inotify-tools-" version ".tar.gz"))
+              (sha256
+               (base32
+                "0icl4bx041axd5dvhg89kilfkysjj86hjakc7bk8n49cxjn4cha6"))))
+    (build-system gnu-build-system)
+    (home-page "http://inotify-tools.sourceforge.net/")
+    (synopsis "Monitor file accesses")
+    (description
+     "The inotify-tools packages provides a C library and command-line tools
+to use Linux' inotify mechanism, which allows file accesses to be monitored.")
+    (license gpl2+)))
+
+(define-public kmod
+  (package
+    (name "kmod")
+    (version "17")
+    (source (origin
+              (method url-fetch)
+              (uri
+               (string-append "mirror://kernel.org/linux/utils/kernel/kmod/"
+                              "kmod-" version ".tar.xz"))
+              (sha256
+               (base32
+                "1yid3a9b64a60ybj66fk2ysrq5klnl0ijl4g624cl16y8404g9rv"))
+              (patches (list (search-patch "kmod-module-directory.patch")))))
+    (build-system gnu-build-system)
+    (native-inputs
+     `(("pkg-config" ,pkg-config)))
+    (inputs
+     `(("xz" ,guix:xz)
+       ("zlib" ,guix:zlib)))
+    (arguments
+     `(#:tests? #f ; FIXME: Investigate test failures
+       #:configure-flags '("--with-xz" "--with-zlib")
+       #:phases (alist-cons-after
+                 'install 'install-modprobe&co
+                 (lambda* (#:key outputs #:allow-other-keys)
+                   (let* ((out (assoc-ref outputs "out"))
+                          (bin (string-append out "/bin")))
+                     (for-each (lambda (tool)
+                                 (symlink "kmod"
+                                          (string-append bin "/" tool)))
+                               '("insmod" "rmmod" "lsmod" "modprobe"
+                                 "modinfo" "depmod"))))
+                 %standard-phases)))
+    (home-page "https://www.kernel.org/")
+    (synopsis "Kernel module tools")
+    (description "kmod is a set of tools to handle common tasks with Linux
+kernel modules like insert, remove, list, check properties, resolve
+dependencies and aliases.
+
+These tools are designed on top of libkmod, a library that is shipped with
+kmod.  The aim is to be compatible with tools, configurations and indices
+from the module-init-tools project.")
+    (license gpl2+))) ; library under lgpl2.1+
+
+(define-public udev
+  (package
+    (name "udev")
+    (version "182")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append
+                   "mirror://kernel.org/linux/utils/kernel/hotplug/udev-"
+                   version ".tar.xz"))
+             (sha256
+              (base32
+               "1awp7p07gi083w0dwqhhbbas68a7fx2sbm1yf1ip2jwf7cpqkf5d"))
+             (patches (list (search-patch "udev-gir-libtool.patch")))))
+    (build-system gnu-build-system)
+    (arguments
+     `(#:configure-flags (list (string-append
+                                "--with-pci-ids-path="
+                                (assoc-ref %build-inputs "pciutils")
+                                "/share/pci.ids.gz")
+
+                               "--with-firmware-path=/no/firmware"
+
+                               ;; Work around undefined reference to
+                               ;; 'mq_getattr' in sc-daemon.c.
+                               "LDFLAGS=-lrt")))
+    (native-inputs
+     `(("pkg-config" ,pkg-config)
+       ("gperf" ,gperf)
+       ("glib" ,glib "bin")                       ; glib-genmarshal, etc.
+       ("perl" ,perl)                             ; for the tests
+       ("python" ,python-2)))                     ; ditto
+    (inputs
+     `(("kmod" ,kmod)
+       ("pciutils" ,pciutils)
+       ("usbutils" ,usbutils)
+       ("util-linux" ,util-linux)
+       ("glib" ,glib)
+       ("gobject-introspection" ,gobject-introspection)))
+    (home-page "http://www.freedesktop.org/software/systemd/libudev/")
+    (synopsis "Userspace device management")
+    (description "Udev is a daemon which dynamically creates and removes
+device nodes from /dev/, handles hotplug events and loads drivers at boot
+time.")
+    (license gpl2+))) ; libudev is under lgpl2.1+
+
+(define-public wireless-tools
+  (package
+    (name "wireless-tools")
+    (version "30.pre9")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "http://www.hpl.hp.com/personal/Jean_Tourrilhes/Linux/wireless_tools."
+                                  version ".tar.gz"))
+              (sha256
+               (base32
+                "0qscyd44jmhs4k32ggp107hlym1pcyjzihiai48xs7xzib4wbndb"))))
+    (build-system gnu-build-system)
+    (arguments
+     `(#:phases (alist-replace
+                 'configure
+                 (lambda* (#:key outputs #:allow-other-keys)
+                   (setenv "PREFIX" (assoc-ref outputs "out")))
+                 %standard-phases)
+       #:tests? #f))
+    (synopsis "Tools for manipulating Linux Wireless Extensions")
+    (description "Wireless Tools are used to manipulate the Linux Wireless
+Extensions.  The Wireless Extension is an interface allowing you to set
+Wireless LAN specific parameters and get the specific stats.")
+    (home-page "http://www.hpl.hp.com/personal/Jean_Tourrilhes/Linux/Tools.html")
+    (license gpl2+)))

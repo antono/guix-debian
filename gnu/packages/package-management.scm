@@ -1,5 +1,5 @@
 ;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2013 Ludovic Courtès <ludo@gnu.org>
+;;; Copyright © 2013, 2014 Ludovic Courtès <ludo@gnu.org>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -19,6 +19,8 @@
 (define-module (gnu packages package-management)
   #:use-module (guix packages)
   #:use-module (guix download)
+  #:use-module (guix git-download)
+  #:use-module (guix utils)
   #:use-module (guix build-system gnu)
   #:use-module ((guix licenses) #:select (gpl3+))
   #:use-module (gnu packages)
@@ -26,24 +28,28 @@
   #:use-module ((gnu packages compression) #:select (bzip2 gzip))
   #:use-module (gnu packages gnupg)
   #:use-module (gnu packages sqlite)
-  #:use-module (gnu packages pkg-config))
+  #:use-module (gnu packages graphviz)
+  #:use-module (gnu packages pkg-config)
+  #:use-module (gnu packages autotools)
+  #:use-module (gnu packages gettext)
+  #:use-module (gnu packages texinfo))
 
-(define-public guix
+(define-public guix-0.6
   (package
     (name "guix")
-    (version "0.5")
+    (version "0.6")
     (source (origin
              (method url-fetch)
              (uri (string-append "ftp://alpha.gnu.org/gnu/guix/guix-"
                                  version ".tar.gz"))
              (sha256
               (base32
-               "15azhc3lb1m64545q8cs8dzcgjbd2wjxhl6nw0rq6lnvrxz2wjmv"))
-             (patches (list (search-patch "guix-test-networking.patch")))))
+               "01xw51wizhsk827w4xp79k2b6dxjaviw04r6rbrb85qdxnwg6k9n"))))
     (build-system gnu-build-system)
     (arguments
      `(#:configure-flags (list
                           "--localstatedir=/var"
+                          "--sysconfdir=/etc"
                           (string-append "--with-libgcrypt-prefix="
                                          (assoc-ref %build-inputs
                                                     "libgcrypt")))
@@ -103,3 +109,55 @@ upgrades and roll-backs, per-user profiles, and much more. It is based on the
 Nix package manager.")
     (license gpl3+)))
 
+(define-public guix
+  ;; Development version of Guix.
+  (let ((commit "0ae8c15"))
+    (package (inherit guix-0.6)
+      (version (string-append "0.6." commit))
+      (source (origin
+                (method git-fetch)
+                (uri (git-reference
+                      (url "git://git.sv.gnu.org/guix.git")
+                      (commit commit)
+                      (recursive? #t)))
+                (sha256
+                 (base32
+                  "1y6mwzwsjdxbfibqypb55dix371rifhfz0bygfr8k868lcdsawic"))))
+      (arguments
+       (substitute-keyword-arguments (package-arguments guix-0.6)
+         ((#:phases phases)
+          `(alist-cons-before
+            'configure 'bootstrap
+            (lambda _
+              ;; Comment out `git' invocations, since 'git-fetch' provides us
+              ;; with a checkout that includes sub-modules.
+              (substitute* "bootstrap"
+                (("git ")
+                 "true git "))
+
+              ;; Keep a list of the files already available under nix/...
+              (call-with-output-file "ls-R"
+                (lambda (port)
+                  (for-each (lambda (file)
+                              (format port "~a~%" file))
+                            (find-files "nix" ""))))
+
+              ;; ... and use that as a substitute to 'git ls-tree'.
+              (substitute* "nix/sync-with-upstream"
+                (("git ls-tree HEAD -- [[:graph:]]+")
+                 "cat ls-R"))
+
+              ;; Make sure 'msgmerge' can modify the PO files.
+              (for-each (lambda (po)
+                          (chmod po #o666))
+                        (find-files "." "\\.po$"))
+
+              (zero? (system* "./bootstrap")))
+            ,phases))))
+      (native-inputs
+       `(("autoconf" ,(autoconf-wrapper))
+         ("automake" ,automake)
+         ("gettext" ,gnu-gettext)
+         ("texinfo" ,texinfo)
+         ("graphviz" ,graphviz)
+         ,@(package-native-inputs guix-0.6))))))

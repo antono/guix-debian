@@ -159,6 +159,16 @@
          ;; the contents.
          (valid-path? %store (derivation->output-path drv)))))
 
+(test-assert "fixed-output-derivation?"
+  (let* ((builder    (add-text-to-store %store "my-fixed-builder.sh"
+                                        "echo -n hello > $out" '()))
+         (hash       (sha256 (string->utf8 "hello")))
+         (drv        (derivation %store "fixed"
+                                 %bash `(,builder)
+                                 #:inputs `((,builder))
+                                 #:hash hash #:hash-algo 'sha256)))
+    (fixed-output-derivation? drv)))
+
 (test-assert "fixed-output derivation"
   (let* ((builder    (add-text-to-store %store "my-fixed-builder.sh"
                                         "echo -n hello > $out" '()))
@@ -379,6 +389,43 @@
                                              (match y
                                                ((p2 . _)
                                                 (string<? p1 p2)))))))))))))))
+
+(test-assert "derivation #:allowed-references, ok"
+  (let ((drv (derivation %store "allowed" %bash
+                         '("-c" "echo hello > $out")
+                         #:inputs `((,%bash))
+                         #:allowed-references '())))
+    (build-derivations %store (list drv))))
+
+(test-assert "derivation #:allowed-references, not allowed"
+  (let* ((txt (add-text-to-store %store "foo" "Hello, world."))
+         (drv (derivation %store "disallowed" %bash
+                          `("-c" ,(string-append "echo " txt "> $out"))
+                          #:inputs `((,%bash) (,txt))
+                          #:allowed-references '())))
+    (guard (c ((nix-protocol-error? c)
+               ;; There's no specific error message to check for.
+               #t))
+      (build-derivations %store (list drv))
+      #f)))
+
+(test-assert "derivation #:allowed-references, self allowed"
+  (let ((drv (derivation %store "allowed" %bash
+                         '("-c" "echo $out > $out")
+                         #:inputs `((,%bash))
+                         #:allowed-references '("out"))))
+    (build-derivations %store (list drv))))
+
+(test-assert "derivation #:allowed-references, self not allowed"
+  (let ((drv (derivation %store "disallowed" %bash
+                         `("-c" ,"echo $out > $out")
+                         #:inputs `((,%bash))
+                         #:allowed-references '())))
+    (guard (c ((nix-protocol-error? c)
+               ;; There's no specific error message to check for.
+               #t))
+      (build-derivations %store (list drv))
+      #f)))
 
 
 (define %coreutils

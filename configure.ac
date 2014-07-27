@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.68)
-AC_INIT([GNU Guix], [0.6], [bug-guix@gnu.org], [guix],
+AC_INIT([GNU Guix], [0.7], [bug-guix@gnu.org], [guix],
   [http://www.gnu.org/software/guix/])
 AC_CONFIG_AUX_DIR([build-aux])
 
@@ -116,19 +116,44 @@ AC_ARG_WITH([libgcrypt-prefix],
     yes|no)
       LIBGCRYPT="libgcrypt"
       LIBGCRYPT_PREFIX="no"
+      LIBGCRYPT_LIBDIR="no"
       ;;
     *)
       LIBGCRYPT="$withval/lib/libgcrypt"
       LIBGCRYPT_PREFIX="$withval"
+      LIBGCRYPT_LIBDIR="$withval/lib"
       ;;
    esac],
-  [LIBGCRYPT="libgcrypt"])
+  [LIBGCRYPT="libgcrypt"
+   LIBGCRYPT_PREFIX="no"
+   LIBGCRYPT_LIBDIR="no"])
+
+AC_ARG_WITH([libgcrypt-libdir],
+  [AS_HELP_STRING([--with-libgcrypt-libdir=DIR],
+     [search for GNU libgcrypt's shared library in DIR])],
+  [case "$withval" in
+    yes|no)
+      LIBGCRYPT="libgcrypt"
+      LIBGCRYPT_LIBDIR="no"
+      ;;
+    *)
+      LIBGCRYPT="$withval/libgcrypt"
+      LIBGCRYPT_LIBDIR="$withval"
+      ;;
+   esac],
+  [if test "x$LIBGCRYPT" = x; then
+      LIBGCRYPT="libgcrypt"
+   fi
+   if test "x$LIBGCRYPT_LIBDIR" = x; then
+      LIBGCRYPT_LIBDIR="no"
+   fi])
 
 dnl Library name suitable for `dynamic-link'.
 AC_MSG_CHECKING([for libgcrypt shared library name])
 AC_MSG_RESULT([$LIBGCRYPT])
 AC_SUBST([LIBGCRYPT])
 AC_SUBST([LIBGCRYPT_PREFIX])
+AC_SUBST([LIBGCRYPT_LIBDIR])
 
 GUIX_ASSERT_LIBGCRYPT_USABLE
 
@@ -141,7 +166,8 @@ dnl See `HACKING' for more info.
 AM_MISSING_PROG([DOT], [dot])
 
 AC_CONFIG_FILES([Makefile
-                 po/Makefile.in
+                 po/guix/Makefile.in
+                 po/packages/Makefile.in
 		 guix/config.scm])
 
 AC_CONFIG_FILES([scripts/guix], [chmod +x scripts/guix])

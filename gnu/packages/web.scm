@@ -27,10 +27,13 @@
   #:use-module (guix build-system perl)
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages apr)
+  #:use-module (gnu packages asciidoc)
+  #:use-module (gnu packages docbook)
   #:use-module (gnu packages autotools)
   #:use-module ((gnu packages compression) #:select (zlib))
   #:use-module (gnu packages openssl)
   #:use-module (gnu packages pcre)
+  #:use-module (gnu packages xml)
   #:use-module (gnu packages perl))
 
 (define-public httpd
@@ -69,6 +72,40 @@ Internet and the Web to communicate, plan, and develop the server and its
 related documentation.")
     (license l:asl2.0)
     (home-page "https://httpd.apache.org/")))
+
+(define-public json-c
+  (package
+    (name "json-c")
+    (version "0.12")
+    (source (origin
+             (method url-fetch)
+             (uri (string-append "https://s3.amazonaws.com/json-c_releases/releases/json-c-"
+                                 version ".tar.gz"))
+             (sha256
+              (base32
+               "0gwzic3ifg2d0w32ya3agpxh8i083cgvf7kmc51cnbgqnfr02300"))
+             (modules '((guix build utils)))
+             (snippet
+              '(begin
+                 ;; Somehow 'config.h.in' is older than
+                 ;; 'aclocal.m4', which would trigger a rule to
+                 ;; run 'autoheader'.
+                 (set-file-time "config.h.in"
+                                (stat "aclocal.m4"))
+
+                 ;; Don't try to build with -Werror.
+                 (substitute* (find-files "." "Makefile\\.in")
+                   (("-Werror") ""))))))
+    (build-system gnu-build-system)
+    (arguments '(#:parallel-build? #f
+                 #:parallel-tests? #f))
+    (home-page "https://github.com/json-c/json-c/wiki")
+    (synopsis "JSON implementation in C")
+    (description
+     "JSON-C implements a reference counting object model that allows you to
+easily construct JSON objects in C, output them as JSON formatted strings and
+parse JSON formatted strings back into the C representation of JSON objects.")
+    (license l:x11)))
 
 (define-public libwebsockets
   (package
@@ -469,3 +506,54 @@ and functions that allow you to write WWW clients. The library also
 contain modules that are of more general use and even classes that
 help you implement simple HTTP servers.")
     (home-page "http://search.cpan.org/~gaas/libwww-perl/")))
+
+(define-public tinyproxy
+  (package
+    (name "tinyproxy")
+    (version "1.8.3")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append
+                    "http://www.samba.org/~obnox/" name "/download/" name "-" version ".tar.bz2"))
+              (sha256
+               (base32
+                "0vl9igw7vm924rs6d6bkib7zfclxnlf9s8rmml1sfwj7xda9nmdy"))))
+    (build-system gnu-build-system)
+    (arguments
+     `(#:configure-flags
+       (list
+        ;; For the log file, etc.
+        "--localstatedir=/var")
+       #:phases
+       (alist-cons-before
+        'build 'pre-build
+        (lambda* (#:key inputs #:allow-other-keys #:rest args)
+          ;; Uncommenting the next two lines may assist in debugging
+          ;; (substitute* "docs/man5/Makefile" (("a2x") "a2x -v"))
+          ;; (setenv "XML_DEBUG_CATALOG" "1")
+
+          (setenv "XML_CATALOG_FILES" 
+                  (string-append
+                   (assoc-ref inputs "docbook-xsl") 
+                   "/xml/xsl/docbook-xsl-1.78.1/catalog.xml"
+                   ;; Contrary to the documentation, the file names must
+                   ;; be separated by a space, not a colon.
+                   " " 
+                   (assoc-ref inputs "docbook-xml") 
+                   "/xml/dtd/docbook/catalog.xml")))
+        %standard-phases)))
+    ;; All of the below are used to generate the documentation
+    ;; (Should they be propagated inputs of asciidoc ??)
+    (native-inputs `(("asciidoc" ,asciidoc)
+                     ("libxml2" ,libxml2) 
+                     ("docbook-xml" ,docbook-xml)
+                     ("docbook-xsl" ,docbook-xsl)
+                     ("libxslt" ,libxslt)))
+    (home-page "https://banu.com/tinyproxy/")
+    (synopsis "Light-weight HTTP/HTTPS proxy daemon")
+    (description "Tinyproxy is a light-weight HTTP/HTTPS proxy
+daemon. Designed from the ground up to be fast and yet small, it is an ideal
+solution for use cases such as embedded deployments where a full featured HTTP
+proxy is required, but the system resources for a larger proxy are
+unavailable.") 
+    (license l:gpl2+)))

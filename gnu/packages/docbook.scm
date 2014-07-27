@@ -19,8 +19,7 @@
 (define-module (gnu packages docbook)
   #:use-module (gnu packages)
   #:use-module (gnu packages compression)
-  #:use-module ((gnu packages base)
-                #:select (tar))
+  #:use-module (gnu packages base)
   #:use-module (guix licenses)
   #:use-module (guix packages)
   #:use-module (guix download)
@@ -51,8 +50,12 @@
                           (dtd    (string-append out "/xml/dtd/docbook")))
                      (mkdir-p dtd)
                      (with-directory-excursion dtd
-                       (system* unzip source))))
-       #:modules ((guix build utils))))
+                       (system* unzip source))
+                     (substitute* (string-append out "/xml/dtd/docbook/catalog.xml")
+                       (("uri=\"") 
+                        (string-append 
+                         "uri=\"file://" dtd "/")))))
+                 #:modules ((guix build utils))))
     (native-inputs `(("unzip" ,unzip)))
     (home-page "http://docbook.org")
     (synopsis "DocBook XML DTDs for document authoring")
@@ -62,20 +65,42 @@ suited to books and papers about computer hardware and software (though it is
 by no means limited to these applications.)  This package provides XML DTDs.")
     (license (x11-style "" "See file headers."))))
 
+(define-public docbook-xml-4.4
+  (package (inherit docbook-xml)
+   (version "4.4")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "http://www.docbook.org/xml/" version
+                                  "/docbook-xml-" version ".zip"))
+              (sha256
+               (base32
+                "141h4zsyc71sfi2zzd89v4bb4qqq9ca1ri9ix2als9f4i3mmkw82"))))))
+
+(define-public docbook-xml-4.3
+  (package (inherit docbook-xml)
+   (version "4.3")
+    (source (origin
+              (method url-fetch)
+              (uri (string-append "http://www.docbook.org/xml/" version
+                                  "/docbook-xml-" version ".zip"))
+              (sha256
+               (base32
+                "0r1l2if1z4wm2v664sqdizm4gak6db1kx9y50jq89m3gxaa8l1i3"))))))
+
 (define-public docbook-xsl
   (package
     (name "docbook-xsl")
-    (version "1.72.0")
+    (version "1.78.1")
     (source (origin
               (method url-fetch)
               (uri (string-append "mirror://sourceforge/docbook/docbook-xsl-"
                                   version ".tar.bz2"))
               (sha256
                (base32
-                "1cnrfgqz8pc9wnlgqjch2338ad7jki6d4h6b2fhaxn1a2201df5k"))))
+                "0rxl013ncmz1n6ymk2idvx3hix9pdabk8xn01cpcv32wmfb753y9"))))
     (build-system trivial-build-system)
     (arguments
-     `(#:builder (begin
+     `(#:builder (let ((name-version (string-append ,name "-" ,version)))
                    (use-modules (guix build utils))
 
                    (let* ((bzip2  (assoc-ref %build-inputs "bzip2"))
@@ -87,10 +112,13 @@ by no means limited to these applications.)  This package provides XML DTDs.")
                      (system* (string-append tar "/bin/tar") "xvf" source)
 
                      (mkdir-p xsl)
-                     (copy-recursively (string-append ,name "-" ,version)
-                                       (string-append xsl "/" ,name
-                                                      "-" ,version))))
-       #:modules ((guix build utils))))
+                     (copy-recursively name-version
+                                       (string-append xsl "/" name-version))
+
+                     (substitute* (string-append xsl "/" name-version "/catalog.xml")
+                       (("rewritePrefix=\"./") 
+                        (string-append "rewritePrefix=\"file://" xsl "/" name-version "/")))))
+                 #:modules ((guix build utils))))
     (native-inputs `(("bzip2" ,bzip2)
                      ("tar" ,tar)))
     (home-page "http://docbook.org")
